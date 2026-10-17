@@ -1,78 +1,42 @@
-> ⚠️ **Don't click Fork!**
-> 
-> This is a GitHub Template repo. If you want to use this for a plugin, [use this template][new-repo] to make a new repo!
->
-> ![image](https://github.com/goatcorp/SamplePlugin/assets/16760685/d9732094-e1ed-4769-a70b-58ed2b92580c)
+# Wanderveil Client
 
-# SamplePlugin
+**Every place has a story. Leave yours.**
 
-[![Use This Template badge](https://img.shields.io/badge/Use%20This%20Template-0?logo=github&labelColor=grey)][new-repo]
+A planned FFXIV Dalamud plugin for location-based discoveries, a collectible adventurer passport, and creator-authored adventures. The first product slice is fully offline: view a curated postcard, collect a demo stamp, and find it in the passport.
 
+## Development status
 
-Simple example plugin for Dalamud.
+The minimal Wanderveil shell is implemented: Discover, Passport, Echoes, and Studio tabs are marked coming soon, with appearance settings and an original procedural compass. Product screens, stamp collection, passport persistence, networking, and advanced rendering are not implemented yet.
 
-This is not designed to be the simplest possible example, but it is also not designed to cover everything you might want to do. For more detailed questions, come ask in [the Discord](https://discord.gg/holdshift).
+## Build the current baseline
 
-## Main Points
+Install a compatible .NET 10 SDK and Dalamud development assemblies. The existing project uses `Dalamud.NET.Sdk/15.0.0`; its lock file targets `net10.0-windows7.0` and CI selects .NET 10. See the [development guide](docs/development.md) for paths and lifecycle checks.
 
-* Simple functional plugin
-  * Slash command
-  * Main UI
-  * Settings UI
-  * Image loading
-  * Plugin json
-* Simple, slightly-improved plugin configuration handling
-* Project organization
-  * Copies all necessary plugin files to the output directory
-    * Does not copy dependencies that are provided by dalamud
-    * Output directory can be zipped directly and have exactly what is required
-  * Hides data files from visual studio to reduce clutter
-    * Also allows having data files in different paths than VS would usually allow if done in the IDE directly
+```powershell
+dotnet restore Wanderveil.slnx --locked-mode
+dotnet build Wanderveil.slnx -c Debug --no-restore
+dotnet build Wanderveil.slnx -c Release --no-restore
+```
 
+Debug output: `src/Wanderveil/bin/x64/Debug/Wanderveil.dll`. Release package: `src/Wanderveil/bin/x64/Release/Wanderveil/latest.zip`. `/wanderveil` toggles the shell; `/wanderveil settings` opens appearance settings. Reduced motion saves through Dalamud configuration; this shell has no animation yet.
 
-The intention is less that any of this is used directly in other projects, and more to show how similar things can be done.
+On 18 October 2026, locked restore and Debug/Release builds passed with zero warnings/errors, both here and from a fresh client-only source copy outside the workspace. Live Dalamud behavior and hosted CI execution remain untested.
 
-## How To Use
+## Repository map
 
-### Getting Started
+| Path | Role |
+| --- | --- |
+| [AGENTS.md](AGENTS.md) | Contributor/agent working agreement |
+| [docs](docs/README.md) | Standalone development, architecture, UI, and protocol notes |
+| `Wanderveil.slnx` | Standalone client solution |
+| [src](src/README.md) | Wanderveil plugin, shell/settings, and future feature boundaries |
+| [tests](tests/README.md) | Reserved meaningful test/fixture location |
+| [assets](assets/README.md) | Reserved original/licensed UI assets |
 
-To begin, [clone this template repository][new-repo] to your own GitHub account. This will automatically bring in everything you need to get a jumpstart on development. You do not need to fork this repository unless you intend to contribute modifications to it.
+This repository must build independently. No private coordination/server files or packages are required. There is no production backend requirement for the local prototype.
 
-Be sure to also check out the [Dalamud Developer Docs][dalamud-docs] for helpful information about building your own plugin. The Developer Docs includes helpful information about all sorts of things, including [how to submit][submit] your newly-created plugin to the official repository. Assuming you use this template repository, the provided project build configuration and license are already chosen to make everything a breeze.
+## References and attribution
 
-[new-repo]: https://github.com/new?template_name=SamplePlugin&template_owner=goatcorp
-[dalamud-docs]: https://dalamud.dev
-[submit]: https://dalamud.dev/plugin-publishing/submission
+[Aetherphone](https://github.com/XeldarAlz/FFXIV-Aetherphone) and its [UI toolkit docs](https://github.com/XeldarAlz/FFXIV-Aetherphone/blob/dev/docs/ui-toolkit.md) are the primary UI reference; [LightlessClient](https://git.lightless-sync.org/Lightless-Sync/LightlessClient) is secondary. [CrystalRenderer](https://github.com/Wrepsk/crystal-renderer) is a candidate for optional presentation after a runtime spike. No reference code/assets or renderer dependency were added in this scaffold.
 
-### Prerequisites
-
-SamplePlugin assumes all the following prerequisites are met:
-
-* XIVLauncher, FINAL FANTASY XIV, and Dalamud have all been installed and the game has been run with Dalamud at least once.
-* XIVLauncher is installed to its default directories and configurations.
-  * If a custom path is required for Dalamud's dev directory, it must be set with the `DALAMUD_HOME` environment variable.
-* A .NET Core 8 SDK has been installed and configured, or is otherwise available. (In most cases, the IDE will take care of this.)
-
-### Building
-
-1. Open up `SamplePlugin.sln` in your C# editor of choice (likely [Visual Studio](https://visualstudio.microsoft.com) or [JetBrains Rider](https://www.jetbrains.com/rider/)).
-2. Build the solution. By default, this will build a `Debug` build, but you can switch to `Release` in your IDE.
-3. The resulting plugin can be found at `SamplePlugin/bin/x64/Debug/SamplePlugin.dll` (or `Release` if appropriate.)
-
-### Activating in-game
-
-1. Launch the game and use `/xlsettings` in chat or `xlsettings` in the Dalamud Console to open up the Dalamud settings.
-    * In here, go to `Experimental`, and add the full path to the `SamplePlugin.dll` to the list of Dev Plugin Locations.
-2. Next, use `/xlplugins` (chat) or `xlplugins` (console) to open up the Plugin Installer.
-    * In here, go to `Dev Tools > Installed Dev Plugins`, and the `SamplePlugin` should be visible. Enable it.
-3. You should now be able to use `/pmycommand` (chat) or `pmycommand` (console)!
-
-Note that you only need to add it to the Dev Plugin Locations once (Step 1); it is preserved afterwards. You can disable, enable, or load your plugin on startup through the Plugin Installer.
-
-### Reconfiguring for your own uses
-
-Replace all references to `SamplePlugin` in all the files and filenames with your desired name, then start building the plugin of your dreams. You'll figure it out 😁
-
-Dalamud will load the JSON file (by default, `SamplePlugin/SamplePlugin.json`) next to your DLL and use it for metadata, including the description for your plugin in the Plugin Installer. Make sure to update this with information relevant to _your_ plugin!
-
-All participation in this repository is governed by our [Code of Conduct](https://dalamud.dev/code-of-conduct). If you used AI tooling at any point, review the [AI Usage Policy](https://dalamud.dev/plugin-publishing/ai-policy) and disclose your level of AI use. Entirely AI-generated submissions will be rejected, and undisclosed AI use may result in a ban.
+The template's [license](LICENSE.md) is preserved. See [third-party notices](THIRD_PARTY_NOTICES.md) before adding dependencies or art. Wanderveil is a working name and an independent fan project, not affiliated with or endorsed by Square Enix. Distribution eligibility and current policy requirements need review before release.

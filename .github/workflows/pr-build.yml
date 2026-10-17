@@ -1,16 +1,15 @@
-name: Sample PR Builder for SamplePlugin
+name: Wanderveil Client Build
 
 on:
   pull_request:
     branches: [ master ]
 
 jobs:
-
   build:
     runs-on: windows-2022
-
-    env:
-      Solution_Name: SamplePlugin
+    strategy:
+      matrix:
+        configuration: [ Debug, Release ]
 
     steps:
     - name: Checkout
@@ -22,18 +21,22 @@ jobs:
         dotnet-version: 10.0.x
 
     - name: Download Dalamud
+      shell: pwsh
       run: |
-        Invoke-WebRequest -Uri https://goatcorp.github.io/dalamud-distrib/latest.zip -OutFile latest.zip
-        Expand-Archive -Force latest.zip "$env:AppData\XIVLauncher\addon\Hooks\dev"
+        $archive = Join-Path $env:RUNNER_TEMP 'dalamud-latest.zip'
+        Invoke-WebRequest -Uri https://goatcorp.github.io/dalamud-distrib/latest.zip -OutFile $archive
+        Expand-Archive -Force $archive "$env:AppData\XIVLauncher\addon\Hooks\dev"
 
-    - name: Build with dotnet
-      run: dotnet build --configuration Release
+    - name: Restore locked dependencies
+      run: dotnet restore Wanderveil.slnx --locked-mode
+
+    - name: Build
+      run: dotnet build Wanderveil.slnx --configuration ${{ matrix.configuration }} --no-restore
 
     - name: Store artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: SamplePlugin
-        path: .\SamplePlugin\bin\x64\Release\SamplePlugin\*
+        name: Wanderveil-${{ matrix.configuration }}
+        path: ./src/Wanderveil/bin/x64/${{ matrix.configuration }}/*
         if-no-files-found: error
         retention-days: 1
-

@@ -1,0 +1,15 @@
+<Project Sdk="Dalamud.NET.Sdk/15.0.0">
+  <PropertyGroup>
+    <Version>0.0.0.1</Version>
+    <Author>Wrepsk</Author>
+    <Name>Wanderveil</Name>
+    <InternalName>Wanderveil</InternalName>
+    <AssemblyName>Wanderveil</AssemblyName>
+    <RootNamespace>Wanderveil</RootNamespace>
+    <Punchline>Every place has a story. Leave yours.</Punchline>
+    <Description>An adventurer's passport and discovery journal for Eorzea.
+Early development build: navigation and appearance settings only. Discoveries, collectible stamps, and creator tools are coming later.</Description>
+    <RepoUrl>https://github.com/Wrepsk/Wanderveil-Client</RepoUrl>
+    <Tags>exploration;passport;discoveries;journal</Tags>
+  </PropertyGroup>
+</Project>
