@@ -1,6 +1,6 @@
 # Client documentation
 
-Status: Phase 01 UI prototype, 18 October 2026. Shared components and the static Passport identity spread are implemented; remaining screens and collection features are planned.
+Status: Phase 01 UI prototype, 18 October 2026. Shared components, static Passport identity spread, and static Discover cards/details are implemented; remaining screens and collection features are planned.
 
 - [Development and current build](development.md)
 - [Client architecture and future layout](architecture.md)
@@ -14,9 +14,9 @@ Status: Phase 01 UI prototype, 18 October 2026. Shared components and the static
 
 ## First implementation tasks
 
-1. Build a static Discover card/detail flow using the shared components.
-2. Add Studio template chooser/preview and later stamp/page controls.
-3. Complete one local postcard → demo stamp → persisted passport loop.
+1. Add Studio template chooser/postcard preview with publication visibly unavailable.
+2. Complete remaining Phase 1 stamp/page controls, Echoes preview, and shared input/state coverage.
+3. Complete one local postcard → demo stamp → persisted passport loop in Phase 2.
 
 No account, private repository, production backend, or advanced renderer is needed for those product steps. Unresolved online contracts, identity proof, and renderer delivery require explicit decisions before implementation.
 

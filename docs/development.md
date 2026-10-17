@@ -1,6 +1,6 @@
 # Development guide
 
-Status: Wanderveil shell plus static Passport identity preview, 18 October 2026.
+Status: Wanderveil shell, static Passport identity preview, and static Discover cards/details, 18 October 2026.
 
 ## Prerequisites
 
@@ -39,7 +39,7 @@ The solution maps both projects to x64; direct check-project runs need `-p:Platf
 | Shell Settings button / Dalamud configuration action | Open appearance settings |
 | Dalamud main-UI action | Open the shell |
 
-Passport initially shows a static synthetic identity spread; other destinations remain coming soon. Explore discoveries selects the Discover tab. Reduced motion persists through Dalamud configuration; the UI is currently static. Save failures offer retry. Wanderveil uses its own configuration identity; the old sample's arbitrary settings are not imported.
+Passport initially shows a static synthetic identity spread. Explore discoveries selects Discover, whose demo cards open postcard/stamp-preview details. Back returns to the list and restores its scroll position; native Tab/Space navigation works, with focus moved to Back when details open. Collection is disabled and explicitly unsaved. Echoes and Studio remain coming soon. Reduced motion persists through Dalamud configuration; the UI is currently static. Save failures offer retry. Wanderveil uses its own configuration identity; the old sample's arbitrary settings are not imported.
 
 ## Optional live observations
 

@@ -120,6 +120,7 @@ using (var host = new HeadlessUi(new Vector2(420, 300)))
         Check(ImGui.GetCursorScreenPos().Y - start >= expected.Y, "Typography did not reserve its measured height.");
     });
 }
+DiscoverChecks.Run(Check, artifacts);
 Console.WriteLine($"PASS {checks} checks using the real ImGui native context.");
 
 static double Contrast(Vector4 first, Vector4 second)

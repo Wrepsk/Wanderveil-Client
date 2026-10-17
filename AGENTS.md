@@ -4,7 +4,7 @@ This agreement is self-contained. Read [docs/README.md](docs/README.md), [archit
 
 ## Current baseline and scope
 
-The executable project is `src/Wanderveil/Wanderveil.csproj`, referenced by `Wanderveil.slnx`. The shell, saved appearance settings, shared UI primitives, and synthetic Passport identity spread are implemented. `tests/Wanderveil.UiChecks` checks real native ImGui layout/input outside the game. Other feature/domain/application folders and assets remain mostly reserved. The next UI task is a static Discover card/detail flow.
+The executable project is `src/Wanderveil/Wanderveil.csproj`, referenced by `Wanderveil.slnx`. The shell, saved appearance settings, shared UI primitives, synthetic Passport identity spread, and static Discover card/detail flow are implemented. `tests/Wanderveil.UiChecks` checks real native ImGui layout/input outside the game. Other feature/domain/application folders and assets remain mostly reserved. The next UI task is Studio's static template chooser/postcard preview; collection and persistence remain later work.
 
 The first product loop is one curated offline discovery → one local demo stamp → passport page. Build static UI before online accounts/publication. Backend identity, networking contracts, and renderer integration remain future work. Honor current user scope rather than implementing all roadmap ideas.
 

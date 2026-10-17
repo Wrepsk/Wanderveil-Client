@@ -6,6 +6,8 @@ This client was initialized from [goatcorp/SamplePlugin](https://github.com/goat
 
 ## Design references only
 
+Discover's geometric postcard scenery (`Features/Discover/PostcardArtwork.cs`) and decorative stamp motif (`UI/Components/StampPreview.cs`) are original project artwork. Demo names, locations, and captions are synthetic; no reference screenshots, game textures, fonts, or upstream implementation were copied for this slice.
+
 [Aetherphone](https://github.com/XeldarAlz/FFXIV-Aetherphone) is the primary UI reference; its repository declares AGPL-3.0-or-later. [LightlessClient](https://git.lightless-sync.org/Lightless-Sync/LightlessClient) is secondary; its repository API reports AGPL-3.0. Neither project is an installed dependency, and no code or art was copied from them in this scaffold.
 
 [CrystalRenderer](https://github.com/Wrepsk/crystal-renderer) is an optional future integration candidate. Its project metadata declares AGPL-3.0-or-later and retains Pictomancy provenance/notices. It has not been added as a dependency.

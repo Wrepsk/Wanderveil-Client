@@ -1,6 +1,6 @@
 # UI guidelines
 
-Status: initial design specification with [implemented foundations](ui-components.md): shared tokens/typography, page surfaces/flow, action buttons, and synthetic Passport identity preview.
+Status: initial design specification with [implemented foundations](ui-components.md): shared tokens/typography, page surfaces/flow, native actions/cards, stamp motif, synthetic Passport identity preview, and static Discover cards/details.
 
 Wanderveil is a warm atlas and physical passport with subtle magical moments. Primary destinations are Discover, Passport, Echoes, and Studio; Settings is secondary. Use paper, ink, brass, stamps, and bookmarks as cues. Keep body text readable and compositions responsive.
 

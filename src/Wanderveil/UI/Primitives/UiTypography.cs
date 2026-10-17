@@ -22,18 +22,18 @@ internal static class UiTypography
         _ => context.FontSize,
     };
 
-    internal static Vector2 Measure(string text, TextRole role, UiContext context, float width)
+    internal static Vector2 Measure(string text, TextRole role, UiContext context, float width, bool wrap = true)
     {
         var ratio = Size(role, context) / ImGui.GetFontSize();
         // Measure and draw use the same font, size ratio, and wrap width.
-        var measured = ImGui.CalcTextSize(text, false, MathF.Max(1f, width) / ratio) * ratio;
+        var measured = ImGui.CalcTextSize(text, false, wrap ? MathF.Max(1f, width) / ratio : -1f) * ratio;
         return new Vector2(MathF.Min(width, measured.X), MathF.Max(Size(role, context), measured.Y));
     }
 
     internal static void Draw(ImDrawListPtr drawList, Vector2 position, string text, TextRole role,
-        UiContext context, float width, Vector4 ink)
+        UiContext context, float width, Vector4 ink, bool wrap = true)
     {
-        drawList.AddText(ImGui.GetFont(), Size(role, context), position, ImGui.GetColorU32(ink), text, MathF.Max(1f, width));
+        drawList.AddText(ImGui.GetFont(), Size(role, context), position, ImGui.GetColorU32(ink), text, wrap ? MathF.Max(1f, width) : 0f);
     }
 
     internal static void Text(string text, TextRole role, UiContext context, Vector4 ink)

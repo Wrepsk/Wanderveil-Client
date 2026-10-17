@@ -2,6 +2,7 @@ using System;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Windowing;
+using Wanderveil.Features.Discover;
 using Wanderveil.Features.Passport;
 using Wanderveil.UI.Components;
 using Wanderveil.UI.Primitives;
@@ -12,6 +13,7 @@ internal sealed class MainWindow : Window
 {
     private readonly Action openSettings;
     private readonly PassportView passport = new(PassportPreview.Sample);
+    private readonly DiscoverView discover = new(DiscoveryPreview.Samples);
     private string? requestedSection = "Passport";
 
     internal MainWindow(Action openSettings) : base("Wanderveil###Wanderveil.Main")
@@ -41,8 +43,17 @@ internal sealed class MainWindow : Window
         {
             try
             {
-                DrawSection("Discover", request, context, "Every journey starts with a discovery.",
-                    "Postcards, hidden stories, and scenic stops across Eorzea. Curated discoveries are coming soon.");
+                if (ImGui.BeginTabItem("Discover", request == "Discover" ? ImGuiTabItemFlags.SetSelected : ImGuiTabItemFlags.None))
+                {
+                    try
+                    {
+                        discover.Draw(context);
+                    }
+                    finally
+                    {
+                        ImGui.EndTabItem();
+                    }
+                }
                 if (ImGui.BeginTabItem("Passport", request == "Passport" ? ImGuiTabItemFlags.SetSelected : ImGuiTabItemFlags.None))
                 {
                     try
