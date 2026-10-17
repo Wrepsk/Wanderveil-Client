@@ -2,17 +2,22 @@ using System;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Windowing;
+using Wanderveil.Features.Passport;
+using Wanderveil.UI.Components;
+using Wanderveil.UI.Primitives;
 
 namespace Wanderveil.UI;
 
 internal sealed class MainWindow : Window
 {
     private readonly Action openSettings;
+    private readonly PassportView passport = new(PassportPreview.Sample);
+    private string? requestedSection = "Passport";
 
     internal MainWindow(Action openSettings) : base("Wanderveil###Wanderveil.Main")
     {
         this.openSettings = openSettings;
-        Size = new Vector2(680, 420);
+        Size = new Vector2(820, 680);
         SizeCondition = ImGuiCond.FirstUseEver;
         SizeConstraints = new WindowSizeConstraints
         {
@@ -23,23 +28,36 @@ internal sealed class MainWindow : Window
 
     public override void Draw()
     {
+        var context = new UiContext(ShellStyle.Scale, ImGui.GetFontSize());
         CompassMark.Draw();
         ImGui.SameLine();
-        ImGui.TextColored(ShellStyle.Parchment, "Wanderveil");
-        ImGui.TextWrapped("Every place has a story. Leave yours.");
+        UiTypography.Text("Wanderveil", TextRole.Heading, context, UiTheme.Paper);
+        UiTypography.Text("Every place has a story. Leave yours.", TextRole.Body, context, UiTheme.Paper);
         ImGui.Spacing();
 
+        var request = requestedSection;
+        requestedSection = null;
         if (ImGui.BeginTabBar("Wanderveil.Sections"))
         {
             try
             {
-                DrawSection("Discover", "Every journey starts with a discovery.",
+                DrawSection("Discover", request, context, "Every journey starts with a discovery.",
                     "Postcards, hidden stories, and scenic stops across Eorzea. Curated discoveries are coming soon.");
-                DrawSection("Passport", "A place for the stories you collect.",
-                    "Your adventurer's passport will hold travel stamps and memories. Your first pages are coming soon.");
-                DrawSection("Echoes", "Follow a story beyond the next horizon.",
+                if (ImGui.BeginTabItem("Passport", request == "Passport" ? ImGuiTabItemFlags.SetSelected : ImGuiTabItemFlags.None))
+                {
+                    try
+                    {
+                        if (passport.Draw(context))
+                            requestedSection = "Discover";
+                    }
+                    finally
+                    {
+                        ImGui.EndTabItem();
+                    }
+                }
+                DrawSection("Echoes", request, context, "Follow a story beyond the next horizon.",
                     "Creator-made adventures, clues, and chapters are planned for a later release.");
-                DrawSection("Studio", "Leave a discovery for someone else.",
+                DrawSection("Studio", request, context, "Leave a discovery for someone else.",
                     "Guided tools for postcards, stamp spots, and trails are coming later. Creation and publishing are not available yet.");
             }
             finally
@@ -51,23 +69,23 @@ internal sealed class MainWindow : Window
         ImGui.Spacing();
         ImGui.Separator();
         ImGui.Spacing();
-        if (ImGui.Button("Settings"))
+        if (UiButton.Draw("Settings", context))
             openSettings();
     }
 
-    private static void DrawSection(string label, string heading, string description)
+    private static void DrawSection(string label, string? request, UiContext context, string heading, string description)
     {
-        if (!ImGui.BeginTabItem(label))
+        if (!ImGui.BeginTabItem(label, request == label ? ImGuiTabItemFlags.SetSelected : ImGuiTabItemFlags.None))
             return;
 
         try
         {
             ImGui.Spacing();
-            ImGui.TextColored(ShellStyle.Veil, "Coming soon");
+            UiTypography.Text("Coming soon", TextRole.Caption, context, UiTheme.Veil);
             ImGui.Spacing();
-            ImGui.TextWrapped(heading);
+            UiTypography.Text(heading, TextRole.Heading, context, UiTheme.Paper);
             ImGui.Spacing();
-            ImGui.TextWrapped(description);
+            UiTypography.Text(description, TextRole.Body, context, UiTheme.Paper);
             ImGui.Spacing();
         }
         finally

@@ -2,4 +2,7 @@
   <Project Path="src/Wanderveil/Wanderveil.csproj">
     <Platform Project="x64" />
   </Project>
+  <Project Path="tests/Wanderveil.UiChecks/Wanderveil.UiChecks.csproj">
+    <Platform Project="x64" />
+  </Project>
 </Solution>

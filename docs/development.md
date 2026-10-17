@@ -1,6 +1,6 @@
 # Development guide
 
-Status: minimal Wanderveil shell, migrated from the sample on 18 October 2026.
+Status: Wanderveil shell plus static Passport identity preview, 18 October 2026.
 
 ## Prerequisites
 
@@ -18,6 +18,7 @@ Run from this repository root:
 dotnet restore Wanderveil.slnx --locked-mode
 dotnet build Wanderveil.slnx -c Debug --no-restore
 dotnet build Wanderveil.slnx -c Release --no-restore
+dotnet run --project tests/Wanderveil.UiChecks -c Release -p:Platform=x64 --no-build --no-restore -- artifacts/ui
 dotnet format whitespace Wanderveil.slnx --no-restore --verify-no-changes
 ```
 
@@ -27,7 +28,7 @@ Use the solution's default platform mapping, which maps the project to x64. Outp
 - Release DLL/manifest: the same filenames under `src/Wanderveil/bin/x64/Release/`.
 - Release distribution package: `src/Wanderveil/bin/x64/Release/Wanderveil/latest.zip`.
 
-All commands above passed during migration. Debug/Release each had zero warnings/errors. A fresh client-only source copy outside the workspace also restored/built both configurations. No test project exists yet. The PR workflow now uses locked restore and a Debug/Release matrix with corrected artifact paths; hosted execution has not been tested.
+The solution maps both projects to x64; direct check-project runs need `-p:Platform=x64` to select that output. [Native UI checks](../tests/README.md) use the installed `Dalamud.Bindings.ImGui.dll` and `cimgui.dll`, with no new NuGet dependency. Optional ignored BMP previews are generated under `artifacts/ui/`. CI runs the checks in Debug/Release and uploads previews separately from plugin artifacts. Hosted execution is not claimed from local results.
 
 ## Commands and settings
 
@@ -38,11 +39,11 @@ All commands above passed during migration. Debug/Release each had zero warnings
 | Shell Settings button / Dalamud configuration action | Open appearance settings |
 | Dalamud main-UI action | Open the shell |
 
-The four destination tabs are coming-soon placeholders. Reduced motion persists through Dalamud configuration; the current shell is static. Save failures offer retry. The new internal name uses Wanderveil's own configuration identity; the old sample's arbitrary settings are not imported.
+Passport initially shows a static synthetic identity spread; other destinations remain coming soon. Explore discoveries selects the Discover tab. Reduced motion persists through Dalamud configuration; the UI is currently static. Save failures offer retry. Wanderveil uses its own configuration identity; the old sample's arbitrary settings are not imported.
 
-## Live smoke checklist — pending
+## Optional live observations
 
-Register the Debug DLL using the current Dalamud developer-plugin UI, then verify:
+When observing the live host, register the Debug DLL using its developer-plugin UI and record these checks. Routine user in-game testing is not required before committing automated-verified work.
 
 - [ ] Load and open through `/wanderveil` and the main-UI action.
 - [ ] Toggle closed/reopen and switch all four tabs; resize and increase UI/text scale.
@@ -52,7 +53,7 @@ Register the Debug DLL using the current Dalamud developer-plugin UI, then verif
 - [ ] Unload/reload repeatedly without duplicate command handlers, windows, or callbacks.
 - [ ] Check logs for errors and confirm the old sample command/asset is unused.
 
-No live runtime test was performed during this migration. Builds, package inspection, and source lifecycle review do not substitute for these checks.
+Native ImGui frames/previews do not establish FFXIV lifecycle, exact font appearance, or GPU compatibility. Record those observations honestly when available; do not turn this optional checklist into a routine user-testing gate.
 
 ## Contribution
 

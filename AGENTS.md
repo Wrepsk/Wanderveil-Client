@@ -4,7 +4,7 @@ This agreement is self-contained. Read [docs/README.md](docs/README.md), [archit
 
 ## Current baseline and scope
 
-The executable project is `src/Wanderveil/Wanderveil.csproj`, referenced by `Wanderveil.slnx`. The minimal shell and saved appearance settings are implemented. Most feature/domain/application folders, `tests/`, and `assets/` remain reservations; do not claim they implement collection or online features. The next UI task is shared tokens/typography and a static Passport identity spread.
+The executable project is `src/Wanderveil/Wanderveil.csproj`, referenced by `Wanderveil.slnx`. The shell, saved appearance settings, shared UI primitives, and synthetic Passport identity spread are implemented. `tests/Wanderveil.UiChecks` checks real native ImGui layout/input outside the game. Other feature/domain/application folders and assets remain mostly reserved. The next UI task is a static Discover card/detail flow.
 
 The first product loop is one curated offline discovery → one local demo stamp → passport page. Build static UI before online accounts/publication. Backend identity, networking contracts, and renderer integration remain future work. Honor current user scope rather than implementing all roadmap ideas.
 
@@ -27,9 +27,14 @@ For the current baseline:
 dotnet restore Wanderveil.slnx --locked-mode
 dotnet build Wanderveil.slnx -c Debug --no-restore
 dotnet build Wanderveil.slnx -c Release --no-restore
+dotnet run --project tests/Wanderveil.UiChecks -c Release -p:Platform=x64 --no-build --no-restore -- artifacts/ui
 dotnet format whitespace Wanderveil.slnx --no-restore --verify-no-changes
 ```
 
-There is no test project yet. Add meaningful tests as domain/persistence/lifecycle behavior is implemented. For docs, check local links and standalone readability. For UI, inspect actual Dalamud screenshots at narrow/default/wide widths, increased text size, reduced motion, and long strings. A build does not prove live behavior.
+Run the native UI check executable for layout, contrast, wrapped-text reservation, mouse/keyboard activation, and style isolation; inspect its software-rendered previews. Add meaningful domain/persistence/lifecycle checks with those features. For docs, check local links and standalone readability. Record live Dalamud evidence when available, without making routine user testing a prerequisite for completion/commits. Headless previews do not establish game-host lifecycle or exact font/GPU appearance.
 
 Update docs with actual behavior and unresolved decisions. Report changed files, checks/results, limits, and next task. Never claim private backend integration or renderer compatibility was tested when it was not.
+
+## Commit workflow — user preference
+
+Commit completed, verified slices automatically, using this repository's Conventional Commit style (for example `feat(ui): add responsive passport identity preview`). Review staged files and preserve unrelated work. Keep commits independent from the parent repository and do not push unless requested. Automated/native UI evidence is sufficient for routine UI commits; do not request in-game testing as a commit gate or claim live behavior you have not observed.

@@ -1,5 +1,6 @@
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
+using Wanderveil.UI.Primitives;
 
 namespace Wanderveil.UI;
 
@@ -16,8 +17,8 @@ internal static class CompassMark
         var extent = new Vector2(Size * scale);
         var center = ImGui.GetCursorScreenPos() + (extent / 2f);
         var drawList = ImGui.GetWindowDrawList();
-        var gold = ImGui.GetColorU32(ShellStyle.Gold);
-        var paper = ImGui.GetColorU32(ShellStyle.Parchment);
+        var gold = ImGui.GetColorU32(UiTheme.Gold);
+        var paper = ImGui.GetColorU32(UiTheme.Paper);
         var left = center - new Vector2(NeedleHalfWidth * scale, 0f);
         var right = center + new Vector2(NeedleHalfWidth * scale, 0f);
 
