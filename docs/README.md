@@ -9,6 +9,7 @@ Status: Phase 01 UI prototype, 18 October 2026. Shared components, static Passpo
 - [Passport visual-fidelity milestone and review previews](passport-visual-fidelity.md)
 - [Intended passport experience, nation editions, and page order](passport-experience.md)
 - [Gridania static cover and spread review](passport-gridania-study.md)
+- [Gridania runtime controls, reload instructions, and previews](passport-runtime.md)
 - [Optional rendering investigation](rendering.md)
 - [API contract status](api/README.md)
 - [Asset organization](../assets/README.md)
@@ -18,7 +19,7 @@ Status: Phase 01 UI prototype, 18 October 2026. Shared components, static Passpo
 ## First implementation tasks
 
 1. Review the Gridania cover/colorway, banner/map introduction, portrait/signature versus information identity spread, and stamp collection targets; refine the artwork/material model before broader customization.
-2. Implement closed/open logical presentation, then closed bottom-center arrival and close-to-cover dismissal; separately evaluate a bounded 2.5D page turn. Review previews between milestones; do not introduce CrystalRenderer without a separate decision.
+2. Review the connected static runtime prototype, then add closed bottom-center arrival and close-to-cover dismissal motion; separately evaluate a bounded 2.5D page turn. Review previews between milestones; do not introduce CrystalRenderer without a separate decision.
 3. Resume Studio/Echoes and remaining Phase 1 controls once the visual language is established. Collection/persistence remain Phase 2.
 
 No account, private repository, production backend, or advanced renderer is needed for those product steps. Unresolved online contracts, identity proof, and renderer delivery require explicit decisions before implementation.

@@ -23,7 +23,7 @@ internal static class GridaniaChecks
             var width = cover ? 560 : scenario.Single ? 420 : 1160;
             var height = cover ? 840 : MathF.Ceiling(BookSurface.NaturalHeight(width, !scenario.Single) * 0.925f);
             var size = new Vector2(width, height);
-            using var host = new HeadlessUi(size + new Vector2(32), textScale: scenario.TextScale, materials: true, signature: true);
+            using var host = new HeadlessUi(size + new Vector2(32), textScale: scenario.TextScale, materials: true);
             foreach (var studyName in new[] { "cover", "cover-plum-cutout", "crest", "banner", "map-overhead" }) host.Textures!.LoadStudy(studyName);
             if (cover)
             {

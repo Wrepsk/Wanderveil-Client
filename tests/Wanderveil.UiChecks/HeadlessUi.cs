@@ -17,7 +17,7 @@ internal sealed unsafe class HeadlessUi : IDisposable
     internal ImFontPtr HeadingFont { get; }
     internal ImFontPtr SignatureFont { get; }
 
-    internal HeadlessUi(Vector2 size, float scale = 1f, float textScale = 1f, bool materials = false, bool signature = false)
+    internal HeadlessUi(Vector2 size, float scale = 1f, float textScale = 1f, bool materials = false)
     {
         displaySize = size;
         context = ImGui.CreateContext();
@@ -34,8 +34,7 @@ internal sealed unsafe class HeadlessUi : IDisposable
             io.Fonts.AddFontFromFileTTF(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Fonts), "segoeui.ttf"), 18f);
             TitleFont = io.Fonts.AddFontFromFileTTF(Path.Combine(AppContext.BaseDirectory, "Assets", "SourceSerif4-Semibold.ttf"), 30f);
             HeadingFont = io.Fonts.AddFontFromFileTTF(Path.Combine(AppContext.BaseDirectory, "Assets", "SourceSerif4-Regular.ttf"), 24f);
-            var signaturePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Fonts), "segoesc.ttf");
-            if (signature && File.Exists(signaturePath)) SignatureFont = io.Fonts.AddFontFromFileTTF(signaturePath, 30f);
+            SignatureFont = io.Fonts.AddFontFromFileTTF(Path.Combine(AppContext.BaseDirectory, "Assets", "Caveat.ttf"), 30f);
             Textures = new PreviewTextures();
         }
         else io.Fonts.AddFontDefault();

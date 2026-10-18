@@ -1,8 +1,8 @@
 # Passport experience
 
-Status: user-selected product/design direction, 18 October 2026; planned behavior, not shipped functionality. This refines the [visual-fidelity milestones](passport-visual-fidelity.md). The current client opens directly onto its stationary identity/notes prototype.
+Status: user-selected product/design direction, 18 October 2026. The [static runtime prototype](passport-runtime.md) now starts closed and supports explicit opening and ordered nation/identity/demo-stamp pages. Motion and broader customization remain planned. This refines the [visual-fidelity milestones](passport-visual-fidelity.md).
 
-First edition selected: **Gridania**. Its [static review previews](passport-gridania-study.md) establish one cover/colorway and the revised spreads; the full intended runtime sequence below is still planned.
+First edition selected: **Gridania**. Its [static review previews](passport-gridania-study.md) establish one cover/colorway and the revised spreads. The selected green edition is now connected to the client; the animated sequence below remains the intended experience.
 
 ## Arrival, opening, and dismissal
 

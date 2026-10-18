@@ -34,6 +34,11 @@ internal sealed class PreviewTextures : IBookAssets
             }
             finally { bitmap.UnlockBits(data); }
         }
+        foreach (var name in new[] { "cover", "banner", "map-overhead", "crest" }) LoadStudy(name);
+        images[BookAsset.EditionCover] = Study("cover");
+        images[BookAsset.NationBanner] = Study("banner");
+        images[BookAsset.NationMap] = Study("map-overhead");
+        images[BookAsset.EditionCrest] = Study("crest");
     }
 
     public bool TryGet(BookAsset asset, out BookImage image) => images.TryGetValue(asset, out image);
@@ -42,6 +47,7 @@ internal sealed class PreviewTextures : IBookAssets
 
     internal void LoadStudy(string name)
     {
+        if (studies.ContainsKey(name)) return;
         using var bitmap = new Bitmap(Path.Combine(AppContext.BaseDirectory, "Assets", "Studies", "Gridania", name + ".png"));
         var data = bitmap.LockBits(new Rectangle(0, 0, bitmap.Width, bitmap.Height), ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
         try

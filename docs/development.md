@@ -40,7 +40,7 @@ The solution maps both projects to x64; direct check-project runs need `-p:Platf
 | Shell Settings button / Dalamud configuration action | Open appearance settings |
 | Dalamud main-UI action | Open the shell |
 
-Passport initially shows a static synthetic identity spread in a borderless book shell. Attached bookmarks select sections. Narrow/enlarged layouts show identity or notes with immediate page navigation. Scroll within the parchment, drag the outer leather edge to move, and use plus/minus for session-only preferred size. Close uses the attached x or Dalamud's Escape handling. Native directional navigation and Space activate actions; opening focuses the selected bookmark. Explore discoveries selects Discover, whose demo cards open postcard/stamp-preview details. Back returns to the list and restores its scroll position, with focus moved to Back when details open. Collection is disabled and explicitly unsaved. Echoes and Studio remain coming soon. Reduced motion persists through Dalamud configuration; the UI is currently static. Save failures offer retry. Wanderveil uses its own configuration identity; the old sample's arbitrary settings are not imported.
+Each summon now shows the closed Gridania cover at the bottom center. Open reveals nation, identity, and demo stamp pages; use previous/next or Cover, with native directional/Space navigation. Narrow layouts advance one page. Discover and focused Back/browse-scroll restoration remain. Settings, drag, and preferred-size controls remain. All transitions are immediate; animation and collection/persistence are not implemented. After building, reload the plugin so Dalamud loads the new DLL; see [runtime reload instructions and previews](passport-runtime.md).
 
 ## Optional live observations
 

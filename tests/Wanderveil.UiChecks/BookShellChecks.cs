@@ -30,7 +30,7 @@ internal static class BookShellChecks
         {
             using var host = new HeadlessUi(scenario.Size, scenario.Scale, scenario.Text, materials: true);
             var shell = new BookShell(host.Textures!, PassportPreview.Sample);
-            var context = new UiContext(scenario.Scale, 18 * scenario.Scale * scenario.Text) { TitleFont = host.TitleFont, HeadingFont = host.HeadingFont };
+            var context = new UiContext(scenario.Scale, 18 * scenario.Scale * scenario.Text) { TitleFont = host.TitleFont, HeadingFont = host.HeadingFont, SignatureFont = host.SignatureFont };
             var size = BookShellLayout.Fit(shell.PreferredWidth, scenario.Size - new Vector2(32), context);
             UiRect root = default;
             BookShellIntent intent = default;
@@ -44,10 +44,15 @@ internal static class BookShellChecks
             }
             void Frame()
             {
-                size = BookShellLayout.Fit(shell.PreferredWidth, scenario.Size - new Vector2(32), context);
+                size = shell.FitSize(scenario.Size - new Vector2(32), context);
                 host.BookFrame(size, Draw);
             }
             for (var frame = 0; frame < 4; frame++) Frame();
+            check(!shell.IsBookOpen, "Summoning skips the closed passport cover.");
+            if (artifacts != null && scenario.Name == "wide") SoftwarePreview.Save(Path.Combine(artifacts, "passport-runtime-cover.png"), host);
+            Click(BookShellLayout.OpenButton(root, context).Position + BookShellLayout.OpenButton(root, context).Size / 2);
+            check(shell.IsBookOpen, "Closed passport does not open through its native action.");
+            for (var frame = 0; frame < 3; frame++) Frame();
             var layout = BookShellLayout.Create(root, context, shell.VisiblePage);
             check(size.X <= scenario.Size.X - 32.01f + 0.02f && size.Y <= scenario.Size.Y - 32 + 0.02f, "Book does not fit the viewport.");
             check(layout.LeftPage.Size.Y > 60 && layout.LeftPage.Max.Y < layout.Footer.Position.Y, "Page content collides with book controls.");
@@ -68,7 +73,7 @@ internal static class BookShellChecks
                 var small = MathF.Max(28 * context.Scale, context.FontSize + 10 * context.Scale);
                 var controlsX = layout.Footer.Max.X - small * 3 - 10 * context.Scale;
                 Click(new Vector2((layout.StackControls ? layout.Footer.Max.X : controlsX) - 12 * context.Scale, layout.Footer.Position.Y + layout.ControlHeight / 2));
-                check(shell.VisiblePage == 1, "Narrow passport cannot reach its notes page.");
+                check(shell.VisiblePage == 1, "Narrow passport cannot reach its next logical page.");
                 ImGui.GetIO().AddMousePosEvent(-100, -100); Frame();
                 if (artifacts != null) SoftwarePreview.Save(Path.Combine(artifacts, "passport-shell-" + scenario.Name + "-notes.png"), host);
             }
@@ -96,7 +101,7 @@ internal static class BookShellChecks
             check(shell.Section == BookSection.Passport, "Bookmark activated after release outside its bounds.");
 
             // Move only the leather grip. Page interaction must not initiate host movement.
-            var grip = layout.Book.Position + new Vector2(layout.Book.Size.X * (layout.IsSpread ? 0.065f : shell.VisiblePage == 1 ? 0.92f : 0.11f), layout.Book.Size.Y * 0.3f);
+            var grip = layout.Book.Position + new Vector2(layout.Book.Size.X * (layout.IsSpread ? 0.065f : shell.VisiblePage % 2 == 1 ? 0.92f : 0.11f), layout.Book.Size.Y * 0.3f);
             ImGui.GetIO().AddMousePosEvent(grip.X, grip.Y); Frame();
             ImGui.GetIO().AddMouseButtonEvent(0, true); Frame();
             ImGui.GetIO().AddMousePosEvent(grip.X + 12, grip.Y + 8); Frame();
@@ -132,8 +137,11 @@ internal static class BookShellChecks
             var context = new UiContext(1, 18) { TitleFont = host.TitleFont, HeadingFont = host.HeadingFont };
             var size = BookShellLayout.Fit(1040, new Vector2(1168, 868), context);
             // Opening focuses the selected bookmark; native directional navigation reaches its peer.
-            void Frame() => host.BookFrame(size, () => shell.Draw(new UiRect(ImGui.GetWindowPos(), ImGui.GetWindowSize()), context));
+            void Frame() => host.BookFrame(shell.FitSize(new Vector2(1168, 868), context), () => shell.Draw(new UiRect(ImGui.GetWindowPos(), ImGui.GetWindowSize()), context));
             Frame(); Frame();
+            ImGui.GetIO().AddKeyEvent(ImGuiKey.Space, true); Frame();
+            ImGui.GetIO().AddKeyEvent(ImGuiKey.Space, false); Frame();
+            check(shell.IsBookOpen, "Opening the cover lost keyboard activation.");
             var reached = false;
             for (var step = 0; step < 20 && !reached; step++)
             {

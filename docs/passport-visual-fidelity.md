@@ -8,7 +8,7 @@ The user's subsequent cover/map/identity references establish the [passport expe
 
 ## Book shell correction
 
-Latest static review: the user selected Gridania; inspect the [cover/colorway, nation introduction, revised identity, and collection study](passport-gridania-study.md). These new compositions follow the intended page order, but runtime routing/motion is unchanged. The map remains an explicitly unvalidated illustration and the colorway is an artwork study, not a color picker.
+Latest runtime update: the selected Gridania cover, nation introduction, identity, and demo collection are now connected to `BookShell` through the same composition used by the gallery. See [runtime controls/reload instructions and previews](passport-runtime.md). Static closed/open logical navigation is implemented; motion remains pending. The map remains explicitly unvalidated and the plum colorway remains a study rather than a color picker. Earlier shell/gallery descriptions below record their original scope.
 
 The initial material milestone placed a book inside the conventional Wanderveil window. The user's in-game screenshot demonstrated the missing root composition. The subsequent approved slice makes the book the visible shell: transparent borderless host, attached section bookmarks, discreet leather-backed Settings/size/close controls, and a simple outer-leather drag grip. The outer book never scrolls. Text and native actions scroll inside bounded transparent page children, leaving the binding, page edges, bookmarks, and controls stationary.
 

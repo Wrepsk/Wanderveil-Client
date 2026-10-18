@@ -2,7 +2,7 @@ using Dalamud.Bindings.ImGui;
 
 namespace Wanderveil.UI.Components;
 
-internal enum BookAsset { Open, Cover, Portrait, Stamps }
+internal enum BookAsset { Open, Cover, Portrait, Stamps, EditionCover, NationBanner, NationMap, EditionCrest }
 
 internal readonly record struct BookImage(ImTextureID Texture, int Width, int Height);
 

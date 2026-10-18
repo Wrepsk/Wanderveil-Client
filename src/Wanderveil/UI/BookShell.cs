@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using Wanderveil.Features.Discover;
@@ -11,35 +13,43 @@ namespace Wanderveil.UI;
 internal enum BookSection { Passport, Discover, Echoes, Studio }
 internal readonly record struct BookShellIntent(bool Close, bool Settings, Vector2 Drag);
 
-internal sealed class BookShell(IBookAssets assets, PassportPreview profile)
+internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IReadOnlyList<PassportPage>? pages = null)
 {
     internal const ImGuiWindowFlags WindowFlags = ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.NoBackground | ImGuiWindowFlags.NoCollapse |
         ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoMove | ImGuiWindowFlags.NoDocking;
     private static readonly string[] Labels = ["Passport", "Discover", "Echoes", "Studio"];
-    private readonly PassportView passport = new(profile, assets);
+    private readonly PassportDocumentView passport = new(assets, profile);
+    private readonly IReadOnlyList<PassportPage> documentPages = ValidatePages(pages ?? PassportDocumentView.SamplePages);
     private readonly DiscoverView discover = new(DiscoveryPreview.Samples);
     internal BookSection Section { get; private set; }
     internal int VisiblePage { get; private set; }
+    internal bool IsBookOpen { get; private set; }
+    private bool focusCover = true;
+    private bool focusSection;
+    internal int PageCount => documentPages.Count;
     internal float PreferredWidth { get; private set; } = 1040;
     internal DiscoveryPreview? SelectedDiscovery => discover.SelectedDiscovery;
 
     internal BookShellIntent Draw(UiRect bounds, UiContext context)
     {
+        if (!IsBookOpen) return DrawClosed(bounds, context);
         var layout = BookShellLayout.Create(bounds, context, Section == BookSection.Passport ? VisiblePage : 0);
-        BookSurface.Draw(layout.Book, layout.IsSpread ? BookFace.Spread : Section == BookSection.Passport && VisiblePage == 1 ? BookFace.Right : BookFace.Left, assets, context);
-        var drag = Grip(layout, !layout.IsSpread && Section == BookSection.Passport && VisiblePage == 1);
+        if (layout.IsSpread) VisiblePage -= VisiblePage % 2;
+        BookSurface.Draw(layout.Book, layout.IsSpread ? BookFace.Spread : Section == BookSection.Passport && VisiblePage % 2 == 1 ? BookFace.Right : BookFace.Left, assets, context);
+        var drag = Grip(layout, !layout.IsSpread && Section == BookSection.Passport && VisiblePage % 2 == 1);
         var next = Section;
         for (var index = 0; index < Labels.Length; index++)
         {
-            if (ImGui.IsWindowAppearing() && (int)Section == index) ImGui.SetKeyboardFocusHere();
+            if ((ImGui.IsWindowAppearing() || focusSection) && (int)Section == index) ImGui.SetKeyboardFocusHere();
             if (BookControl.Draw(Labels[index], Labels[index], layout.Bookmark(index), context, (int)Section == index, true, assets: assets)) next = (BookSection)index;
         }
+        focusSection = false;
 
         var explore = false;
         if (Section == BookSection.Passport)
         {
-            Page(layout.IsSpread || VisiblePage == 0 ? "Identity" : "Notes", layout.LeftPage, () => explore |= passport.DrawPageContent(layout.IsSpread ? 0 : VisiblePage, context));
-            if (layout.IsSpread) Page("Notes", layout.RightPage, () => explore |= passport.DrawPageContent(1, context));
+            DocumentPage(VisiblePage, layout.LeftPage);
+            if (layout.IsSpread && VisiblePage + 1 < documentPages.Count) DocumentPage(VisiblePage + 1, layout.RightPage);
         }
         else
         {
@@ -64,18 +74,42 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile)
         var controlsX = footer.Max.X - controlsWidth;
         var controlsY = footer.Max.Y - layout.ControlHeight;
         var firstRowEnd = layout.StackControls ? footer.Max.X : controlsX - gap;
-        var settingsWidth = MathF.Min(80 * MathF.Max(context.Scale, context.FontSize / 18), MathF.Max(1, (firstRowEnd - footer.Position.X) * (layout.IsSpread ? 1 : 0.6f)));
+        var settingsWidth = MathF.Min(80 * MathF.Max(context.Scale, context.FontSize / 18), MathF.Max(1, (firstRowEnd - footer.Position.X) * 0.45f));
         var settings = BookControl.Draw("Settings", "Settings", new UiRect(footer.Position, new Vector2(settingsWidth, layout.ControlHeight)), context, assets: assets);
-        if (!layout.IsSpread && Section == BookSection.Passport)
+        if (Section == BookSection.Passport)
         {
             var pager = new UiRect(footer.Position + new Vector2(settingsWidth + gap, 0), new Vector2(MathF.Max(1, firstRowEnd - footer.Position.X - settingsWidth - gap), layout.ControlHeight));
-            if (BookControl.Draw("Page", VisiblePage == 0 ? "2 >" : "< 1", pager, context, hint: VisiblePage == 0 ? "Read notes" : "Read identity", assets: assets)) VisiblePage = 1 - VisiblePage;
+            var arrowWidth = MathF.Min(small, pager.Size.X * 0.20f);
+            var step = layout.IsSpread ? 2 : 1;
+            ImGui.BeginDisabled(VisiblePage == 0);
+            if (BookControl.Draw("Previous page", "<", pager with { Size = new Vector2(arrowWidth, pager.Size.Y) }, context, hint: "Previous page", assets: assets)) VisiblePage = Math.Max(0, VisiblePage - step);
+            ImGui.EndDisabled();
+            var middleWidth = MathF.Min(96 * MathF.Max(context.Scale, context.FontSize / 18), MathF.Max(1, pager.Size.X - 2 * (arrowWidth + gap)));
+            var middle = new UiRect(pager.Position + new Vector2((pager.Size.X - middleWidth) / 2, 0), new Vector2(middleWidth, pager.Size.Y));
+            if (BookControl.Draw("Return to cover", "Cover", middle, context, hint: $"Close the book / Page {VisiblePage + 1} of {PageCount}", assets: assets)) { IsBookOpen = false; focusCover = true; }
+            ImGui.BeginDisabled(VisiblePage + step >= PageCount);
+            if (BookControl.Draw("Next page", ">", new UiRect(new Vector2(pager.Max.X - arrowWidth, pager.Position.Y), new Vector2(arrowWidth, pager.Size.Y)), context, hint: "Next page", assets: assets)) VisiblePage = Math.Min(PageCount - 1, VisiblePage + step);
+            ImGui.EndDisabled();
         }
         if (BookControl.Draw("Smaller", "-", new UiRect(new Vector2(controlsX, controlsY), new Vector2(small, layout.ControlHeight)), context, hint: "Smaller passport", assets: assets)) PreferredWidth = MathF.Max(420, PreferredWidth / 1.15f);
         if (BookControl.Draw("Larger", "+", new UiRect(new Vector2(controlsX + small + gap, controlsY), new Vector2(small, layout.ControlHeight)), context, hint: "Larger passport", assets: assets)) PreferredWidth = MathF.Min(1400, PreferredWidth * 1.15f);
         var close = BookControl.Draw("Close", "x", new UiRect(new Vector2(controlsX + 2 * (small + gap), controlsY), new Vector2(small, layout.ControlHeight)), context, hint: "Close passport (Escape)", assets: assets);
         Section = next;
         return new BookShellIntent(close, settings, drag);
+
+        void DocumentPage(int index, UiRect region)
+        {
+            var page = documentPages[index];
+            Page(page.Id, region, () =>
+            {
+                passport.Compose(page, context);
+                if (page.Kind == PassportPageKind.Information)
+                {
+                    ImGui.Dummy(new Vector2(0, 12 * context.Scale));
+                    explore |= UiButton.Draw("Explore discoveries", context);
+                }
+            });
+        }
 
         void Page(string id, UiRect region, Action content)
         {
@@ -92,6 +126,46 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile)
             }
             finally { ImGui.PopStyleColor(2); ImGui.PopStyleVar(2); }
         }
+    }
+
+    internal void BeginSession()
+    {
+        IsBookOpen = false;
+        Section = BookSection.Passport;
+        VisiblePage = 0;
+        focusCover = true;
+    }
+
+    internal Vector2 FitSize(Vector2 room, UiContext context) => BookShellLayout.Fit(PreferredWidth, room, context, !IsBookOpen);
+
+    private BookShellIntent DrawClosed(UiRect bounds, UiContext context)
+    {
+        passport.DrawCover(bounds, context);
+        ImGui.SetCursorScreenPos(bounds.Position + new Vector2(bounds.Size.X * 0.07f, bounds.Size.Y * 0.2f));
+        ImGui.InvisibleButton("Move closed passport", new Vector2(bounds.Size.X * 0.07f, bounds.Size.Y * 0.55f));
+        var drag = ImGui.IsItemActive() && ImGui.IsMouseDragging(ImGuiMouseButton.Left) ? ImGui.GetIO().MouseDelta : Vector2.Zero;
+        if (focusCover || ImGui.IsWindowAppearing()) ImGui.SetKeyboardFocusHere();
+        focusCover = false;
+        if (BookControl.Draw("Open passport", "Open", BookShellLayout.OpenButton(bounds, context), context, hint: "Open passport", assets: assets)) { IsBookOpen = true; VisiblePage = 0; focusSection = true; }
+        var height = BookShellLayout.GetControlHeight(context);
+        var footer = new UiRect(bounds.Position + new Vector2(bounds.Size.X * 0.1f, bounds.Size.Y * 0.88f), new Vector2(bounds.Size.X * 0.8f, height));
+        var small = MathF.Max(28 * context.Scale, context.FontSize + 10 * context.Scale);
+        var gap = 5 * context.Scale;
+        var x = footer.Max.X - 3 * small - 2 * gap;
+        var settingsWidth = MathF.Min(80 * MathF.Max(context.Scale, context.FontSize / 18), MathF.Max(1, x - footer.Position.X - gap));
+        var settings = BookControl.Draw("Settings", "Settings", footer with { Size = new Vector2(settingsWidth, height) }, context, assets: assets);
+        if (BookControl.Draw("Smaller", "-", new UiRect(new Vector2(x, footer.Position.Y), new Vector2(small, height)), context, assets: assets)) PreferredWidth = MathF.Max(420, PreferredWidth / 1.15f);
+        if (BookControl.Draw("Larger", "+", new UiRect(new Vector2(x + small + gap, footer.Position.Y), new Vector2(small, height)), context, assets: assets)) PreferredWidth = MathF.Min(1400, PreferredWidth * 1.15f);
+        var close = BookControl.Draw("Close", "x", new UiRect(new Vector2(x + 2 * (small + gap), footer.Position.Y), new Vector2(small, height)), context, assets: assets);
+        return new BookShellIntent(close, settings, drag);
+    }
+
+    private static IReadOnlyList<PassportPage> ValidatePages(IReadOnlyList<PassportPage> source)
+    {
+        var copy = source.ToArray();
+        if (copy.Length == 0 || copy.Any(page => page == null || string.IsNullOrWhiteSpace(page.Id)) || copy.Select(page => page.Id).Distinct(StringComparer.Ordinal).Count() != copy.Length)
+            throw new ArgumentException("A passport needs pages with unique stable identifiers.", nameof(source));
+        return Array.AsReadOnly(copy);
     }
 
     private void Introduction(UiContext context)

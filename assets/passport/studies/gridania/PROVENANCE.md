@@ -1,6 +1,6 @@
 # Gridania visual studies
 
-Created on 18 October 2026 with OpenAI's built-in image-generation tool using the [recorded prompts](generation-prompts.md). The user chose Gridania as the first edition. These files are review resources, not embedded runtime assets; the plugin's existing root PNG/font resources remain unchanged.
+Created on 18 October 2026 with OpenAI's built-in image-generation tool using the [recorded prompts](generation-prompts.md). The user chose Gridania as the first edition. The static runtime prototype now embeds `cover.png`, `banner.png`, `map-overhead.png`, and `crest.png` explicitly. Plum/intermediate assets remain review resources outside the plugin package. Existing root material/portrait/stamp PNGs are unchanged.
 
 | File | Dimensions | Purpose |
 | --- | --- | --- |
@@ -21,4 +21,4 @@ Outputs retain their generated RGBA pixels unchanged. Text, identity fields, cap
 
 The generated banner/crest are original stylized interpretations, not official reproductions. FINAL FANTASY XIV setting names and heraldic concepts remain attributable to Square Enix. Project-authored contributions use the repository's existing license; no exclusive copyright claim is made for generated imagery, and that license does not grant rights in third-party intellectual property. These studies do not establish release-ready geography or exact heraldry.
 
-The native gallery loads local Windows Segoe UI and Segoe Script as preview-only font surrogates; neither is redistributed. Signature text is the invented sample name Ari Vale, not a real person's signature. Signature input/storage is not implemented. Bundled Source Serif 4 retains its existing Adobe/SIL OFL license.
+The original gallery used local Windows Segoe UI/Segoe Script surrogates without redistributing either. The connected runtime and regenerated gallery use bundled Caveat for the invented Ari Vale signature; local Segoe UI remains a preview-only body-font surrogate. Signature input/storage is not implemented. Caveat and Source Serif 4 retain their separate SIL OFL notices.
