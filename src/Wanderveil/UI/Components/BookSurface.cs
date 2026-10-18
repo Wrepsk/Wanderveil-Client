@@ -12,6 +12,19 @@ internal static class BookSurface
 {
     internal static float ContentWidth(float width, bool spread) => width * (spread ? 0.35f : 0.70f);
 
+    // The paper of one page in the open-book plate (pages at x 66-768 and 768-1470, y 66-958 of 1536 x 1024).
+    internal static UiRect Paper(UiRect book, BookFace face, bool rightOfSpread = false)
+    {
+        var natural = NaturalHeight(book.Size.X, face == BookFace.Spread);
+        var (x0, x1) = face switch
+        {
+            BookFace.Spread => rightOfSpread ? (768f / 1536f, 1470f / 1536f) : (66f / 1536f, 768f / 1536f),
+            BookFace.Right => (0f, 702f / 768f),
+            _ => (66f / 768f, 1f),
+        };
+        return new UiRect(book.Position + new Vector2(book.Size.X * x0, natural * 66f / 1024f), new Vector2(book.Size.X * (x1 - x0), natural * 892f / 1024f));
+    }
+
     internal static float NaturalHeight(float width, bool spread) => width * (spread ? 2f / 3f : 4f / 3f);
 
     // The closed cover plate's board sits at 42,141 (940 x 1253) of 1024 x 1536 and is authored in

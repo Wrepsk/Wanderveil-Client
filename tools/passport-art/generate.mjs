@@ -59,7 +59,7 @@ for (const [id, palette] of Object.entries(editions)) {
   const tokens = { ...shared, ...palette };
   await emit(cover(id, tokens), `editions/${id}/cover.png`, COVER.w, COVER.h);
   await emit(crest(id, tokens), `editions/${id}/crest.png`, CREST, CREST);
-  await emit(banner(id, tokens), `editions/${id}/banner.png`, 1200, 760);
+  await emit(banner(id, tokens), `editions/${id}/banner.png`, 800, 1840);
   await emit(fill(read("map.svg"), tokens), `editions/${id}/map-overhead.png`, 1044, 1260);
   await emit(fill(read("book-open.svg"), tokens), `editions/${id}/book-open.png`, 1536, 1024);
 }

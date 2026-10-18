@@ -31,7 +31,7 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportPreview p
         if (assets.TryGet(BookAsset.EditionCrest, out var crest)) BookSurface.Illustration(new UiRect(board + new Vector2(135, 153) * unit, new Vector2(150 * unit)), crest);
         CoverText("GRIDANIA", 321, 44, 8);
         CoverText("THE BLACK SHROUD", 396, 14, 6);
-        CoverText("WANDERVEIL", 538, 10, 4, 0.7f);
+        CoverText("WANDERVEIL", 492, 10, 5, 0.7f);
 
         void CoverText(string text, float top, float size, float tracking, float alpha = 1)
         {
@@ -53,7 +53,7 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportPreview p
         var flow = new PageFlow(ImGui.GetCursorScreenPos(), width, context, true);
         switch (page.Kind)
         {
-            case PassportPageKind.NationBanner: Nation(ref flow, true, width, context); break;
+            case PassportPageKind.NationBanner: break; // Drawn on the paper by DrawNationBanner.
             case PassportPageKind.NationMap: Nation(ref flow, false, width, context); break;
             case PassportPageKind.Portrait: Identity(ref flow, true, width, context); break;
             case PassportPageKind.Information: Identity(ref flow, false, width, context); break;
@@ -63,6 +63,38 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportPreview p
         }
         ImGui.Dummy(new Vector2(width, flow.Height));
         return flow.Height;
+    }
+
+    // A pennant hung from the top edge of the page down to the lower margin, with foil lettering.
+    internal void DrawNationBanner(UiRect paper, float bottom, UiContext context)
+    {
+        var list = ImGui.GetWindowDrawList();
+        var height = MathF.Max(1, bottom - paper.Position.Y);
+        if (!assets.TryGet(BookAsset.NationBanner, out var image))
+        {
+            UiTypography.Draw(list, paper.Position + new Vector2(paper.Size.X * 0.12f, paper.Size.Y * 0.1f), "Gridania", TextRole.Title, context, paper.Size.X * 0.76f, UiTheme.Ink, false);
+            return;
+        }
+        var width = MathF.Min(paper.Size.X * 0.62f, height * image.Width / image.Height);
+        height = width * image.Height / image.Width;
+        var banner = new UiRect(new Vector2(paper.Position.X + (paper.Size.X - width) / 2, paper.Position.Y), new Vector2(width, height));
+        list.AddImage(image.Texture, banner.Position, banner.Max);
+        // Proportions are in the banner's 200 x 460 design units.
+        var unit = width / 200f;
+        Lettering("01 / THE FOREST NATION", 34, 8, 2.5f, 0.85f);
+        if (assets.TryGet(BookAsset.EditionCrest, out var crest)) BookSurface.Illustration(new UiRect(banner.Position + new Vector2(45, 62) * unit, new Vector2(110 * unit)), crest);
+        Lettering("GRIDANIA", 198, 22, 4, 1);
+        Lettering("REALM OF EORZEA", 240, 8, 3, 0.85f);
+
+        void Lettering(string text, float top, float size, float tracking, float alpha)
+        {
+            var type = context with { FontSize = MathF.Max(8, size * unit) / 1.65f, TitleFont = context.DisplayFont };
+            var spacing = MathF.Round(tracking * unit);
+            var measured = UiTypography.MeasureTracked(text, TextRole.Title, type, spacing);
+            var position = new Vector2(banner.Position.X + (width - measured) / 2, banner.Position.Y + top * unit);
+            UiTypography.DrawTracked(list, position + new Vector2(0, MathF.Max(1, unit * 0.6f)), text, TextRole.Title, type, spacing, new Vector4(0.02f, 0.05f, 0.03f, 0.5f * alpha));
+            UiTypography.DrawTracked(list, position, text, TextRole.Title, type, spacing, UiTheme.Foil with { W = alpha });
+        }
     }
 
     private void Nation(ref PageFlow flow, bool isLeft, float width, UiContext context)

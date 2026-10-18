@@ -82,6 +82,35 @@ internal static class RuntimePassportChecks
             check(!shell.IsBookOpen && shell.VisiblePage == 0 && shell.Section == BookSection.Passport, "Resummoning does not reset to the closed cover.");
         }
 
+        // Shrinking the book shrinks its printed contents instead of making pages scroll.
+        foreach (var steps in new[] { 0, 3, 6, 9 })
+        {
+            using var host = new HeadlessUi(new Vector2(1600, 1100), materials: true);
+            var shell = new BookShell(host.Textures!, PassportPreview.Sample);
+            var context = new UiContext(1, 18) { TitleFont = host.TitleFont, HeadingFont = host.HeadingFont, BodyFont = host.BodyFont, DisplayFont = host.DisplayFont, MonoFont = host.MonoFont, SignatureFont = host.SignatureFont };
+            UiRect bounds = default;
+            void Frame() => host.BookFrame(shell.FitSize(new Vector2(1568, 1068), context), () => { bounds = new UiRect(ImGui.GetWindowPos(), ImGui.GetWindowSize()); shell.Draw(bounds, context); });
+            void Press(ImGuiKey key) { ImGui.GetIO().AddKeyEvent(key, true); Frame(); ImGui.GetIO().AddKeyEvent(key, false); for (var frame = 0; frame < 4; frame++) Frame(); }
+            Frame(); Frame();
+            Press(ImGuiKey.Space);
+            for (var step = 0; step < steps; step++)
+            {
+                var layout = BookShellLayout.Create(bounds, context, shell.VisiblePage);
+                ImGui.GetIO().AddMousePosEvent(layout.Tool(0, context).Position.X + 4, layout.Tool(0, context).Position.Y + 4); Frame();
+                ImGui.GetIO().AddMouseButtonEvent(0, true); Frame();
+                ImGui.GetIO().AddMouseButtonEvent(0, false); Frame(); Frame();
+            }
+            ImGui.GetIO().AddMousePosEvent(-100, -100); Frame();
+            for (var page = 0; page < shell.PageCount; page++)
+            {
+                check(shell.PageOverflow < 1, $"Passport page {shell.VisiblePage + 1} scrolls by {shell.PageOverflow:0.0} at preferred width {shell.PreferredWidth:0} ({bounds.Size.X:0} x {bounds.Size.Y:0}).");
+                var before = shell.VisiblePage;
+                Press(ImGuiKey.PageDown);
+                if (shell.VisiblePage == before) break;
+            }
+            if (artifacts != null && steps == 9) SoftwarePreview.Save(Path.Combine(artifacts, "passport-runtime-smallest.png"), host);
+        }
+
         var mutable = PassportDocumentView.SamplePages.ToList();
         for (var index = 6; index < 17; index++) mutable.Add(new PassportPage("extra-" + index, PassportPageKind.Blank));
         var expanded = new BookShell(new MissingAssets(), PassportPreview.Sample, mutable);

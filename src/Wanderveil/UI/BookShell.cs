@@ -26,6 +26,8 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
     private readonly DiscoverView discover = new(DiscoveryPreview.Samples);
     private bool pressing;
     private bool dragging;
+    // Per-page shrink-to-fit factor, converged from each page's measured content height.
+    private readonly Dictionary<string, float> fits = new(StringComparer.Ordinal);
     internal BookSection Section { get; private set; }
     internal int VisiblePage { get; private set; }
     internal bool IsBookOpen { get; private set; }
@@ -33,11 +35,14 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
     internal int PageCount => documentPages.Count;
     internal float PreferredWidth { get; private set; } = 1040;
     internal DiscoveryPreview? SelectedDiscovery => discover.SelectedDiscovery;
+    // Largest scroll range among the pages drawn last frame; zero when every page fits its paper.
+    internal float PageOverflow { get; private set; }
 
     internal BookShellIntent Draw(UiRect bounds, UiContext context)
     {
         if (!IsBookOpen) return DrawClosed(bounds, context);
         var layout = BookShellLayout.Create(bounds, context, Section == BookSection.Passport ? VisiblePage : 0);
+        PageOverflow = 0;
         if (layout.IsSpread) VisiblePage -= VisiblePage % 2;
         var step = layout.IsSpread ? 2 : 1;
 
@@ -51,9 +56,12 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
         focusSection = false;
         BookSurface.Draw(layout.Book, layout.IsSpread ? BookFace.Spread : Section == BookSection.Passport && VisiblePage % 2 == 1 ? BookFace.Right : BookFace.Left, assets, context);
 
-        // Page text scales with the paper, never below the host text size.
+        // Page contents scale with the paper like printed matter: a smaller book shows smaller text,
+        // spacing, and artwork rather than scrolling. Enlarged host text still enlarges it (and may scroll).
         var pageWidth = layout.Book.Size.X * (layout.IsSpread ? 0.5f : 1f);
-        var page = context with { FontSize = MathF.Max(context.FontSize, MathF.Round(pageWidth * 16f / 420f)) };
+        var unit = pageWidth / 520f;
+        var enlarged = MathF.Max(1f, context.FontSize / (18f * context.Scale));
+        var page = context with { Scale = unit, FontSize = MathF.Max(10f, MathF.Round(pageWidth * 16f / 420f * enlarged)) };
         var explore = false;
         if (Section == BookSection.Passport)
         {
@@ -98,13 +106,27 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
         void DocumentPage(int index, UiRect region)
         {
             var entry = documentPages[index];
+            if (entry.Kind == PassportPageKind.NationBanner)
+            {
+                var face = layout.IsSpread ? BookFace.Spread : index % 2 == 1 ? BookFace.Right : BookFace.Left;
+                passport.DrawNationBanner(BookSurface.Paper(layout.Book, face, layout.IsSpread && index != VisiblePage), layout.Footer.Position.Y - 4 * context.Scale, page);
+            }
+            // Printed pages shrink to their paper; enlarged host text keeps its size and may scroll instead.
+            var fit = enlarged > 1f ? 1f : fits.GetValueOrDefault(entry.Id, 1f);
+            var type = page with { Scale = page.Scale * fit, FontSize = MathF.Max(8f, MathF.Round(page.FontSize * fit)) };
             Page(entry.Id, region, () =>
             {
-                passport.Compose(entry, page);
+                passport.Compose(entry, type);
                 if (entry.Kind == PassportPageKind.Information)
                 {
-                    ImGui.Dummy(new Vector2(0, 10 * context.Scale));
-                    explore |= BookControl.Link("Explore discoveries »", page);
+                    ImGui.Dummy(new Vector2(0, 10 * type.Scale));
+                    explore |= BookControl.Link("Explore discoveries »", type);
+                }
+                var used = ImGui.GetCursorPosY();
+                if (enlarged <= 1f && used > 1f)
+                {
+                    var target = MathF.Min(1f, fit * region.Size.Y * 0.96f / used);
+                    if (used > region.Size.Y || MathF.Abs(target - fit) > 0.015f || (target >= 1f && fit < 1f)) fits[entry.Id] = MathF.Max(0.4f, MathF.Min(target, used > region.Size.Y ? fit * 0.97f : 1f));
                 }
             });
         }
@@ -126,7 +148,7 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
             try
             {
                 var visible = ImGui.BeginChild(id, region.Size, false, ImGuiWindowFlags.NoBackground | ImGuiWindowFlags.NoSavedSettings);
-                try { if (visible) content(); }
+                try { if (visible) { content(); PageOverflow = MathF.Max(PageOverflow, ImGui.GetScrollMaxY()); } }
                 finally { ImGui.EndChild(); }
             }
             finally { ImGui.PopStyleColor(2); ImGui.PopStyleVar(2); }
@@ -176,13 +198,14 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
         var height = MathF.Max(BookShellLayout.Small(context), 22 * unit);
         var top = board.Y + 531 * unit + (22 * unit - height) / 2;
         var settingsWidth = BookShellLayout.SettingsWidth(context);
-        var settings = BookControl.Draw("Settings", "Settings", new UiRect(new Vector2(board.X + 58 * unit, top), new Vector2(settingsWidth, height)), stamp, BookControlStyle.Foil, hint: "Wanderveil settings");
+        var settings = BookControl.Draw("Settings", "Settings", new UiRect(new Vector2(board.X + 64 * unit, top), new Vector2(settingsWidth, height)), stamp, BookControlStyle.Foil, hint: "Wanderveil settings");
         var small = BookShellLayout.Small(context);
-        var x = board.X + 362 * unit - 3 * small - 2 * BookShellLayout.Gap(context);
+        var spacing = MathF.Max(BookShellLayout.Gap(context), 10 * unit);
+        var x = board.X + 356 * unit - 3 * small - 2 * spacing;
         if (BookControl.Draw("Smaller", "-", new UiRect(new Vector2(x, top), new Vector2(small, height)), stamp, BookControlStyle.Foil, hint: "Smaller passport")) PreferredWidth = MathF.Max(420, PreferredWidth / 1.15f);
-        x += small + BookShellLayout.Gap(context);
+        x += small + spacing;
         if (BookControl.Draw("Larger", "+", new UiRect(new Vector2(x, top), new Vector2(small, height)), stamp, BookControlStyle.Foil, hint: "Larger passport")) PreferredWidth = MathF.Min(1400, PreferredWidth * 1.15f);
-        x += small + BookShellLayout.Gap(context);
+        x += small + spacing;
         var close = BookControl.Draw("Close", "×", new UiRect(new Vector2(x, top), new Vector2(small, height)), stamp, BookControlStyle.Foil, hint: "Close passport (Escape)");
 
         var cover = new UiRect(board, new Vector2(420, 560) * unit);

@@ -80,7 +80,9 @@ internal static class BookShellChecks
             if (scenario.Name != "compact-text")
             {
                 var discoveries = layout.IsSpread ? layout.RightPage : layout.LeftPage;
-                Click(discoveries.Position + new Vector2(70 * context.Scale, 160 * context.Scale * scenario.Text));
+                // Card position follows the page scale; probe down the column (blank paper in Discover never turns pages).
+                for (var y = 40f; shell.SelectedDiscovery == null && y < discoveries.Size.Y; y += 24 * context.Scale)
+                    Click(discoveries.Position + new Vector2(40 * context.Scale, y));
                 check(shell.SelectedDiscovery != null, "Discovery card cannot open inside the book page.");
                 ImGui.GetIO().AddKeyEvent(ImGuiKey.Space, true); Frame();
                 ImGui.GetIO().AddKeyEvent(ImGuiKey.Space, false); Frame(); Frame();

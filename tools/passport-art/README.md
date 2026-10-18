@@ -27,7 +27,7 @@ this tool: the PNGs are committed.
 | --- | --- | --- |
 | `svg/cover-base.svg` + `svg/cover-<edition>.svg` | `editions/<edition>/cover.png`, `book-cover.png` (Eorzea) | 1024 × 1536, board at 42,141 940 × 1253 |
 | `svg/crest-<edition>.svg` | `editions/<edition>/crest.png` | 1254 × 1254 |
-| `svg/banner.svg` (nests the crest) | `editions/<edition>/banner.png` | 1200 × 760 |
+| `svg/banner.svg` | `editions/<edition>/banner.png` | 800 × 1840 (crest and lettering are live) |
 | `svg/map.svg` | `editions/<edition>/map-overhead.png` | 1044 × 1260 |
 | `svg/book-open.svg` | `editions/<edition>/book-open.png` | 1536 × 1024 |
 | `svg/portrait.svg` | `demo-portrait.png` | 1086 × 1448 |
