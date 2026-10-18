@@ -14,7 +14,8 @@ internal sealed class MainWindow : Window
     private readonly Func<bool> reducedMotion;
     private readonly PassportAssets assets;
     private readonly BookShell shell;
-    // Where the book rests (bottom centre on summon, or where it was dragged); the slide offsets from it.
+    // Where the book rests: the screen centre on the first summon, then wherever it was dragged or
+    // dismissed, remembered for the rest of this plugin session. The slide offsets from it.
     private Vector2? rest;
     private Vector2 lastSize;
 
@@ -54,17 +55,8 @@ internal sealed class MainWindow : Window
         var size = shell.FitSize(room, context);
         // WindowSystem applies host UI scaling to Size; layout above uses actual pixels.
         Size = size / context.Scale;
-        var lowest = viewport.WorkPos + Vector2.Max(Vector2.Zero, viewport.WorkSize - size);
-        if (rest is { } position)
-        {
-            // Keep the bottom centre anchored when the book changes between closed and open sizes.
-            position += new Vector2((lastSize.X - size.X) / 2, lastSize.Y - size.Y);
-            rest = Vector2.Clamp(position, viewport.WorkPos, lowest);
-        }
-        else rest = viewport.WorkPos + new Vector2((viewport.WorkSize.X - size.X) / 2, MathF.Max(0, viewport.WorkSize.Y - size.Y - 8 * context.Scale));
-        // Below the screen at lift 0, at rest at lift 1.
-        var travel = viewport.WorkPos.Y + viewport.WorkSize.Y + 24 * context.Scale - rest.Value.Y;
-        Position = rest.Value + new Vector2(0, (1 - shell.Lift) * travel);
+        rest = BookShellPlacement.Rest(rest, lastSize, size, viewport.WorkPos, viewport.WorkSize);
+        Position = BookShellPlacement.Slide(rest.Value, shell.Lift, viewport.WorkPos, viewport.WorkSize, 24 * context.Scale);
         PositionCondition = ImGuiCond.Always;
         lastSize = size;
         BookShell.PrepareWindow(size);
@@ -72,7 +64,8 @@ internal sealed class MainWindow : Window
 
     public override void PostDraw() => BookShell.PopWindowStyle();
 
-    public override void OnOpen() { shell.BeginSession(); rest = null; }
+    // A recalled passport returns to where it was dismissed; only the session's first summon centres it.
+    public override void OnOpen() => shell.BeginSession();
 
     public override void Draw()
     {

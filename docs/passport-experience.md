@@ -19,7 +19,7 @@ Page turning is a transition between logical open spreads, independent of stamp 
 
 Reduced motion preserves the closed arrival state, explicit Open action, page order, and dismissal result while skipping sliding, rotation, and page-turn movement. Navigation must remain usable before animation is implemented and if an experimental effect is unavailable.
 
-The bottom-center anchor is the intended summon position. Whether later reopening restores a reading position, and how manual dragging interacts with that anchor, remain interaction decisions. The existing movable open-book shell is an implementation baseline, not the final arrival behavior.
+Decided 19 October 2026: the first summon of a session brings the passport to the screen center; later summons in the same session return it to where it was dismissed, including after dragging, always sliding up from below the screen. Dismissing an open book closes its cover quickly so putting it away does not feel like waiting. The position is not saved across sessions. Whether reopening restores a reading position remains open. The existing movable open-book shell is an implementation baseline, not the final arrival behavior.
 
 ## Page sequence
 

@@ -14,6 +14,8 @@ internal sealed class BookShellMotion
 {
     internal const float SlideSeconds = 0.42f;
     internal const float CoverSeconds = 0.6f;
+    // Dismissing closes the cover quickly so putting the passport away never feels like waiting.
+    internal const float DismissCoverSeconds = 0.25f;
     internal const float RevealSeconds = 0.18f;
 
     private enum Goal { Hidden, Closed, Open }
@@ -70,7 +72,7 @@ internal sealed class BookShellMotion
         if (ReducedMotion) { Finish(); return; }
         var target = Target(goal);
         var landed = Cover >= 1f;
-        if (Cover > target.Cover) Cover = MathF.Max(target.Cover, Cover - dt / CoverSeconds);
+        if (Cover > target.Cover) Cover = MathF.Max(target.Cover, Cover - dt / (goal == Goal.Hidden ? DismissCoverSeconds : CoverSeconds));
         else if (Lift != target.Lift) Lift = Step(Lift, target.Lift, dt / SlideSeconds);
         else if (Cover < target.Cover) Cover = MathF.Min(target.Cover, Cover + dt / CoverSeconds);
         // Pages start to appear on the frame after the cover lands.

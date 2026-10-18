@@ -15,6 +15,7 @@ internal static class MotionChecks
         Sequence(check);
         Interruption(check);
         Reduced(check);
+        Placement(check);
         Shell(check, artifacts);
         Console.WriteLine("PASS passport-motion");
     }
@@ -53,6 +54,23 @@ internal static class MotionChecks
 
         motion.Summon();
         check(motion.Lift == 0f && motion.Cover == 0f, "A new summon does not start closed from below the screen.");
+
+        // Dismissing closes the cover faster than closing back to the cover does.
+        int CloseFrames(bool dismiss)
+        {
+            var timed = new BookShellMotion { ReducedMotion = true };
+            timed.Summon();
+            timed.Open();
+            timed.ReducedMotion = false;
+            if (dismiss) timed.Dismiss(); else timed.CloseToCover();
+            var frames = 0;
+            while (timed.Cover > 0f && frames < 600) { timed.Update(Frame); frames++; }
+            return frames;
+        }
+        var dismissFrames = CloseFrames(true);
+        var coverFrames = CloseFrames(false);
+        check(Math.Abs(dismissFrames - BookShellMotion.DismissCoverSeconds * 60) <= 2 && Math.Abs(coverFrames - BookShellMotion.CoverSeconds * 60) <= 2 && dismissFrames < coverFrames,
+            "Dismissing does not close the cover quickly, or closing to the cover is not unhurried.");
 
         check(BookShellMotion.Ease(0) == 0 && BookShellMotion.Ease(1) == 1 && Math.Abs(BookShellMotion.Ease(0.5f) - 0.5f) < 1e-5f, "Easing does not span 0 to 1 symmetrically.");
         var previous = 0f;
@@ -195,6 +213,33 @@ internal static class MotionChecks
             hidden = intent.Close;
         }
         check(closing && hidden && shell.Phase == BookPhase.Hidden, "Dismissing the open shell does not close, slide away, and ask the host to hide.");
+    }
+
+    // The first summon centres the book; later summons return where it was dismissed or dragged.
+    private static void Placement(Action<bool, string> check)
+    {
+        var workPos = new Vector2(0, 20);
+        var workSize = new Vector2(1920, 1060);
+        var closed = new Vector2(540, 810);
+        var open = new Vector2(1040, 700);
+        var first = BookShellPlacement.Rest(null, Vector2.Zero, closed, workPos, workSize);
+        check(first == workPos + (workSize - closed) / 2, "The first summon is not centred on the screen.");
+
+        var dismissed = new Vector2(600, 150);
+        var recalled = BookShellPlacement.Rest(dismissed, closed, closed, workPos, workSize);
+        check(recalled == dismissed, "A recalled passport does not return to where it was dismissed.");
+
+        var opened = BookShellPlacement.Rest(dismissed, closed, open, workPos, workSize);
+        check(opened.X + open.X / 2 == dismissed.X + closed.X / 2 && opened.Y + open.Y == dismissed.Y + closed.Y, "Opening moves the bottom centre of the book.");
+        var reclosed = BookShellPlacement.Rest(opened, open, closed, workPos, workSize);
+        check(reclosed == dismissed, "Opening then closing does not return the cover to the same place.");
+
+        var offscreen = BookShellPlacement.Rest(new Vector2(-400, 5000), closed, closed, workPos, workSize);
+        check(offscreen.X >= workPos.X && offscreen.Y + closed.Y <= workPos.Y + workSize.Y, "A remembered position outside the screen is not kept inside it.");
+
+        var below = BookShellPlacement.Slide(dismissed, 0f, workPos, workSize, 24);
+        check(below.X == dismissed.X && below.Y >= workPos.Y + workSize.Y, "The book does not slide from below the screen toward its remembered place.");
+        check(BookShellPlacement.Slide(dismissed, 1f, workPos, workSize, 24) == dismissed, "A book at rest is not at its remembered place.");
     }
 
     private static int Until(BookShellMotion motion, Func<bool> done, Action<bool, string> check)
