@@ -122,6 +122,7 @@ using (var host = new HeadlessUi(new Vector2(420, 300)))
 }
 DiscoverChecks.Run(Check, artifacts);
 BookChecks.Run(Check, artifacts);
+BookShellChecks.Run(Check, artifacts);
 Console.WriteLine($"PASS {checks} checks using the real ImGui native context.");
 
 static double Contrast(Vector4 first, Vector4 second)

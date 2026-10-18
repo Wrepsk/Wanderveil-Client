@@ -1,6 +1,7 @@
 using System.Numerics;
 using System.Runtime.InteropServices;
 using Dalamud.Bindings.ImGui;
+using Wanderveil.UI;
 
 namespace Wanderveil.UiChecks;
 
@@ -69,6 +70,23 @@ internal sealed unsafe class HeadlessUi : IDisposable
         {
             ImGui.End();
         }
+        ImGui.Render();
+    }
+
+    internal void BookFrame(Vector2 size, Action draw)
+    {
+        ImGui.NewFrame();
+        // An authored backdrop makes the transparent host and artwork silhouette inspectable.
+        var background = ImGui.GetBackgroundDrawList();
+        background.AddRectFilledMultiColor(Vector2.Zero, displaySize, 0xff493c29, 0xff493c29, 0xff26382f, 0xff26382f);
+        for (var x = 0; x < displaySize.X; x += 64)
+            background.AddLine(new Vector2(x, 0), new Vector2(x, displaySize.Y), 0x183cddbd);
+        ImGui.SetNextWindowPos(new Vector2(16), ImGuiCond.FirstUseEver);
+        ImGui.SetNextWindowSize(size);
+        BookShell.PrepareWindow(size);
+        ImGui.Begin("Wanderveil book checks", BookShell.WindowFlags | ImGuiWindowFlags.NoSavedSettings);
+        try { draw(); }
+        finally { ImGui.End(); BookShell.PopWindowStyle(); }
         ImGui.Render();
     }
 

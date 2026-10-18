@@ -51,6 +51,17 @@ internal sealed class PassportView
         return UiButton.Draw("Explore discoveries", context);
     }
 
+    internal bool DrawPageContent(int page, UiContext context)
+    {
+        var width = UiLayout.ContentWidth;
+        var flow = new PageFlow(ImGui.GetCursorScreenPos(), width, context, true);
+        if (page == 0) ComposeIdentity(ref flow, context);
+        else ComposeJournal(ref flow);
+        ImGui.Dummy(new Vector2(width, flow.Height));
+        ImGui.Dummy(new Vector2(0, UiMetrics.Medium * context.Scale));
+        return page == 1 && UiButton.Draw("Explore discoveries", context);
+    }
+
     private bool DrawBook(float width, bool spread, UiContext context)
     {
         var contentWidth = BookSurface.ContentWidth(width, spread);

@@ -40,14 +40,14 @@ The solution maps both projects to x64; direct check-project runs need `-p:Platf
 | Shell Settings button / Dalamud configuration action | Open appearance settings |
 | Dalamud main-UI action | Open the shell |
 
-Passport initially shows a static synthetic identity spread. Explore discoveries selects Discover, whose demo cards open postcard/stamp-preview details. Back returns to the list and restores its scroll position; native Tab/Space navigation works, with focus moved to Back when details open. Collection is disabled and explicitly unsaved. Echoes and Studio remain coming soon. Reduced motion persists through Dalamud configuration; the UI is currently static. Save failures offer retry. Wanderveil uses its own configuration identity; the old sample's arbitrary settings are not imported.
+Passport initially shows a static synthetic identity spread in a borderless book shell. Attached bookmarks select sections. Narrow/enlarged layouts show identity or notes with immediate page navigation. Scroll within the parchment, drag the outer leather edge to move, and use plus/minus for session-only preferred size. Close uses the attached x or Dalamud's Escape handling. Native directional navigation and Space activate actions; opening focuses the selected bookmark. Explore discoveries selects Discover, whose demo cards open postcard/stamp-preview details. Back returns to the list and restores its scroll position, with focus moved to Back when details open. Collection is disabled and explicitly unsaved. Echoes and Studio remain coming soon. Reduced motion persists through Dalamud configuration; the UI is currently static. Save failures offer retry. Wanderveil uses its own configuration identity; the old sample's arbitrary settings are not imported.
 
 ## Optional live observations
 
 When observing the live host, register the Debug DLL using its developer-plugin UI and record these checks. Routine user in-game testing is not required before committing automated-verified work.
 
 - [ ] Load and open through `/wanderveil` and the main-UI action.
-- [ ] Toggle closed/reopen and switch all four tabs; resize and increase UI/text scale.
+- [ ] Toggle closed/reopen and switch all four bookmarks; use size controls, drag the outer leather edge, and increase UI/text scale.
 - [ ] Open settings through the command, button, and configuration action.
 - [ ] Change reduced motion; unload/reload and confirm it persists.
 - [ ] Confirm the shell remains usable at the title screen and across login/logout.

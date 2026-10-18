@@ -15,7 +15,7 @@ Status: Phase 01 UI prototype, 18 October 2026. Shared components, static Passpo
 
 ## First implementation tasks
 
-1. Review the stationary Passport targets, then implement the approved identity/demo collection spreads and logical-page navigation.
+1. Review the complete borderless Passport shell previews and stationary targets, then refine identity/demo collection spreads and general logical-page navigation.
 2. Add entrance/exit, then separately evaluate a bounded 2.5D page turn. Review previews between milestones; do not introduce CrystalRenderer without a separate decision.
 3. Resume Studio/Echoes and remaining Phase 1 controls once the visual language is established. Collection/persistence remain Phase 2.
 

@@ -14,7 +14,7 @@ internal sealed class DiscoverView(IReadOnlyList<DiscoveryPreview> previews)
     private float? requestedScroll;
     private bool focusDetails;
 
-    internal void Draw(UiContext context)
+    internal void Draw(UiContext context, bool onPaper = false)
     {
         if (requestedScroll is { } scroll)
         {
@@ -23,21 +23,22 @@ internal sealed class DiscoverView(IReadOnlyList<DiscoveryPreview> previews)
         }
 
         if (SelectedDiscovery is { } selected)
-            DrawDetails(selected, context);
+            DrawDetails(selected, context, onPaper);
         else
-            DrawBrowse(context);
+            DrawBrowse(context, onPaper);
     }
 
-    private void DrawBrowse(UiContext context)
+    private void DrawBrowse(UiContext context, bool onPaper)
     {
-        UiTypography.Text("A little wonder awaits", TextRole.Title, context, UiTheme.Paper);
-        UiTypography.Text("DISCOVER / CURATED DEMO", TextRole.Caption, context, UiTheme.Veil);
-        UiTypography.Text("A small journal of imagined places. This preview does not use your location.", TextRole.Body, context, UiTheme.Paper);
+        var ink = onPaper ? UiTheme.Ink : UiTheme.Paper;
+        UiTypography.Text("A little wonder awaits", TextRole.Title, context, ink);
+        UiTypography.Text("DISCOVER / CURATED DEMO", TextRole.Caption, context, onPaper ? UiTheme.MutedInk : UiTheme.Veil);
+        UiTypography.Text("A small journal of imagined places. This preview does not use your location.", TextRole.Body, context, ink);
         ImGui.Dummy(new Vector2(0f, UiMetrics.Medium * context.Scale));
         if (previews.Count == 0)
         {
-            UiTypography.Text("No demo discoveries", TextRole.Heading, context, UiTheme.Paper);
-            UiTypography.Text("The sample journal is empty. Nothing has been fetched or published.", TextRole.Body, context, UiTheme.Paper);
+            UiTypography.Text("No demo discoveries", TextRole.Heading, context, ink);
+            UiTypography.Text("The sample journal is empty. Nothing has been fetched or published.", TextRole.Body, context, ink);
             return;
         }
 
@@ -74,7 +75,7 @@ internal sealed class DiscoverView(IReadOnlyList<DiscoveryPreview> previews)
         }
     }
 
-    private void DrawDetails(DiscoveryPreview preview, UiContext context)
+    private void DrawDetails(DiscoveryPreview preview, UiContext context, bool onPaper)
     {
         if (focusDetails)
         {
@@ -86,8 +87,8 @@ internal sealed class DiscoverView(IReadOnlyList<DiscoveryPreview> previews)
             SelectedDiscovery = null;
             requestedScroll = browseScroll;
         }
-        UiTypography.Text(preview.Title, TextRole.Title, context, UiTheme.Paper);
-        UiTypography.Text("DISCOVER / DEMO DETAILS", TextRole.Caption, context, UiTheme.Veil);
+        UiTypography.Text(preview.Title, TextRole.Title, context, onPaper ? UiTheme.Ink : UiTheme.Paper);
+        UiTypography.Text("DISCOVER / DEMO DETAILS", TextRole.Caption, context, onPaper ? UiTheme.MutedInk : UiTheme.Veil);
         ImGui.Dummy(new Vector2(0f, UiMetrics.Medium * context.Scale));
         var width = MathF.Max(1f, UiLayout.ContentWidth - (4f * context.Scale));
         var layout = DiscoveryLayout.Create(width, context);
@@ -117,7 +118,7 @@ internal sealed class DiscoverView(IReadOnlyList<DiscoveryPreview> previews)
         {
             ImGui.EndDisabled();
         }
-        UiTypography.Text("Collection is unavailable in this UI preview. No stamp is awarded or saved.", TextRole.Body, context, UiTheme.Paper);
+        UiTypography.Text("Collection is unavailable in this UI preview. No stamp is awarded or saved.", TextRole.Body, context, onPaper ? UiTheme.Ink : UiTheme.Paper);
     }
 
     private static void DrawPage(UiRect bounds, float padding, DiscoveryPreview preview, UiContext context, bool postcard)

@@ -2,10 +2,8 @@ using System;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Windowing;
-using Wanderveil.Features.Discover;
 using Wanderveil.Features.Passport;
 using Wanderveil.Infrastructure.Media;
-using Wanderveil.UI.Components;
 using Wanderveil.UI.Primitives;
 
 namespace Wanderveil.UI;
@@ -13,100 +11,46 @@ namespace Wanderveil.UI;
 internal sealed class MainWindow : Window
 {
     private readonly Action openSettings;
-    private readonly PassportView passport;
     private readonly PassportAssets assets;
-    private readonly DiscoverView discover = new(DiscoveryPreview.Samples);
-    private string? requestedSection = "Passport";
+    private readonly BookShell shell;
+    private Vector2? lastPosition;
 
-    internal MainWindow(Action openSettings, PassportAssets assets) : base("Wanderveil###Wanderveil.Main")
+    internal MainWindow(Action openSettings, PassportAssets assets) : base("Wanderveil###Wanderveil.Main", BookShell.WindowFlags)
     {
         this.openSettings = openSettings;
         this.assets = assets;
-        passport = new PassportView(PassportPreview.Sample, assets);
-        Size = new Vector2(820, 680);
-        SizeCondition = ImGuiCond.FirstUseEver;
-        SizeConstraints = new WindowSizeConstraints
-        {
-            MinimumSize = new Vector2(420, 280),
-            MaximumSize = new Vector2(float.MaxValue, float.MaxValue),
-        };
+        shell = new BookShell(assets, PassportPreview.Sample);
+        SizeCondition = ImGuiCond.Always;
+        RespectCloseHotkey = true;
+        ForceMainWindow = true;
     }
+
+    public override void PreDraw()
+    {
+        var context = new UiContext(ShellStyle.Scale, ImGui.GetFontSize());
+        var viewport = ImGui.GetMainViewport();
+        var room = Vector2.Max(Vector2.One, viewport.WorkSize - new Vector2(16 * context.Scale));
+        var size = BookShellLayout.Fit(shell.PreferredWidth, room, context);
+        // WindowSystem applies host UI scaling to Size; layout above uses actual pixels.
+        Size = size / context.Scale;
+        if (lastPosition is { } position)
+        {
+            Position = Vector2.Clamp(position, viewport.WorkPos, viewport.WorkPos + Vector2.Max(Vector2.Zero, viewport.WorkSize - size));
+            PositionCondition = ImGuiCond.Always;
+        }
+        BookShell.PrepareWindow(size);
+    }
+
+    public override void PostDraw() => BookShell.PopWindowStyle();
 
     public override void Draw()
     {
         using var fonts = assets.LockFonts();
-        var context = new UiContext(ShellStyle.Scale, ImGui.GetFontSize());
-        CompassMark.Draw();
-        ImGui.SameLine();
-        UiTypography.Text("Wanderveil", TextRole.Heading, context, UiTheme.Paper);
-        UiTypography.Text("Every place has a story. Leave yours.", TextRole.Body, context, UiTheme.Paper);
-        ImGui.Spacing();
-
-        var request = requestedSection;
-        requestedSection = null;
-        if (ImGui.BeginTabBar("Wanderveil.Sections"))
-        {
-            try
-            {
-                if (ImGui.BeginTabItem("Discover", request == "Discover" ? ImGuiTabItemFlags.SetSelected : ImGuiTabItemFlags.None))
-                {
-                    try
-                    {
-                        discover.Draw(context);
-                    }
-                    finally
-                    {
-                        ImGui.EndTabItem();
-                    }
-                }
-                if (ImGui.BeginTabItem("Passport", request == "Passport" ? ImGuiTabItemFlags.SetSelected : ImGuiTabItemFlags.None))
-                {
-                    try
-                    {
-                        if (passport.Draw(context with { TitleFont = fonts.Title, HeadingFont = fonts.Heading }))
-                            requestedSection = "Discover";
-                    }
-                    finally
-                    {
-                        ImGui.EndTabItem();
-                    }
-                }
-                DrawSection("Echoes", request, context, "Follow a story beyond the next horizon.",
-                    "Creator-made adventures, clues, and chapters are planned for a later release.");
-                DrawSection("Studio", request, context, "Leave a discovery for someone else.",
-                    "Guided tools for postcards, stamp spots, and trails are coming later. Creation and publishing are not available yet.");
-            }
-            finally
-            {
-                ImGui.EndTabBar();
-            }
-        }
-
-        ImGui.Spacing();
-        ImGui.Separator();
-        ImGui.Spacing();
-        if (UiButton.Draw("Settings", context))
-            openSettings();
-    }
-
-    private static void DrawSection(string label, string? request, UiContext context, string heading, string description)
-    {
-        if (!ImGui.BeginTabItem(label, request == label ? ImGuiTabItemFlags.SetSelected : ImGuiTabItemFlags.None))
-            return;
-
-        try
-        {
-            ImGui.Spacing();
-            UiTypography.Text("Coming soon", TextRole.Caption, context, UiTheme.Veil);
-            ImGui.Spacing();
-            UiTypography.Text(heading, TextRole.Heading, context, UiTheme.Paper);
-            ImGui.Spacing();
-            UiTypography.Text(description, TextRole.Body, context, UiTheme.Paper);
-            ImGui.Spacing();
-        }
-        finally
-        {
-            ImGui.EndTabItem();
-        }
+        var context = new UiContext(ShellStyle.Scale, ImGui.GetFontSize()) { TitleFont = fonts.Title, HeadingFont = fonts.Heading };
+        var intent = shell.Draw(new UiRect(ImGui.GetWindowPos(), ImGui.GetWindowSize()), context);
+        if (intent.Drag != Vector2.Zero) ImGui.SetWindowPos(ImGui.GetWindowPos() + intent.Drag);
+        lastPosition = ImGui.GetWindowPos();
+        if (intent.Settings) openSettings();
+        if (intent.Close) IsOpen = false;
     }
 }
