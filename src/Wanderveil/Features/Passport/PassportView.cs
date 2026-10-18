@@ -137,7 +137,7 @@ internal sealed class PassportView
             else DrawPortrait(portrait, context);
         }
         flow.Gap();
-        flow.Text(assets != null && assets.TryGet(BookAsset.Portrait, out _) ? "Illustrated demo portrait" : "Portrait placeholder", TextRole.Caption, true);
+        flow.Text(assets != null && assets.TryGet(BookAsset.Portrait, out _) ? "Demo portrait placeholder" : "Portrait placeholder", TextRole.Caption, true);
         flow.Rule();
         flow.Text(preview.Name, TextRole.Title);
         flow.Gap(UiMetrics.Medium);

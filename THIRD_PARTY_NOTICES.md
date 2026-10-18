@@ -18,6 +18,10 @@ The four PNGs in `assets/passport/` are original outputs generated for this proj
 
 Source Serif 4 Regular/Semibold are unmodified Adobe font files from [revision 80d3f8894c09c937bebfa9011247d2e1c79fd6f4](https://github.com/adobe-fonts/source-serif/tree/80d3f8894c09c937bebfa9011247d2e1c79fd6f4/TTF). Copyright 2014–2023 Adobe, reserved font name “Source”; licensed under [SIL Open Font License 1.1](assets/fonts/SourceSerif4-LICENSE.md). The license is copied into release output/packages. The fonts retain their separate license. Segoe UI is used only from the local Windows installation in test previews; no Segoe font file is redistributed.
 
+## Vector passport plates
+
+The runtime passport plates in `assets/passport/vector/` are rasterized by `tools/passport-art` from original SVG sources adapted from the user's "Eorzea Passport" Claude Design canvas; see [their provenance](assets/passport/vector/PROVENANCE.md). The generator's structure follows the approach of Aetherphone's `tools/` asset generators; no Aetherphone code or art was copied. The tool's only dependency is [sharp](https://github.com/lovell/sharp) 0.35.5 (Apache-2.0, bundling libvips/librsvg under LGPL), used at authoring time only and never shipped with the plugin.
+
 ## When adding material
 
 The [Gridania studies](assets/passport/studies/gridania/PROVENANCE.md) add generated cover colorways, banner/crest interpretations, and schematic map art. The selected green cover/banner/overhead map/crest are now embedded for the static runtime prototype; plum/intermediate studies stay excluded. Prompts/edit lineage and research references are recorded separately and accompany the package. Setting names/heraldic concepts are attributable to Square Enix; no downloaded reference artwork or extracted game pixels were reused.

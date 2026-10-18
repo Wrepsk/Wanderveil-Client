@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="40 160 440 240">
+  <!-- Garlemald: opposed heavy chevrons around a nested lozenge. -->
+  <g id="wing">
+    <path d="M205 198L172 172L62 280L172 388L205 362" fill="none" stroke="{{foil}}" stroke-width="24" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M205 198L172 172L62 280L172 388L205 362" fill="none" stroke="{{foil}}" stroke-opacity=".45" stroke-width="7" stroke-linejoin="round" transform="translate(4 0)"/>
+    <path d="M200 190l20 10-14 12ZM200 370l20-10-14-12Z" fill="{{foil}}" stroke="{{foil}}" stroke-width="6" stroke-linejoin="round"/>
+  </g>
+  <use href="#wing" transform="translate(520 0) scale(-1 1)"/>
+  <path d="M260 182L348 280L260 378L172 280Z" fill="none" stroke="{{foil}}" stroke-width="24" stroke-linejoin="round"/>
+  <path d="M260 182L348 280L260 378L172 280Z" fill="none" stroke="{{accent}}" stroke-width="5" stroke-linejoin="round" transform="translate(260 280) scale(.9) translate(-260 -280)"/>
+</svg>

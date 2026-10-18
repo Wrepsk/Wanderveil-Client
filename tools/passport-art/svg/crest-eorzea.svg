@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-64 -64 128 128">
+  <!-- Eorzea: four-point compass star within a beaded ring. -->
+  <defs><filter id="emboss" x="-10%" y="-10%" width="120%" height="120%"><feDropShadow dx="-.5" dy="-.5" stdDeviation=".3" flood-color="#fff" flood-opacity=".25" result="hl"/><feDropShadow dx=".8" dy="1" stdDeviation=".6" flood-color="#000" flood-opacity=".6"/></filter></defs>
+  <g filter="url(#emboss)" fill="none" stroke="{{foil}}">
+    <circle r="56" stroke-width="2.5"/><circle r="46" stroke-width="1" stroke-dasharray="2.5 3.8"/>
+    <path d="M0-51 10-10 51 0 10 10 0 51-10 10-51 0-10-10Z" stroke-width="2.5"/>
+    <circle r="5" fill="{{foil}}" stroke="none"/>
+  </g>
+</svg>

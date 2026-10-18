@@ -25,12 +25,13 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportPreview p
         if (hasCover)
             ImGui.GetWindowDrawList().AddImage(cover.Texture, window.Position, window.Max);
         else BookSurface.Draw(window, BookFace.Cover, assets, context);
-        var centerX = window.Position.X + window.Size.X * 0.54f;
-        CoverText("EORZEA PASSPORT", 0.25f, TextRole.Caption, 1);
-        if (assets.TryGet(BookAsset.EditionCrest, out var crest)) BookSurface.Illustration(new UiRect(new Vector2(centerX - window.Size.X * 0.19f, window.Position.Y + window.Size.Y * 0.36f), new Vector2(window.Size.X * 0.38f, window.Size.Y * 0.26f)), crest);
-        CoverText("GRIDANIA", 0.67f, TextRole.Title, 1.35f);
-        CoverText("THE BLACK SHROUD", 0.73f, TextRole.Caption, 1);
-        CoverText("WANDERVEIL", 0.30f, TextRole.Caption, 0.85f);
+        // Positions follow the generated cover's board (tools/passport-art): centered, crest above the nation name.
+        var centerX = window.Position.X + window.Size.X * 0.5f;
+        CoverText("EORZEA PASSPORT", 0.255f, TextRole.Caption, 1);
+        if (assets.TryGet(BookAsset.EditionCrest, out var crest)) BookSurface.Illustration(new UiRect(new Vector2(centerX - window.Size.X * 0.165f, window.Position.Y + window.Size.Y * 0.31f), new Vector2(window.Size.X * 0.33f, window.Size.X * 0.33f)), crest);
+        CoverText("GRIDANIA", 0.555f, TextRole.Title, 1.35f);
+        CoverText("THE BLACK SHROUD", 0.635f, TextRole.Caption, 1);
+        CoverText("WANDERVEIL", 0.865f, TextRole.Caption, 0.85f);
 
 
         void CoverText(string text, float y, TextRole role, float size)
@@ -41,7 +42,7 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportPreview p
             var position = new Vector2(centerX - measured.X / 2, window.Position.Y + window.Size.Y * y);
             var list = ImGui.GetWindowDrawList();
             UiTypography.Draw(list, position + new Vector2(0.7f, 1), text, role, type, width, new Vector4(0.04f, 0.06f, 0.03f, 0.9f), false);
-            UiTypography.Draw(list, position, text, role, type, width, hasCover ? new Vector4(0.83f, 0.72f, 0.45f, 1) : UiTheme.Ink, false);
+            UiTypography.Draw(list, position, text, role, type, width, hasCover ? new Vector4(0.66f, 0.76f, 0.54f, 1) : UiTheme.Ink, false);
         }
 
     }
@@ -73,15 +74,9 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportPreview p
         var art = flow.Reserve(380 * context.Scale);
         if (!assets.TryGet(isLeft ? BookAsset.NationBanner : BookAsset.NationMap, out var image))
         { flow.Text("Artwork is loading or unavailable.", TextRole.Caption, true); return; }
-        var fitted = BookSurface.Illustration(art, image);
-        if (!isLeft)
-        {
-            var label = "WV";
-            var measured = UiTypography.Measure(label, TextRole.Caption, context, fitted.Size.X * 0.22f, false);
-            UiTypography.Draw(ImGui.GetWindowDrawList(), new Vector2(fitted.Position.X + fitted.Size.X / 2 - measured.X / 2, fitted.Position.Y + fitted.Size.Y * 0.035f), label, TextRole.Caption, context, fitted.Size.X * 0.22f, UiTheme.Ink, false);
-        }
+        BookSurface.Illustration(art, image);
         flow.Gap(16);
-        flow.Text(isLeft ? "Lily & entwined serpents / Banner study" : "Illustrative map study / Geography not validated", TextRole.Caption, true);
+        flow.Text(isLeft ? "Wreath & sprout / Banner study" : "Illustrative map study / Geography not validated", TextRole.Caption, true);
     }
 
     private void Identity(ref PageFlow flow, bool isLeft, float width, UiContext context)
@@ -95,7 +90,7 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportPreview p
             if (hasPortrait) BookSurface.Portrait(portrait, assets, context);
             else UiTypography.Draw(ImGui.GetWindowDrawList(), portrait.Position, "Portrait unavailable", TextRole.Body, context, width, UiTheme.MutedInk);
             flow.Gap(12);
-            flow.Text(hasPortrait ? "Illustrated demo portrait" : "Offline portrait preview", TextRole.Caption, true);
+            flow.Text(hasPortrait ? "Demo portrait placeholder" : "Offline portrait preview", TextRole.Caption, true);
             flow.Gap(24);
             var signature = flow.Reserve(44 * context.Scale);
             var type = context with { HeadingFont = context.SignatureFont, FontSize = context.FontSize * 1.5f };

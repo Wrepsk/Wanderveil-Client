@@ -19,7 +19,7 @@ internal static class BookControl
         }
         else list.AddRectFilled(bounds.Position, bounds.Max, fill, 3 * context.Scale);
         if (assets != null && (assets.TryGet(BookAsset.EditionCover, out var leather) || assets.TryGet(BookAsset.Cover, out leather)))
-            list.AddImage(leather.Texture, bounds.Position, bounds.Max - new Vector2(0, bookmark ? 5 * context.Scale : 0), new Vector2(0.25f, 0.35f), new Vector2(0.75f, 0.46f));
+            list.AddImage(leather.Texture, bounds.Position, bounds.Max - new Vector2(0, bookmark ? 5 * context.Scale : 0), new Vector2(0.30f, 0.73f), new Vector2(0.70f, 0.77f));
         if (selected) list.AddLine(bounds.Position + new Vector2(6 * context.Scale, 2 * context.Scale), new Vector2(bounds.Max.X - 6 * context.Scale, bounds.Position.Y + 2 * context.Scale), ImGui.GetColorU32(UiTheme.Gold), 2 * context.Scale);
         ImGui.SetCursorScreenPos(bounds.Position);
         ImGui.PushID(id);

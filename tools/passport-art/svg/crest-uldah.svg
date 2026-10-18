@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-64 -64 128 128">
+  <!-- Ul'dah: a radiant sun inside a lozenge. -->
+  <defs><filter id="emboss" x="-10%" y="-10%" width="120%" height="120%"><feDropShadow dx="-.5" dy="-.5" stdDeviation=".3" flood-color="#fff" flood-opacity=".25" result="hl"/><feDropShadow dx=".8" dy="1" stdDeviation=".6" flood-color="#000" flood-opacity=".6"/></filter></defs>
+  <g filter="url(#emboss)">
+    <g fill="{{foil}}"><circle r="22"/>
+<path d="M-4-30L0-52 4-30Z" transform="rotate(0)"/>
+<path d="M-4-30L0-52 4-30Z" transform="rotate(22.5)"/>
+<path d="M-4-30L0-52 4-30Z" transform="rotate(45)"/>
+<path d="M-4-30L0-52 4-30Z" transform="rotate(67.5)"/>
+<path d="M-4-30L0-52 4-30Z" transform="rotate(90)"/>
+<path d="M-4-30L0-52 4-30Z" transform="rotate(112.5)"/>
+<path d="M-4-30L0-52 4-30Z" transform="rotate(135)"/>
+<path d="M-4-30L0-52 4-30Z" transform="rotate(157.5)"/>
+<path d="M-4-30L0-52 4-30Z" transform="rotate(180)"/>
+<path d="M-4-30L0-52 4-30Z" transform="rotate(202.5)"/>
+<path d="M-4-30L0-52 4-30Z" transform="rotate(225)"/>
+<path d="M-4-30L0-52 4-30Z" transform="rotate(247.5)"/>
+<path d="M-4-30L0-52 4-30Z" transform="rotate(270)"/>
+<path d="M-4-30L0-52 4-30Z" transform="rotate(292.5)"/>
+<path d="M-4-30L0-52 4-30Z" transform="rotate(315)"/>
+<path d="M-4-30L0-52 4-30Z" transform="rotate(337.5)"/>
+    </g>
+    <g fill="none" stroke-width="1.6"><path d="M0-58 58 0 0 58-58 0Z" stroke="{{foil}}"/><circle r="12" stroke="{{cover}}"/></g>
+  </g>
+</svg>

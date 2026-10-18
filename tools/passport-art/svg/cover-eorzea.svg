@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 560">
+  <!-- Generic Eorzea edition: inset foil border and the e-passport chip mark. -->
+  <path d="M28 22H392A12 12 0 0 1 404 34V526A12 12 0 0 1 392 538H28A4 4 0 0 1 24 534V26A4 4 0 0 1 28 22Z" fill="none" stroke="{{foil}}" stroke-width="2" opacity=".8"/>
+  <g transform="translate(190 488)" fill="none" stroke="{{foil}}" stroke-width="1.5"><rect x="1" y="1" width="38" height="22" rx="11"/><circle cx="20" cy="12" r="5"/></g>
+</svg>

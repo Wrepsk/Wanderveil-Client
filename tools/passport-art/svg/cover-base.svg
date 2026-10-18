@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 560">
+  <!-- Shared board for every closed cover: flat cloth with a fine dot weave, hinge groove, and edge. -->
+  <defs>
+    <pattern id="weave" width="6" height="6" patternUnits="userSpaceOnUse">
+      <circle cx="3" cy="3" r="1.1" fill="#FFFFFF" fill-opacity=".06"/>
+    </pattern>
+    <linearGradient id="spine" x1="0" x2="1">
+      <stop offset="0" stop-color="#000" stop-opacity=".32"/>
+      <stop offset=".06" stop-color="#000" stop-opacity=".08"/>
+      <stop offset=".12" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".93" stop-color="#FFF" stop-opacity="0"/>
+      <stop offset="1" stop-color="#FFF" stop-opacity=".05"/>
+    </linearGradient>
+    <clipPath id="board"><path d="M6 0H402A18 18 0 0 1 420 18V542A18 18 0 0 1 402 560H6A6 6 0 0 1 0 554V6A6 6 0 0 1 6 0Z"/></clipPath>
+  </defs>
+  <g clip-path="url(#board)">
+    <rect width="420" height="560" fill="{{cover}}"/>
+    <rect width="420" height="560" fill="url(#weave)"/>
+    <rect width="420" height="560" fill="url(#spine)"/>
+    <path d="M17 0V560" stroke="#000" stroke-opacity=".28" stroke-width="1.4"/>
+    <path d="M18.6 0V560" stroke="#FFF" stroke-opacity=".07" stroke-width="1"/>
+    <!-- include:decor -->
+  </g>
+  <path d="M6 .5H402A17.5 17.5 0 0 1 419.5 18V542A17.5 17.5 0 0 1 402 559.5H6A5.5 5.5 0 0 1 .5 554V6A5.5 5.5 0 0 1 6 .5Z" fill="none" stroke="#000" stroke-opacity=".4"/>
+</svg>

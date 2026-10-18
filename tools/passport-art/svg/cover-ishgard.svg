@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 560">
+  <!-- Ishgard: pressed grain, nested cathedral arches, and diamond studs. -->
+  <defs><filter id="grain" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".7" numOctaves="4" seed="7" result="n"/><feDiffuseLighting in="n" lighting-color="#fff" surfaceScale="1.8"><feDistantLight azimuth="50" elevation="62"/></feDiffuseLighting></filter><filter id="deboss" x="-5%" y="-5%" width="110%" height="110%"><feDropShadow dx="1" dy="1.2" stdDeviation=".7" flood-color="#000" flood-opacity=".75"/></filter></defs>
+  <rect width="420" height="560" filter="url(#grain)" style="mix-blend-mode:multiply" opacity=".55"/>
+  <rect width="420" height="560" fill="none" stroke="#000" stroke-opacity=".35" stroke-width="60" style="filter:blur(18px)"/>
+  <g opacity=".5" filter="url(#deboss)">
+    <path d="M60 520V230Q60 110 210 50Q360 110 360 230V520" fill="none" stroke="{{foil}}" stroke-width="2"/>
+    <path d="M76 520V246Q76 126 210 66Q344 126 344 246V520" fill="none" stroke="{{accent}}" stroke-width="2"/>
+    <path d="M90 520V260Q90 140 210 80Q330 140 330 260V520" fill="none" stroke="{{accent}}" stroke-width="2"/>
+    <path d="M30 500l6-10 6 10-6 10ZM372 500l6-10 6 10-6 10Z" fill="{{foil}}"/>
+  </g>
+</svg>

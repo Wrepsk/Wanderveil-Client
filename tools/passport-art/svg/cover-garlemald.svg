@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 560">
+  <!-- Garlemald: stark pressed grain, a red rule above the title and the chip mark. -->
+  <defs><filter id="grain" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".7" numOctaves="4" seed="7" result="n"/><feDiffuseLighting in="n" lighting-color="#fff" surfaceScale="1.8"><feDistantLight azimuth="50" elevation="62"/></feDiffuseLighting></filter></defs>
+  <rect width="420" height="560" filter="url(#grain)" style="mix-blend-mode:multiply" opacity=".2"/>
+  <rect x="170" y="158" width="80" height="4" fill="{{accent}}"/>
+  <g transform="translate(190 488)" fill="none" stroke="{{foil}}" stroke-width="1.6"><rect width="40" height="24" rx="12"/><circle cx="20" cy="12" r="5"/></g>
+</svg>

@@ -20,3 +20,7 @@ artifacts/
 *.db-wal
 Thumbs.db
 .DS_Store
+
+# Passport art generator dependencies and review output
+tools/passport-art/node_modules/
+tools/passport-art/out/

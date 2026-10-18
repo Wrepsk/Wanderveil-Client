@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1044" height="1260" viewBox="0 0 348 420">
+  <!-- Schematic nation map: survey grid, one stylised landmass with contour rings, compass emblem.
+       Not real geography; the page caption says so. -->
+  <rect width="348" height="420" fill="{{paper}}"/>
+  <rect width="348" height="420" fill="#83B9B8" fill-opacity=".18"/>
+  <g stroke="{{ink}}" stroke-opacity=".18" fill="none">
+    <path d="M58 0V420M116 0V420M174 0V420M232 0V420M290 0V420M0 60H348M0 120H348M0 180H348M0 240H348M0 300H348M0 360H348"/>
+  </g>
+  <g fill="none" stroke="#3E7C7B" stroke-opacity=".25">
+    <path id="coast" d="M20 30C30 8 62 6 78 22C92 36 88 60 80 74C74 92 52 110 36 100C18 88 24 70 14 58C8 48 12 38 20 30Z" transform="translate(28 34) scale(2.9 2.7)"/>
+  </g>
+  <g transform="translate(34 40) scale(2.8 2.6)">
+    <path d="M20 30C30 8 62 6 78 22C92 36 88 60 80 74C74 92 52 110 36 100C18 88 24 70 14 58C8 48 12 38 20 30Z" fill="{{accent}}" fill-opacity=".38" stroke="{{ink}}" stroke-width=".8"/>
+    <g fill="none" stroke="{{ink}}" stroke-opacity=".3" stroke-width=".35">
+      <path d="M20 30C30 8 62 6 78 22C92 36 88 60 80 74C74 92 52 110 36 100C18 88 24 70 14 58C8 48 12 38 20 30Z" transform="translate(50 56) scale(.72) translate(-50 -56)"/>
+      <path d="M20 30C30 8 62 6 78 22C92 36 88 60 80 74C74 92 52 110 36 100C18 88 24 70 14 58C8 48 12 38 20 30Z" transform="translate(50 56) scale(.44) translate(-50 -56)"/>
+    </g>
+    <path d="M30 36Q44 46 52 40T70 58Q66 74 50 82" fill="none" stroke="{{ink}}" stroke-opacity=".5" stroke-width=".5" stroke-dasharray="1.6 1.4"/>
+    <g fill="{{ink}}" fill-opacity=".7"><circle cx="30" cy="36" r="1.4"/><circle cx="52" cy="40" r="1.4"/><circle cx="70" cy="58" r="1.4"/><circle cx="50" cy="82" r="1.4"/></g>
+  </g>
+  <g transform="translate(312 36)" opacity=".8" fill="none" stroke="{{ink}}">
+    <circle r="19.4" stroke-width=".9"/><circle r="15.8" stroke-width=".35" stroke-dasharray=".9 1.3"/>
+    <path d="M0-17.6 3.5-3.5 17.6 0 3.5 3.5 0 17.6-3.5 3.5-17.6 0-3.5-3.5Z" stroke-width=".9"/><circle r="1.8" fill="{{ink}}" stroke="none"/>
+  </g>
+  <rect x="1" y="1" width="346" height="418" fill="none" stroke="{{ink}}" stroke-width="2"/>
+</svg>

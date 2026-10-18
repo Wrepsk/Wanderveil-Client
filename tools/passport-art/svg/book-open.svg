@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1536" height="1024" viewBox="0 0 1536 1024">
+  <!-- Open spread: edition-colored board, page-stack edges, guilloche paper, and gutter fold.
+       Rows 40%-60% must stay quiet: the client repeats that band for tall pages. -->
+  <defs>
+    <filter id="drop" x="-5%" y="-5%" width="110%" height="115%"><feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#000" flood-opacity=".45"/></filter>
+    <pattern id="weave" width="13" height="13" patternUnits="userSpaceOnUse"><circle cx="6.5" cy="6.5" r="2.2" fill="#FFF" fill-opacity=".06"/></pattern>
+    <filter id="fiber" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="3" seed="11"/><feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 -.9 .5"/></filter>
+    <linearGradient id="gutterL" x1="1" x2="0"><stop offset="0" stop-color="#000" stop-opacity=".26"/><stop offset=".12" stop-color="#000" stop-opacity=".06"/><stop offset=".2" stop-color="#000" stop-opacity="0"/><stop offset=".95" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".07"/></linearGradient>
+    <linearGradient id="gutterR" x1="0" x2="1"><stop offset="0" stop-color="#000" stop-opacity=".26"/><stop offset=".12" stop-color="#000" stop-opacity=".06"/><stop offset=".2" stop-color="#000" stop-opacity="0"/><stop offset=".95" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".07"/></linearGradient>
+    <clipPath id="pageL"><rect x="66" y="66" width="702" height="892" rx="4"/></clipPath>
+    <clipPath id="pageR"><rect x="768" y="66" width="702" height="892" rx="4"/></clipPath>
+  </defs>
+  <g filter="url(#drop)">
+    <rect x="40" y="44" width="1456" height="936" rx="22" fill="{{cover}}"/>
+  </g>
+  <rect x="40" y="44" width="1456" height="936" rx="22" fill="url(#weave)"/>
+  <rect x="40.75" y="44.75" width="1454.5" height="934.5" rx="21.25" fill="none" stroke="#000" stroke-opacity=".4" stroke-width="1.5"/>
+  <!-- page stack thickness at the outer and lower edges -->
+  <g fill="{{paper}}" stroke="#000" stroke-opacity=".18">
+    <rect x="58" y="70" width="710" height="895" rx="4"/><rect x="62" y="68" width="706" height="893" rx="4"/>
+    <rect x="768" y="70" width="710" height="895" rx="4"/><rect x="768" y="68" width="706" height="893" rx="4"/>
+  </g>
+  <g clip-path="url(#pageL)">
+    <rect x="66" y="66" width="702" height="892" fill="{{paper}}"/>
+    <g fill="none" stroke="#000" stroke-opacity=".05" stroke-width="1.6"><circle cx="417" cy="601" r="15"/><circle cx="417" cy="601" r="31"/><circle cx="417" cy="601" r="47"/><circle cx="417" cy="601" r="63"/><circle cx="417" cy="601" r="79"/><circle cx="417" cy="601" r="95"/><circle cx="417" cy="601" r="111"/><circle cx="417" cy="601" r="127"/><circle cx="417" cy="601" r="143"/><circle cx="417" cy="601" r="159"/><circle cx="417" cy="601" r="175"/><circle cx="417" cy="601" r="191"/><circle cx="417" cy="601" r="207"/><circle cx="417" cy="601" r="223"/><circle cx="417" cy="601" r="239"/><circle cx="417" cy="601" r="255"/><circle cx="417" cy="601" r="271"/><circle cx="417" cy="601" r="287"/><circle cx="417" cy="601" r="303"/><circle cx="417" cy="601" r="319"/><circle cx="417" cy="601" r="335"/><circle cx="417" cy="601" r="351"/><circle cx="417" cy="601" r="367"/><circle cx="417" cy="601" r="383"/><circle cx="417" cy="601" r="399"/><circle cx="417" cy="601" r="415"/><circle cx="417" cy="601" r="431"/><circle cx="417" cy="601" r="447"/><circle cx="417" cy="601" r="463"/><circle cx="417" cy="601" r="479"/><circle cx="417" cy="601" r="495"/><circle cx="417" cy="601" r="511"/><circle cx="417" cy="601" r="527"/><circle cx="417" cy="601" r="543"/><circle cx="417" cy="601" r="559"/><circle cx="417" cy="601" r="575"/><circle cx="417" cy="601" r="591"/><circle cx="417" cy="601" r="607"/><circle cx="417" cy="601" r="623"/><circle cx="417" cy="601" r="639"/><circle cx="417" cy="601" r="655"/></g>
+    <rect x="66" y="66" width="702" height="892" filter="url(#fiber)" opacity=".06"/>
+    <rect x="66" y="66" width="702" height="892" fill="url(#gutterL)"/>
+  </g>
+  <g clip-path="url(#pageR)">
+    <rect x="768" y="66" width="702" height="892" fill="{{paper}}"/>
+    <g fill="none" stroke="#000" stroke-opacity=".05" stroke-width="1.6"><circle cx="1119" cy="601" r="15"/><circle cx="1119" cy="601" r="31"/><circle cx="1119" cy="601" r="47"/><circle cx="1119" cy="601" r="63"/><circle cx="1119" cy="601" r="79"/><circle cx="1119" cy="601" r="95"/><circle cx="1119" cy="601" r="111"/><circle cx="1119" cy="601" r="127"/><circle cx="1119" cy="601" r="143"/><circle cx="1119" cy="601" r="159"/><circle cx="1119" cy="601" r="175"/><circle cx="1119" cy="601" r="191"/><circle cx="1119" cy="601" r="207"/><circle cx="1119" cy="601" r="223"/><circle cx="1119" cy="601" r="239"/><circle cx="1119" cy="601" r="255"/><circle cx="1119" cy="601" r="271"/><circle cx="1119" cy="601" r="287"/><circle cx="1119" cy="601" r="303"/><circle cx="1119" cy="601" r="319"/><circle cx="1119" cy="601" r="335"/><circle cx="1119" cy="601" r="351"/><circle cx="1119" cy="601" r="367"/><circle cx="1119" cy="601" r="383"/><circle cx="1119" cy="601" r="399"/><circle cx="1119" cy="601" r="415"/><circle cx="1119" cy="601" r="431"/><circle cx="1119" cy="601" r="447"/><circle cx="1119" cy="601" r="463"/><circle cx="1119" cy="601" r="479"/><circle cx="1119" cy="601" r="495"/><circle cx="1119" cy="601" r="511"/><circle cx="1119" cy="601" r="527"/><circle cx="1119" cy="601" r="543"/><circle cx="1119" cy="601" r="559"/><circle cx="1119" cy="601" r="575"/><circle cx="1119" cy="601" r="591"/><circle cx="1119" cy="601" r="607"/><circle cx="1119" cy="601" r="623"/><circle cx="1119" cy="601" r="639"/><circle cx="1119" cy="601" r="655"/></g>
+    <rect x="768" y="66" width="702" height="892" filter="url(#fiber)" opacity=".06"/>
+    <rect x="768" y="66" width="702" height="892" fill="url(#gutterR)"/>
+  </g>
+  <path d="M768 62V962" stroke="#000" stroke-opacity=".35" stroke-width="2"/>
+  <path d="M768 40V66M768 958V984" stroke="#000" stroke-opacity=".4" stroke-width="3"/>
+</svg>

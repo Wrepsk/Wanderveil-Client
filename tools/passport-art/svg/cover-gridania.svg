@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 560">
+  <!-- Gridania: twin climbing vines with alternating leaves, framed by shallow arcs. -->
+  <g id="vine">
+    <path d="M44 540C74 440 8 380 48 300C88 220 18 160 58 60" fill="none" stroke="{{foil}}" stroke-width="2.5"/>
+    <g fill="{{accent}}" opacity=".6">
+      <ellipse rx="6" ry="14" transform="translate(52 480) rotate(-35)"/>
+      <ellipse rx="6" ry="14" transform="translate(36 420) rotate(30)"/>
+      <ellipse rx="6" ry="14" transform="translate(60 360) rotate(-40)"/>
+      <ellipse rx="6" ry="14" transform="translate(34 300) rotate(35)"/>
+      <ellipse rx="6" ry="14" transform="translate(58 240) rotate(-35)"/>
+      <ellipse rx="6" ry="14" transform="translate(40 180) rotate(30)"/>
+      <ellipse rx="6" ry="14" transform="translate(60 120) rotate(-30)"/>
+    </g>
+  </g>
+  <use href="#vine" transform="translate(420 0) scale(-1 1)"/>
+  <path d="M96 40Q210 12 324 40M96 524Q210 552 324 524" fill="none" stroke="{{accent}}" stroke-width="1.5"/>
+</svg>

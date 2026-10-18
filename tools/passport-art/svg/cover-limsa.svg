@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 560">
+  <!-- Limsa Lominsa: weathered grain, a faint compass rose of rings and rays, rolling waves. -->
+  <defs><filter id="grain" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".7" numOctaves="4" seed="7" result="n"/><feDiffuseLighting in="n" lighting-color="#fff" surfaceScale="1.8"><feDistantLight azimuth="50" elevation="62"/></feDiffuseLighting></filter>
+    <filter id="deboss" x="-5%" y="-5%" width="110%" height="110%"><feDropShadow dx="1" dy="1.2" stdDeviation=".7" flood-color="#000" flood-opacity=".75"/></filter>
+    <radialGradient id="stain"><stop offset="0" stop-color="#000" stop-opacity=".3"/><stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient>
+    <radialGradient id="scuff"><stop offset="0" stop-color="#fff" stop-opacity=".14"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
+  </defs>
+  <rect width="420" height="560" filter="url(#grain)" style="mix-blend-mode:multiply" opacity=".55"/>
+  <g fill="none" stroke="{{foil}}" stroke-opacity=".14"><circle cx="210" cy="230" r="110"/><circle cx="210" cy="230" r="170"/><circle cx="210" cy="230" r="230"/></g>
+  <g stroke="{{foil}}" stroke-opacity=".1"><path d="M210 230L630 230M210 230L574 440M210 230L420 594M210 230L210 650M210 230L0 594M210 230L-154 440M210 230L-210 230M210 230L-154 20M210 230L0-134M210 230L210-190M210 230L420-134M210 230L574 20"/></g>
+  <g filter="url(#deboss)" fill="none" stroke="{{foil}}" stroke-opacity=".35" stroke-width="1.5">
+    <path d="M0 498q15-12 30 0t30 0q15-12 30 0t30 0q15-12 30 0t30 0q15-12 30 0t30 0q15-12 30 0t30 0q15-12 30 0t30 0q15-12 30 0t30 0"/>
+    <path d="M0 520q15-12 30 0t30 0q15-12 30 0t30 0q15-12 30 0t30 0q15-12 30 0t30 0q15-12 30 0t30 0q15-12 30 0t30 0q15-12 30 0t30 0"/>
+  </g>
+  <circle cx="90" cy="120" r="90" fill="url(#stain)"/><circle cx="330" cy="430" r="110" fill="url(#stain)"/><circle cx="210" cy="520" r="60" fill="url(#stain)"/>
+  <circle cx="300" cy="90" r="70" fill="url(#scuff)"/><circle cx="120" cy="400" r="80" fill="url(#scuff)"/>
+  <path d="M70 300l40-6M280 180l30 10M150 470l50 4M330 260l-26 18" stroke="#fff" stroke-opacity=".12"/>
+</svg>

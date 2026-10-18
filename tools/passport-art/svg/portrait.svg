@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1086" height="1448" viewBox="0 0 348 464">
+  <!-- Portrait placeholder: tinted window with an anonymous bust until a real portrait is chosen. -->
+  <defs><clipPath id="win"><rect width="348" height="464"/></clipPath></defs>
+  <rect width="348" height="464" fill="{{paper}}"/>
+  <rect width="348" height="464" fill="#000" fill-opacity=".08"/>
+  <g clip-path="url(#win)" fill="none" stroke="#000" stroke-opacity=".05">
+    <circle cx="174" cy="190" r="40"/><circle cx="174" cy="190" r="80"/><circle cx="174" cy="190" r="120"/><circle cx="174" cy="190" r="160"/><circle cx="174" cy="190" r="200"/><circle cx="174" cy="190" r="240"/><circle cx="174" cy="190" r="280"/>
+  </g>
+  <g clip-path="url(#win)" fill="{{ink}}" opacity=".22">
+    <ellipse cx="174" cy="178" rx="58" ry="70"/>
+    <path d="M60 464C60 360 104 300 174 300S288 360 288 464Z"/>
+    <path d="M146 236h56v72h-56z"/>
+  </g>
+  <rect x="1.5" y="1.5" width="345" height="461" fill="none" stroke="{{ink}}" stroke-width="3"/>
+</svg>

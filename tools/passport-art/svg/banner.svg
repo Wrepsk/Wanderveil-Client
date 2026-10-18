@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 300 190">
+  <!-- Nation pennant: cover-colored swallow-notched banner with a foil inner rule; crest nests at its centre. -->
+  <defs>
+    <pattern id="weave" width="4" height="4" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r=".7" fill="#FFF" fill-opacity=".07"/></pattern>
+    <filter id="drop" x="-10%" y="-10%" width="120%" height="130%"><feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#000" flood-opacity=".35"/></filter>
+  </defs>
+  <g filter="url(#drop)"><path d="M6 6H294V180L150 158L6 180Z" fill="{{cover}}"/></g>
+  <path d="M6 6H294V180L150 158L6 180Z" fill="url(#weave)"/>
+  <path d="M14 13H286V170L150 149L14 170Z" fill="none" stroke="{{foil}}" stroke-width="1.2" opacity=".85"/>
+  <path d="M4 6H296" stroke="{{foil}}" stroke-width="3" stroke-linecap="round"/>
+  <!-- include:crest x=95 y=26 w=110 h=110 -->
+</svg>

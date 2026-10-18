@@ -15,6 +15,10 @@ Run `/wanderveil`. Each summon starts with the closed Gridania cover anchored at
 
 These are native software previews of the production shell, not live game captures. Real host font/GPU/hotkey/lifecycle behavior remains unobserved here. The map retains its visible unvalidated-geography caption, and identity/signature/stamps are synthetic demo content. No collection or signature input/storage is implemented.
 
+## Vector art (branch `feat/svg-passport-assets`)
+
+The embedded plates now come from `assets/passport/vector/`, rasterized from SVG by [tools/passport-art](../tools/passport-art/README.md) following the "Eorzea Passport" Claude Design. Canvas sizes are unchanged, so the composition code is shared; cover text and crest were re-centered for the new board, the map's cartouche label was removed, and button leather samples a plain cover band. The Release package dropped from about 10.9 MB to 2.8 MB. Gallery checks for the plum colorway still use the earlier image-generated study.
+
 ## Presentation and assets
 
 `PassportDocumentView` owns reusable live cover/page composition. `PassportPage` records supply stable IDs and presentation kinds; `BookShell` snapshots and validates a nonempty catalog with unique IDs, tracks closed/open state and reading position, and renders only visible pages. The demo provides six logical pages; catalog size is not fixed to six. Navigation clamps safely and preserves child scrolling through stable page IDs. New sessions start closed at the first page.

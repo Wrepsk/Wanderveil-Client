@@ -1,0 +1,14 @@
+{
+  "name": "wanderveil-passport-art",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Rasterizes the passport SVG sources into the PNG plates embedded by the client.",
+  "scripts": {
+    "build": "node generate.mjs",
+    "sheet": "node generate.mjs --sheet"
+  },
+  "dependencies": {
+    "sharp": "0.35.5"
+  }
+}

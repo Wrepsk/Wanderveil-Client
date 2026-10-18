@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 560">
+  <!-- Ul'dah: sawtooth crowns above and below, double pillars at each side. -->
+  <polyline points="24,40 42,24 60,40 78,24 96,40 114,24 132,40 150,24 168,40 186,24 204,40 222,24 240,40 258,24 276,40 294,24 312,40 330,24 348,40 366,24 384,40" fill="none" stroke="{{foil}}" stroke-width="2"/>
+  <polyline points="24,520 42,536 60,520 78,536 96,520 114,536 132,520 150,536 168,520 186,536 204,520 222,536 240,520 258,536 276,520 294,536 312,520 330,536 348,520 366,536 384,520" fill="none" stroke="{{foil}}" stroke-width="2"/>
+  <path d="M24 56V504M396 56V504" stroke="{{foil}}" stroke-width="2"/>
+  <path d="M36 64V496M384 64V496" stroke="{{accent}}" stroke-width="1.5"/>
+</svg>
