@@ -2,6 +2,8 @@
 
 Status: user-selected product/design direction, 18 October 2026; planned behavior, not shipped functionality. This refines the [visual-fidelity milestones](passport-visual-fidelity.md). The current client opens directly onto its stationary identity/notes prototype.
 
+First edition selected: **Gridania**. Its [static review previews](passport-gridania-study.md) establish one cover/colorway and the revised spreads; the full intended runtime sequence below is still planned.
+
 ## Arrival, opening, and dismissal
 
 1. Summoning the passport brings a **closed book upward from the bottom center of the screen**. Its cover faces the user and remains closed after arrival.

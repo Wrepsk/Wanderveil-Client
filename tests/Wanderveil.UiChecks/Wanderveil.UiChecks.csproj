@@ -15,6 +15,7 @@
   </PropertyGroup>
   <ItemGroup>
     <None Include="../../assets/passport/*.png" Link="Assets/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../assets/passport/studies/gridania/*.png" Link="Assets/Studies/Gridania/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../../assets/fonts/*.ttf" Link="Assets/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <Reference Include="Dalamud.Bindings.ImGui">
       <HintPath>$(DalamudLibPath)/Dalamud.Bindings.ImGui.dll</HintPath>

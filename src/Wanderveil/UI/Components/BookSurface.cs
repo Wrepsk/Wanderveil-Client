@@ -87,6 +87,15 @@ internal static class BookSurface
         drawList.AddImage(image.Texture, min, max);
     }
 
+    internal static UiRect Illustration(UiRect bounds, BookImage image)
+    {
+        var aspect = image.Width / (float)image.Height;
+        var size = new Vector2(MathF.Min(bounds.Size.X, bounds.Size.Y * aspect), MathF.Min(bounds.Size.Y, bounds.Size.X / aspect));
+        var fitted = new UiRect(bounds.Position + (bounds.Size - size) / 2, size);
+        ImGui.GetWindowDrawList().AddImage(image.Texture, fitted.Position, fitted.Max);
+        return fitted;
+    }
+
     internal static void Stamp(UiRect bounds, int index, IBookAssets assets)
     {
         if ((uint)index > 2 || !assets.TryGet(BookAsset.Stamps, out var image))

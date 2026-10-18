@@ -20,4 +20,6 @@ Source Serif 4 Regular/Semibold are unmodified Adobe font files from [revision 8
 
 ## When adding material
 
+The [Gridania static studies](assets/passport/studies/gridania/PROVENANCE.md) add generated cover colorways, banner/crest interpretations, and schematic map art for review only. Their prompts/edit lineage and research references are recorded separately; they are excluded from the plugin package. Setting names/heraldic concepts are attributable to Square Enix; no downloaded reference artwork or extracted game pixels were reused. Local Windows Segoe Script joins Segoe UI only in preview rendering; neither font is redistributed.
+
 Record the exact source/revision, files or assets reused, author, license, retained notices, modifications, and redistribution requirements. Asset/font licenses may differ from repository code licenses. Keep applicable license text with the distributed material; this page is not a substitute for it. Do not assume a reference screenshot grants rights to ship its artwork.

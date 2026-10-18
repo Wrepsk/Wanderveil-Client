@@ -15,8 +15,9 @@ internal sealed unsafe class HeadlessUi : IDisposable
     internal PreviewTextures? Textures { get; }
     internal ImFontPtr TitleFont { get; }
     internal ImFontPtr HeadingFont { get; }
+    internal ImFontPtr SignatureFont { get; }
 
-    internal HeadlessUi(Vector2 size, float scale = 1f, float textScale = 1f, bool materials = false)
+    internal HeadlessUi(Vector2 size, float scale = 1f, float textScale = 1f, bool materials = false, bool signature = false)
     {
         displaySize = size;
         context = ImGui.CreateContext();
@@ -33,6 +34,8 @@ internal sealed unsafe class HeadlessUi : IDisposable
             io.Fonts.AddFontFromFileTTF(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Fonts), "segoeui.ttf"), 18f);
             TitleFont = io.Fonts.AddFontFromFileTTF(Path.Combine(AppContext.BaseDirectory, "Assets", "SourceSerif4-Semibold.ttf"), 30f);
             HeadingFont = io.Fonts.AddFontFromFileTTF(Path.Combine(AppContext.BaseDirectory, "Assets", "SourceSerif4-Regular.ttf"), 24f);
+            var signaturePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Fonts), "segoesc.ttf");
+            if (signature && File.Exists(signaturePath)) SignatureFont = io.Fonts.AddFontFromFileTTF(signaturePath, 30f);
             Textures = new PreviewTextures();
         }
         else io.Fonts.AddFontDefault();
@@ -73,14 +76,15 @@ internal sealed unsafe class HeadlessUi : IDisposable
         ImGui.Render();
     }
 
-    internal void BookFrame(Vector2 size, Action draw)
+    internal void BookFrame(Vector2 size, Action draw, bool studyBackdrop = false)
     {
         ImGui.NewFrame();
         // An authored backdrop makes the transparent host and artwork silhouette inspectable.
         var background = ImGui.GetBackgroundDrawList();
         background.AddRectFilledMultiColor(Vector2.Zero, displaySize, 0xff493c29, 0xff493c29, 0xff26382f, 0xff26382f);
-        for (var x = 0; x < displaySize.X; x += 64)
-            background.AddLine(new Vector2(x, 0), new Vector2(x, displaySize.Y), 0x183cddbd);
+        if (!studyBackdrop)
+            for (var x = 0; x < displaySize.X; x += 64)
+                background.AddLine(new Vector2(x, 0), new Vector2(x, displaySize.Y), 0x183cddbd);
         ImGui.SetNextWindowPos(new Vector2(16), ImGuiCond.FirstUseEver);
         ImGui.SetNextWindowSize(size);
         BookShell.PrepareWindow(size);
