@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using Dalamud.Bindings.ImGui;
 using Wanderveil.Features.Passport;
 using Wanderveil.UI;
+using Wanderveil.UI.Components;
 using Wanderveil.UI.Primitives;
 
 namespace Wanderveil.UiChecks;
@@ -19,7 +20,7 @@ internal static class RuntimePassportChecks
 #endif
         var root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../.."));
         var plugin = Assembly.LoadFile(Path.Combine(root, "src", "Wanderveil", "bin", "x64", configuration, "Wanderveil.dll"));
-        foreach (var asset in new[] { (Resource: "gridania-cover.png", File: "Studies/Gridania/cover.png"), (Resource: "gridania-banner.png", File: "Studies/Gridania/banner.png"), (Resource: "gridania-map.png", File: "Studies/Gridania/map-overhead.png"), (Resource: "gridania-crest.png", File: "Studies/Gridania/crest.png"), (Resource: "Caveat.ttf", File: "Caveat.ttf"), (Resource: "CormorantGaramond-Bold.ttf", File: "CormorantGaramond-Bold.ttf"), (Resource: "CormorantGaramond-SemiBold.ttf", File: "CormorantGaramond-SemiBold.ttf"), (Resource: "CormorantGaramond-Medium.ttf", File: "CormorantGaramond-Medium.ttf"), (Resource: "Cinzel-Bold.ttf", File: "Cinzel-Bold.ttf"), (Resource: "CourierPrime-Regular.ttf", File: "CourierPrime-Regular.ttf") })
+        foreach (var asset in new[] { (Resource: "gridania-cover.png", File: "Studies/Gridania/cover.png"), (Resource: "gridania-banner.png", File: "Studies/Gridania/banner.png"), (Resource: "gridania-map-overhead.png", File: "Studies/Gridania/map-overhead.png"), (Resource: "gridania-crest.png", File: "Studies/Gridania/crest.png"), (Resource: "Caveat.ttf", File: "Caveat.ttf"), (Resource: "CormorantGaramond-Bold.ttf", File: "CormorantGaramond-Bold.ttf"), (Resource: "CormorantGaramond-SemiBold.ttf", File: "CormorantGaramond-SemiBold.ttf"), (Resource: "CormorantGaramond-Medium.ttf", File: "CormorantGaramond-Medium.ttf"), (Resource: "Cinzel-Bold.ttf", File: "Cinzel-Bold.ttf"), (Resource: "CourierPrime-Regular.ttf", File: "CourierPrime-Regular.ttf") })
         {
             using var stream = plugin.GetManifestResourceStream("Wanderveil.Assets." + asset.Resource);
             check(stream != null, "Installed-client resource missing: " + asset.Resource);
@@ -27,6 +28,13 @@ internal static class RuntimePassportChecks
             check(SHA256.HashData(stream!).SequenceEqual(SHA256.HashData(original)), "Runtime and preview asset differ: " + asset.Resource);
         }
         check(!plugin.GetManifestResourceNames().Any(name => name.Contains("plum", StringComparison.OrdinalIgnoreCase)), "Unused colorway study entered the runtime assembly.");
+        int[] widths = [1254, 627, 314, 157];
+        check(BookImageLevels.Pick(widths, 150) == 3 && BookImageLevels.Pick(widths, 158) == 2 && BookImageLevels.Pick(widths, 600) == 1, "Size copy choice does not pick the smallest copy at least as wide as drawn.");
+        check(BookImageLevels.Pick(widths, 4000) == 0 && BookImageLevels.Pick(widths, 0) == 3 && BookImageLevels.Pick([1024], 50) == 0, "Size copy choice mishandles oversized, unsized, or single-copy draws.");
+        // Every plate ships reduced copies so the client never shrinks a texture more than about 2x.
+        foreach (var plate in new[] { "book-open", "book-cover", "demo-portrait", "stamp-atlas", "gridania-cover", "gridania-banner", "gridania-map-overhead", "gridania-crest" })
+            foreach (var level in new[] { ".half", ".quarter" })
+                check(plugin.GetManifestResourceNames().Contains("Wanderveil.Assets." + plate + level + ".png"), "Runtime plate lacks a reduced copy: " + plate + level);
         check(!plugin.GetManifestResourceNames().Any(name => name.Contains("SourceSerif4", StringComparison.Ordinal)), "Replaced Source Serif 4 font entered the runtime assembly.");
 
         foreach (var single in new[] { false, true })
@@ -125,6 +133,6 @@ internal static class RuntimePassportChecks
 
     private sealed class MissingAssets : Wanderveil.UI.Components.IBookAssets
     {
-        public bool TryGet(Wanderveil.UI.Components.BookAsset asset, out Wanderveil.UI.Components.BookImage image) { image = default; return false; }
+        public bool TryGet(Wanderveil.UI.Components.BookAsset asset, out Wanderveil.UI.Components.BookImage image, float drawWidth = 0f) { image = default; return false; }
     }
 }

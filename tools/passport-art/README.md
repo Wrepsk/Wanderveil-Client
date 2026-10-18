@@ -37,6 +37,13 @@ Templates are ordinary SVG with `{{token}}` slots (`cover`, `foil`, `accent`, `p
 Palettes live in `editions.mjs`. `<!-- include:decor -->` and `<!-- include:crest ... -->` mark
 where the script nests another template.
 
+## Size copies
+
+The game samples textures without mipmaps, so shrinking a plate more than about 2x skips pixels and
+edges alias. Every plate is therefore also re-rendered from its SVG at 1/2, 1/4 and 1/8 size
+(`<name>.half.png`, `.quarter`, `.eighth`, stopping near 96 px). The client draws the smallest copy
+that is still at least as wide as it appears on screen, falling back to any loaded copy while one loads.
+
 ## Contracts with the client
 
 - Art holds no text. Nation names, captions, and the passport number stay live in

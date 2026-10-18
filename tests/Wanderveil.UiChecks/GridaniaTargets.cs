@@ -48,7 +48,7 @@ internal static class GridaniaTargets
 
     private sealed class VariantAssets(PreviewTextures assets) : IBookAssets
     {
-        public bool TryGet(BookAsset asset, out BookImage image)
+        public bool TryGet(BookAsset asset, out BookImage image, float drawWidth = 0f)
         {
             if (asset == BookAsset.EditionCover) { image = assets.Study("cover-plum-cutout"); return true; }
             return assets.TryGet(asset, out image);

@@ -41,7 +41,7 @@ internal sealed class PreviewTextures : IBookAssets
         images[BookAsset.EditionCrest] = Study("crest");
     }
 
-    public bool TryGet(BookAsset asset, out BookImage image) => images.TryGetValue(asset, out image);
+    public bool TryGet(BookAsset asset, out BookImage image, float drawWidth = 0f) => images.TryGetValue(asset, out image);
     internal Texture Get(ulong id) => textures[id];
     internal void Register(ulong id, int width, int height, byte[] pixels) => textures.Add(id, new Texture(width, height, pixels));
 

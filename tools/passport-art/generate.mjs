@@ -45,11 +45,19 @@ function banner(id, tokens) {
     (_, x, y, w, h) => nest(crest(id, tokens), x, y, w, h));
 }
 
+// The game samples textures without mipmaps, so shrinking a plate more than about 2x skips pixels
+// and edges alias. Each plate therefore also ships re-rendered at 1/2, 1/4 and 1/8 size (down to
+// about 96 px); the client draws the smallest copy that is still at least as large as on screen.
+export const LEVELS = [["", 1], [".half", 2], [".quarter", 4], [".eighth", 8]];
 const results = [];
 async function emit(svg, path, w, h) {
   const file = resolve(out, path);
-  await png(sized(svg, w, h), file);
-  results.push(path);
+  for (const [suffix, divisor] of LEVELS) {
+    if (divisor > 1 && Math.min(w, h) / divisor < 96) break;
+    const target = suffix ? file.replace(/\.png$/, `${suffix}.png`) : file;
+    await png(sized(svg, Math.round(w / divisor), Math.round(h / divisor)), target);
+    results.push(path + suffix);
+  }
   return file;
 }
 

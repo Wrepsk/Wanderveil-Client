@@ -20,7 +20,11 @@ internal sealed class PassportAssets : IBookAssets, IDisposable
     private const float BaseSizePx = 24f;
     // Each distinct pixel size is a separate atlas font; the cap bounds atlas growth while resizing.
     private const int MaxSizedFonts = 48;
-    private readonly ISharedImmediateTexture[] textures;
+    // Size copies written by tools/passport-art: full, then .half/.quarter/.eighth where present.
+    private static readonly string[] Levels = ["", ".half", ".quarter", ".eighth"];
+    private static readonly string[] TextureNames = ["book-open", "book-cover", "demo-portrait", "stamp-atlas",
+        "gridania-cover", "gridania-banner", "gridania-map-overhead", "gridania-crest"];
+    private readonly (ISharedImmediateTexture Texture, int Width)[][] textures;
     private readonly IFontAtlas atlas;
     private readonly byte[][] fontBytes;
     private readonly IFontHandle[] fonts;
@@ -31,14 +35,17 @@ internal sealed class PassportAssets : IBookAssets, IDisposable
     {
         var assembly = typeof(PassportAssets).Assembly;
         this.atlas = atlas;
-        textures = [provider.GetFromManifestResource(assembly, "Wanderveil.Assets.book-open.png"),
-            provider.GetFromManifestResource(assembly, "Wanderveil.Assets.book-cover.png"),
-            provider.GetFromManifestResource(assembly, "Wanderveil.Assets.demo-portrait.png"),
-            provider.GetFromManifestResource(assembly, "Wanderveil.Assets.stamp-atlas.png"),
-            provider.GetFromManifestResource(assembly, "Wanderveil.Assets.gridania-cover.png"),
-            provider.GetFromManifestResource(assembly, "Wanderveil.Assets.gridania-banner.png"),
-            provider.GetFromManifestResource(assembly, "Wanderveil.Assets.gridania-map.png"),
-            provider.GetFromManifestResource(assembly, "Wanderveil.Assets.gridania-crest.png")];
+        var resources = new HashSet<string>(assembly.GetManifestResourceNames(), StringComparer.Ordinal);
+        textures = Array.ConvertAll(TextureNames, name =>
+        {
+            var levels = new List<(ISharedImmediateTexture, int)>();
+            foreach (var level in Levels)
+            {
+                var resource = "Wanderveil.Assets." + name + level + ".png";
+                if (resources.Contains(resource)) levels.Add((provider.GetFromManifestResource(assembly, resource), PngWidth(assembly, resource)));
+            }
+            return levels.ToArray();
+        });
         fontBytes = Array.ConvertAll(FontFiles, name => ReadFont(assembly, name));
         fonts = new IFontHandle[FontFiles.Length];
         try { for (var index = 0; index < fonts.Length; index++) fonts[index] = CreateFont(index, BaseSizePx); }
@@ -46,13 +53,35 @@ internal sealed class PassportAssets : IBookAssets, IDisposable
         scope = new FontScope(this);
     }
 
-    public bool TryGet(BookAsset asset, out BookImage image)
+    public bool TryGet(BookAsset asset, out BookImage image, float drawWidth = 0f)
     {
         // The host asynchronously loads/caches shared resources; these frame wraps must not be retained/disposed.
-        if ((uint)asset >= textures.Length) { image = default; return false; }
-        var wrap = textures[(int)asset].GetWrapOrDefault();
-        image = wrap == null ? default : new BookImage(wrap.Handle, wrap.Width, wrap.Height);
-        return wrap != null;
+        image = default;
+        if ((uint)asset >= textures.Length || textures[(int)asset].Length == 0) return false;
+        var levels = textures[(int)asset];
+        Span<int> widths = stackalloc int[levels.Length];
+        for (var index = 0; index < levels.Length; index++) widths[index] = levels[index].Width;
+        var wanted = BookImageLevels.Pick(widths, drawWidth);
+        // While the wanted copy loads, draw whichever copy is ready, nearest in size first.
+        for (var distance = 0; distance < levels.Length; distance++)
+            foreach (var index in new[] { wanted - distance, wanted + distance })
+            {
+                if ((uint)index >= levels.Length) continue;
+                var wrap = levels[index].Texture.GetWrapOrDefault();
+                if (wrap == null) continue;
+                image = new BookImage(wrap.Handle, wrap.Width, wrap.Height);
+                return true;
+            }
+        return false;
+    }
+
+    private static int PngWidth(Assembly assembly, string resource)
+    {
+        // The IHDR width sits at bytes 16-19 of every PNG.
+        using var stream = assembly.GetManifestResourceStream(resource)!;
+        Span<byte> header = stackalloc byte[24];
+        stream.ReadExactly(header);
+        return (header[16] << 24) | (header[17] << 16) | (header[18] << 8) | header[19];
     }
 
     // Locks the base fonts for one frame; sized fonts are locked on first use and released with the scope.

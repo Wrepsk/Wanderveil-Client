@@ -193,6 +193,6 @@ internal static class BookShellChecks
 
     private sealed class MissingAssets : IBookAssets
     {
-        public bool TryGet(BookAsset asset, out BookImage image) { image = default; return false; }
+        public bool TryGet(BookAsset asset, out BookImage image, float drawWidth = 0f) { image = default; return false; }
     }
 }

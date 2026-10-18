@@ -20,7 +20,7 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportPreview p
 
     internal void DrawCover(UiRect window, UiContext context)
     {
-        var hasCover = assets.TryGet(BookAsset.EditionCover, out var cover) || assets.TryGet(BookAsset.Cover, out cover);
+        var hasCover = assets.TryGet(BookAsset.EditionCover, out var cover, window.Size.X) || assets.TryGet(BookAsset.Cover, out cover, window.Size.X);
         if (hasCover)
             ImGui.GetWindowDrawList().AddImage(cover.Texture, window.Position, window.Max);
         else BookSurface.Draw(window, BookFace.Cover, assets, context);
@@ -28,7 +28,7 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportPreview p
         var (board, unit) = BookSurface.CoverBoard(window);
         var centerX = board.X + 210 * unit;
         CoverText("EORZEA PASSPORT", 117, 13, 6);
-        if (assets.TryGet(BookAsset.EditionCrest, out var crest)) BookSurface.Illustration(new UiRect(board + new Vector2(135, 153) * unit, new Vector2(150 * unit)), crest);
+        if (assets.TryGet(BookAsset.EditionCrest, out var crest, 150 * unit)) BookSurface.Illustration(new UiRect(board + new Vector2(135, 153) * unit, new Vector2(150 * unit)), crest);
         CoverText("GRIDANIA", 321, 44, 8);
         CoverText("THE BLACK SHROUD", 396, 14, 6);
         CoverText("WANDERVEIL", 492, 10, 5, 0.7f);
@@ -70,7 +70,7 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportPreview p
     {
         var list = ImGui.GetWindowDrawList();
         var height = MathF.Max(1, bottom - paper.Position.Y);
-        if (!assets.TryGet(BookAsset.NationBanner, out var image))
+        if (!assets.TryGet(BookAsset.NationBanner, out var image, MathF.Min(paper.Size.X * 0.62f, height * 0.435f)))
         {
             UiTypography.Draw(list, paper.Position + new Vector2(paper.Size.X * 0.12f, paper.Size.Y * 0.1f), "Gridania", TextRole.Title, context, paper.Size.X * 0.76f, UiTheme.Ink, false);
             return;
@@ -82,7 +82,7 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportPreview p
         // Proportions are in the banner's 200 x 460 design units.
         var unit = width / 200f;
         Lettering("01 / THE FOREST NATION", 34, 8, 2.5f, 0.85f);
-        if (assets.TryGet(BookAsset.EditionCrest, out var crest)) BookSurface.Illustration(new UiRect(banner.Position + new Vector2(45, 62) * unit, new Vector2(110 * unit)), crest);
+        if (assets.TryGet(BookAsset.EditionCrest, out var crest, 110 * unit)) BookSurface.Illustration(new UiRect(banner.Position + new Vector2(45, 62) * unit, new Vector2(110 * unit)), crest);
         Lettering("GRIDANIA", 198, 22, 4, 1);
         Lettering("REALM OF EORZEA", 240, 8, 3, 0.85f);
 
@@ -104,7 +104,7 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportPreview p
         flow.Text(isLeft ? "Gridania" : "An atlas of quiet paths", TextRole.Title);
         flow.Gap(16);
         var art = flow.Reserve(380 * context.Scale);
-        if (!assets.TryGet(isLeft ? BookAsset.NationBanner : BookAsset.NationMap, out var image))
+        if (!assets.TryGet(isLeft ? BookAsset.NationBanner : BookAsset.NationMap, out var image, MathF.Min(width, art.Size.Y * 0.83f)))
         { flow.Text("Artwork is loading or unavailable.", TextRole.Caption, true); return; }
         BookSurface.Illustration(art, image);
         flow.Gap(16);

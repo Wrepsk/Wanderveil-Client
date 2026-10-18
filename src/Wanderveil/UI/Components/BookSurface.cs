@@ -57,7 +57,9 @@ internal static class BookSurface
     internal static bool Draw(UiRect bounds, BookFace face, IBookAssets? assets, UiContext context)
     {
         var asset = face == BookFace.Cover ? BookAsset.Cover : BookAsset.Open;
-        if (assets == null || !assets.TryGet(asset, out var image))
+        // A single page shows half of the open-book plate, so the whole plate spans twice its width.
+        var span = face is BookFace.Left or BookFace.Right ? bounds.Size.X * 2 : bounds.Size.X;
+        if (assets == null || !assets.TryGet(asset, out var image, span))
         {
             PageSurface.Draw(ImGui.GetWindowDrawList(), bounds, context);
             return false;
@@ -93,7 +95,7 @@ internal static class BookSurface
 
     internal static void Portrait(UiRect bounds, IBookAssets assets, UiContext context)
     {
-        if (!assets.TryGet(BookAsset.Portrait, out var image))
+        if (!assets.TryGet(BookAsset.Portrait, out var image, MathF.Min(bounds.Size.X, bounds.Size.Y * 0.75f)))
             return;
         var aspect = image.Width / (float)image.Height;
         var size = new Vector2(MathF.Min(bounds.Size.X, bounds.Size.Y * aspect), MathF.Min(bounds.Size.Y, bounds.Size.X / aspect));
@@ -116,7 +118,7 @@ internal static class BookSurface
 
     internal static void Stamp(UiRect bounds, int index, IBookAssets assets)
     {
-        if ((uint)index > 2 || !assets.TryGet(BookAsset.Stamps, out var image))
+        if ((uint)index > 2 || !assets.TryGet(BookAsset.Stamps, out var image, MathF.Min(bounds.Size.X, bounds.Size.Y) * 3.2f))
             return;
         // Authored atlas regions: trim the middle gutter to exclude a neighboring impression's stray ink.
         var region = index == 1 ? new Vector2(0.34f, 0.65f) : new Vector2(index / 3f, (index + 1) / 3f);
