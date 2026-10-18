@@ -16,8 +16,8 @@
   <ItemGroup>
     <!-- Runtime plates come from the SVG generator (tools/passport-art); remaining Gridania studies stay gallery-only. -->
     <None Include="../../assets/passport/vector/*.png" Link="Assets/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
-    <None Include="../../assets/passport/vector/editions/gridania/*.png" Exclude="../../assets/passport/vector/editions/gridania/book-open.png" Link="Assets/Studies/Gridania/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
-    <None Include="../../assets/passport/vector/editions/gridania/book-open.png" Link="Assets/book-open.png" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../assets/passport/vector/editions/gridania/*.png" Exclude="../../assets/passport/vector/editions/gridania/book-open*.png" Link="Assets/Studies/Gridania/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../assets/passport/vector/editions/gridania/book-open*.png" Link="Assets/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../../assets/passport/studies/gridania/*.png" Exclude="../../assets/passport/studies/gridania/cover.png;../../assets/passport/studies/gridania/banner.png;../../assets/passport/studies/gridania/map-overhead.png;../../assets/passport/studies/gridania/crest.png" Link="Assets/Studies/Gridania/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../../assets/fonts/*.ttf" Link="Assets/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <Reference Include="Dalamud.Bindings.ImGui">

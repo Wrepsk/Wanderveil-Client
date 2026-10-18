@@ -42,7 +42,7 @@ where the script nests another template.
 The game samples textures without mipmaps, so shrinking a plate more than about 2x skips pixels and
 edges alias. Every plate is therefore also re-rendered from its SVG at 1/2, 1/4 and 1/8 size
 (`<name>.half.png`, `.quarter`, `.eighth`, stopping near 96 px). The client draws the smallest copy
-that is still at least as wide as it appears on screen, falling back to any loaded copy while one loads.
+that is still at least as wide as it appears on screen, falling back to any loaded copy while one loads. Every root `<svg>` therefore needs a `viewBox`: without one, rendering smaller crops the drawing, and the generator refuses it. The client checks also compare each copy against its full plate.
 
 ## Contracts with the client
 

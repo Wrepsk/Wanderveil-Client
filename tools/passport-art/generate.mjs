@@ -20,8 +20,11 @@ const fill = (svg, tokens) => svg.replace(/\{\{(\w+)\}\}/g, (match, key) => {
 const inner = (svg) => svg.replace(/^[\s\S]*?<svg[^>]*>/, "").replace(/<\/svg>\s*$/, "");
 const viewBox = (svg) => /viewBox="([^"]+)"/.exec(svg)[1];
 const nest = (svg, x, y, w, h) => `<svg x="${x}" y="${y}" width="${w}" height="${h}" viewBox="${viewBox(svg)}" overflow="visible">${inner(svg)}</svg>`;
-const sized = (svg, w, h) => svg.replace(/<svg([^>]*)>/, (tag, attrs) =>
-  `<svg${attrs.replace(/\s(width|height)="[^"]*"/g, "")} width="${w}" height="${h}">`);
+// Without a viewBox, a smaller width/height crops the drawing instead of scaling it.
+const sized = (svg, w, h) => svg.replace(/<svg([^>]*)>/, (tag, attrs) => {
+  if (!/\sviewBox="/.test(attrs)) throw new Error("Root <svg> needs a viewBox to render at other sizes.");
+  return `<svg${attrs.replace(/\s(width|height)="[^"]*"/g, "")} width="${w}" height="${h}">`;
+});
 
 async function png(svg, file) {
   const buffer = await sharp(Buffer.from(svg)).png({ compressionLevel: 9, palette: false }).toBuffer();
@@ -33,7 +36,7 @@ async function png(svg, file) {
 function cover(id, tokens) {
   const board = fill(read("cover-base.svg").replace("<!-- include:decor -->", inner(read(`cover-${id}.svg`))), tokens);
   const { x, y, w, h } = COVER.board;
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${COVER.w}" height="${COVER.h}">
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${COVER.w}" height="${COVER.h}" viewBox="0 0 ${COVER.w} ${COVER.h}">
     <defs><filter id="lift" x="-10%" y="-10%" width="120%" height="120%"><feDropShadow dx="0" dy="14" stdDeviation="16" flood-color="#000" flood-opacity=".45"/></filter></defs>
     <g filter="url(#lift)">${nest(board, x, y, w, h)}</g></svg>`;
 }

@@ -37,6 +37,15 @@ internal static class RuntimePassportChecks
                 check(plugin.GetManifestResourceNames().Contains("Wanderveil.Assets." + plate + level + ".png"), "Runtime plate lacks a reduced copy: " + plate + level);
         check(!plugin.GetManifestResourceNames().Any(name => name.Contains("SourceSerif4", StringComparison.Ordinal)), "Replaced Source Serif 4 font entered the runtime assembly.");
 
+        // A reduced copy must be its full plate shrunk, never cropped or shifted (a missing viewBox once cropped covers).
+        foreach (var level in Directory.EnumerateFiles(Path.Combine(AppContext.BaseDirectory, "Assets"), "*.png", SearchOption.AllDirectories)
+            .Where(file => file.EndsWith(".half.png", StringComparison.Ordinal) || file.EndsWith(".quarter.png", StringComparison.Ordinal) || file.EndsWith(".eighth.png", StringComparison.Ordinal)))
+        {
+            var full = level[..level.LastIndexOf('.', level.Length - 5)] + ".png";
+            check(File.Exists(full), "Reduced copy has no full plate: " + Path.GetFileName(level));
+            check(LevelDifference(full, level) < 0.06f, "Reduced copy does not match its full plate: " + Path.GetFileName(level));
+        }
+
         foreach (var single in new[] { false, true })
         {
             var viewport = single ? new Vector2(452, 760) : new Vector2(1200, 900);
@@ -129,6 +138,32 @@ internal static class RuntimePassportChecks
             try { _ = new BookShell(new MissingAssets(), PassportPreview.Sample, invalid); check(false, "Invalid logical page identifiers accepted."); }
             catch (ArgumentException) { check(true, "Invalid logical page catalog rejected."); }
         }
+    }
+
+    // Mean per-channel difference (0-1) between a reduced copy and its full plate scaled to the same size.
+    private static float LevelDifference(string fullPath, string levelPath)
+    {
+        using var level = new System.Drawing.Bitmap(levelPath);
+        using var source = new System.Drawing.Bitmap(fullPath);
+        using var scaled = new System.Drawing.Bitmap(level.Width, level.Height, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+        using (var graphics = System.Drawing.Graphics.FromImage(scaled))
+        {
+            graphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+            graphics.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
+            graphics.DrawImage(source, new System.Drawing.Rectangle(0, 0, level.Width, level.Height));
+        }
+        double total = 0;
+        var step = Math.Max(1, Math.Min(level.Width, level.Height) / 96);
+        var samples = 0;
+        for (var y = 0; y < level.Height; y += step)
+            for (var x = 0; x < level.Width; x += step)
+            {
+                var a = level.GetPixel(x, y);
+                var b = scaled.GetPixel(x, y);
+                total += (Math.Abs(a.R - b.R) + Math.Abs(a.G - b.G) + Math.Abs(a.B - b.B) + Math.Abs(a.A - b.A)) / (4 * 255.0);
+                samples++;
+            }
+        return (float)(total / samples);
     }
 
     private sealed class MissingAssets : Wanderveil.UI.Components.IBookAssets
