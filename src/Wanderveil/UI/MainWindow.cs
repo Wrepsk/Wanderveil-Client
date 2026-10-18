@@ -4,6 +4,7 @@ using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Windowing;
 using Wanderveil.Features.Discover;
 using Wanderveil.Features.Passport;
+using Wanderveil.Infrastructure.Media;
 using Wanderveil.UI.Components;
 using Wanderveil.UI.Primitives;
 
@@ -12,13 +13,16 @@ namespace Wanderveil.UI;
 internal sealed class MainWindow : Window
 {
     private readonly Action openSettings;
-    private readonly PassportView passport = new(PassportPreview.Sample);
+    private readonly PassportView passport;
+    private readonly PassportAssets assets;
     private readonly DiscoverView discover = new(DiscoveryPreview.Samples);
     private string? requestedSection = "Passport";
 
-    internal MainWindow(Action openSettings) : base("Wanderveil###Wanderveil.Main")
+    internal MainWindow(Action openSettings, PassportAssets assets) : base("Wanderveil###Wanderveil.Main")
     {
         this.openSettings = openSettings;
+        this.assets = assets;
+        passport = new PassportView(PassportPreview.Sample, assets);
         Size = new Vector2(820, 680);
         SizeCondition = ImGuiCond.FirstUseEver;
         SizeConstraints = new WindowSizeConstraints
@@ -30,6 +34,7 @@ internal sealed class MainWindow : Window
 
     public override void Draw()
     {
+        using var fonts = assets.LockFonts();
         var context = new UiContext(ShellStyle.Scale, ImGui.GetFontSize());
         CompassMark.Draw();
         ImGui.SameLine();
@@ -58,7 +63,7 @@ internal sealed class MainWindow : Window
                 {
                     try
                     {
-                        if (passport.Draw(context))
+                        if (passport.Draw(context with { TitleFont = fonts.Title, HeadingFont = fonts.Heading }))
                             requestedSection = "Discover";
                     }
                     finally

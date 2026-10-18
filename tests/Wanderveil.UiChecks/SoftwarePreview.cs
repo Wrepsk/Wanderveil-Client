@@ -1,4 +1,7 @@
 using System.Numerics;
+using System.Drawing;
+using System.Drawing.Imaging;
+using System.Runtime.InteropServices;
 using Dalamud.Bindings.ImGui;
 
 namespace Wanderveil.UiChecks;
@@ -27,16 +30,25 @@ internal static unsafe class SoftwarePreview
                 var command = list.CmdBuffer[commandIndex];
                 if (command.UserCallback != null)
                     throw new InvalidOperationException("Preview does not support native draw callbacks.");
-                if (command.TextureId.Handle != 1)
-                    throw new InvalidOperationException("Preview only supports the test font atlas.");
+                var texture = command.TextureId.Handle == 1 ? null : host.Textures?.Get(command.TextureId.Handle)
+                    ?? throw new InvalidOperationException("Unregistered preview texture.");
                 for (var index = 0u; index < command.ElemCount; index += 3)
                 {
                     var a = list.VtxBuffer[(int)(command.VtxOffset + list.IdxBuffer[(int)(command.IdxOffset + index)])];
                     var b = list.VtxBuffer[(int)(command.VtxOffset + list.IdxBuffer[(int)(command.IdxOffset + index + 1)])];
                     var c = list.VtxBuffer[(int)(command.VtxOffset + list.IdxBuffer[(int)(command.IdxOffset + index + 2)])];
-                    Triangle(a, b, c, command.ClipRect, pixels, width, height, host);
+                    Triangle(a, b, c, command.ClipRect, pixels, width, height, host, texture);
                 }
             }
+        }
+        if (Path.GetExtension(path).Equals(".png", StringComparison.OrdinalIgnoreCase))
+        {
+            using var bitmap = new Bitmap(width, height, PixelFormat.Format32bppArgb);
+            var locked = bitmap.LockBits(new Rectangle(0, 0, width, height), ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
+            try { Marshal.Copy(pixels, 0, locked.Scan0, pixels.Length); }
+            finally { bitmap.UnlockBits(locked); }
+            bitmap.Save(path, ImageFormat.Png);
+            return;
         }
         using var writer = new BinaryWriter(File.Create(path));
         writer.Write((ushort)0x4D42);
@@ -58,7 +70,7 @@ internal static unsafe class SoftwarePreview
     }
 
     private static void Triangle(ImDrawVert a, ImDrawVert b, ImDrawVert c, Vector4 clip, byte[] pixels,
-        int width, int height, HeadlessUi host)
+        int width, int height, HeadlessUi host, PreviewTextures.Texture? texture)
     {
         static float Edge(Vector2 start, Vector2 end, Vector2 point) =>
             ((point.X - start.X) * (end.Y - start.Y)) - ((point.Y - start.Y) * (end.X - start.X));
@@ -79,17 +91,21 @@ internal static unsafe class SoftwarePreview
                 if (wa < 0f || wb < 0f || wc < 0f)
                     continue;
                 var uv = (a.Uv * wa) + (b.Uv * wb) + (c.Uv * wc);
-                var tx = Math.Clamp((int)(uv.X * host.AtlasWidth), 0, host.AtlasWidth - 1);
-                var ty = Math.Clamp((int)(uv.Y * host.AtlasHeight), 0, host.AtlasHeight - 1);
-                var sample = host.AtlasPixels + (((ty * host.AtlasWidth) + tx) * 4);
-                var alpha = (((a.Col >> 24) * wa) + ((b.Col >> 24) * wb) + ((c.Col >> 24) * wc)) / 255f * sample[3] / 255f;
+                var textureWidth = texture?.Width ?? host.AtlasWidth;
+                var textureHeight = texture?.Height ?? host.AtlasHeight;
+                var tx = Math.Clamp((int)(uv.X * textureWidth), 0, textureWidth - 1);
+                var ty = Math.Clamp((int)(uv.Y * textureHeight), 0, textureHeight - 1);
+                var sampleIndex = ((ty * textureWidth) + tx) * 4;
+                var sampleAlpha = texture == null ? host.AtlasPixels[sampleIndex + 3] : texture.Pixels[sampleIndex + 3];
+                var alpha = (((a.Col >> 24) * wa) + ((b.Col >> 24) * wb) + ((c.Col >> 24) * wc)) / 255f * sampleAlpha / 255f;
                 var target = ((y * width) + x) * 4;
                 for (var channel = 0; channel < 3; channel++)
                 {
                     var shift = channel * 8;
                     var color = (((a.Col >> shift) & 255) * wa) + (((b.Col >> shift) & 255) * wb) + (((c.Col >> shift) & 255) * wc);
                     var destination = target + (2 - channel);
-                    pixels[destination] = (byte)((color * sample[channel] / 255f * alpha) + (pixels[destination] * (1f - alpha)));
+                    var sample = texture == null ? host.AtlasPixels[sampleIndex + channel] : texture.Pixels[sampleIndex + channel];
+                    pixels[destination] = (byte)((color * sample / 255f * alpha) + (pixels[destination] * (1f - alpha)));
                 }
             }
     }

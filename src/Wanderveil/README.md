@@ -13,6 +13,9 @@
 | `Features/Social/` | Future consent/request UI |
 | `Features/Settings/` | Implemented appearance window; future privacy/account UI |
 | `UI/` | Shell, primitives, typography, page/button/card/stamp-preview components, and procedural compass |
-| `Infrastructure/` | Dalamud, local persistence, future API/media/rendering adapters |
+| `Infrastructure/Media/` | Implemented embedded Passport texture/font adapter; no network/media processing in draw |
+| `Infrastructure/` | Future local persistence, API, and optional rendering adapters |
 
 Keep one plugin project and only classes needed by the current slice. Domain/application behavior must not depend on drawing APIs, private backend projects, or optional graphics. The sample Passport is presentation-only; no collection, identity authentication, storage, creator tools, or online services are implemented.
+
+The stationary material book is shared presentation code. Its cover and collection compositions are test-only review targets; full logical-page routing and motion follow separate milestones. Original artwork, fonts, and provenance live under `assets/`. Native window chrome stays until the physical book is established.

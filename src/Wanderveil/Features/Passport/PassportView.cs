@@ -9,8 +9,13 @@ namespace Wanderveil.Features.Passport;
 internal sealed class PassportView
 {
     private readonly PassportPreview preview;
+    private readonly IBookAssets? assets;
 
-    internal PassportView(PassportPreview preview) => this.preview = preview;
+    internal PassportView(PassportPreview preview, IBookAssets? assets = null)
+    {
+        this.preview = preview;
+        this.assets = assets;
+    }
 
     internal bool Draw(UiContext context)
     {
@@ -21,6 +26,8 @@ internal sealed class PassportView
         // Leave room for the page shadow and the parent window's native scrollbar.
         var width = MathF.Max(1f, UiLayout.ContentWidth - (4f * context.Scale));
         var layout = PassportLayout.Create(width, context);
+        if (assets != null)
+            return DrawBook(width, layout.IsSpread, context);
         var contentWidth = layout.PageWidth - (2f * layout.Padding);
         var measureIdentity = new PageFlow(Vector2.Zero, contentWidth, context, false);
         var measureJournal = new PageFlow(Vector2.Zero, contentWidth, context, false);
@@ -42,6 +49,51 @@ internal sealed class PassportView
         ImGui.Dummy(new Vector2(width, totalHeight + (4f * context.Scale)));
         ImGui.Dummy(new Vector2(0f, UiMetrics.Medium * context.Scale));
         return UiButton.Draw("Explore discoveries", context);
+    }
+
+    private bool DrawBook(float width, bool spread, UiContext context)
+    {
+        var contentWidth = BookSurface.ContentWidth(width, spread);
+        var identityMeasure = new PageFlow(Vector2.Zero, contentWidth, context, false);
+        var notesMeasure = new PageFlow(Vector2.Zero, contentWidth, context, false);
+        ComposeIdentity(ref identityMeasure, context);
+        ComposeJournal(ref notesMeasure);
+        var leftHeight = BookSurface.Height(width, spread, identityMeasure.Height);
+        var rightHeight = BookSurface.Height(width, spread, notesMeasure.Height);
+        var origin = ImGui.GetCursorScreenPos();
+        if (spread)
+        {
+            var book = new UiRect(origin, new Vector2(width, MathF.Max(leftHeight, rightHeight)));
+            BookSurface.Draw(book, BookFace.Spread, assets, context);
+            PaintContent(BookSurface.Content(book, BookFace.Spread), context, true);
+            PaintContent(BookSurface.RightContent(book), context, false);
+            ImGui.Dummy(book.Size);
+        }
+        else
+        {
+            var left = new UiRect(origin, new Vector2(width, leftHeight));
+            var right = new UiRect(origin + new Vector2(0, leftHeight + (UiMetrics.PageGap * context.Scale)), new Vector2(width, rightHeight));
+            BookSurface.Draw(left, BookFace.Left, assets, context);
+            BookSurface.Draw(right, BookFace.Right, assets, context);
+            PaintContent(BookSurface.Content(left, BookFace.Left), context, true);
+            PaintContent(BookSurface.Content(right, BookFace.Right), context, false);
+            ImGui.Dummy(new Vector2(width, right.Max.Y - origin.Y));
+        }
+        ImGui.Dummy(new Vector2(0, UiMetrics.Medium * context.Scale));
+        return UiButton.Draw("Explore discoveries", context);
+    }
+
+    private void PaintContent(UiRect bounds, UiContext context, bool identity)
+    {
+        var list = ImGui.GetWindowDrawList();
+        list.PushClipRect(bounds.Position, bounds.Max, true);
+        try
+        {
+            var flow = new PageFlow(bounds.Position, bounds.Size.X, context, true);
+            if (identity) ComposeIdentity(ref flow, context);
+            else ComposeJournal(ref flow);
+        }
+        finally { list.PopClipRect(); }
     }
 
     private void DrawPage(UiRect bounds, float padding, UiContext context, bool identity)
@@ -67,11 +119,14 @@ internal sealed class PassportView
     {
         flow.Text("WANDERVEIL / IDENTITY", TextRole.Caption, true);
         flow.Gap(UiMetrics.Medium);
-        var portrait = flow.Reserve(MathF.Max(84f * context.Scale, context.FontSize * 5f));
+        var portrait = flow.Reserve(MathF.Max((assets == null ? 84f : 180f) * context.Scale, context.FontSize * 5f));
         if (flow.IsDrawing)
-            DrawPortrait(portrait, context);
+        {
+            if (assets != null && assets.TryGet(BookAsset.Portrait, out _)) BookSurface.Portrait(portrait, assets, context);
+            else DrawPortrait(portrait, context);
+        }
         flow.Gap();
-        flow.Text("Portrait placeholder", TextRole.Caption, true);
+        flow.Text(assets != null && assets.TryGet(BookAsset.Portrait, out _) ? "Illustrated demo portrait" : "Portrait placeholder", TextRole.Caption, true);
         flow.Rule();
         flow.Text(preview.Name, TextRole.Title);
         flow.Gap(UiMetrics.Medium);

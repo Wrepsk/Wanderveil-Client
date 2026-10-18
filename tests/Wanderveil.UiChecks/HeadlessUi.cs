@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Runtime.InteropServices;
 using Dalamud.Bindings.ImGui;
 
 namespace Wanderveil.UiChecks;
@@ -10,8 +11,11 @@ internal sealed unsafe class HeadlessUi : IDisposable
     internal byte* AtlasPixels { get; }
     internal int AtlasWidth { get; }
     internal int AtlasHeight { get; }
+    internal PreviewTextures? Textures { get; }
+    internal ImFontPtr TitleFont { get; }
+    internal ImFontPtr HeadingFont { get; }
 
-    internal HeadlessUi(Vector2 size, float scale = 1f, float textScale = 1f)
+    internal HeadlessUi(Vector2 size, float scale = 1f, float textScale = 1f, bool materials = false)
     {
         displaySize = size;
         context = ImGui.CreateContext();
@@ -22,7 +26,15 @@ internal sealed unsafe class HeadlessUi : IDisposable
         io.ConfigFlags |= ImGuiConfigFlags.NavEnableKeyboard;
         io.ConfigInputTrickleEventQueue = false;
         io.FontGlobalScale = scale * textScale;
-        io.Fonts.AddFontDefault();
+        if (materials)
+        {
+            // A local Windows UI font is a preview surrogate for the host font, never a shipped asset.
+            io.Fonts.AddFontFromFileTTF(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Fonts), "segoeui.ttf"), 18f);
+            TitleFont = io.Fonts.AddFontFromFileTTF(Path.Combine(AppContext.BaseDirectory, "Assets", "SourceSerif4-Semibold.ttf"), 30f);
+            HeadingFont = io.Fonts.AddFontFromFileTTF(Path.Combine(AppContext.BaseDirectory, "Assets", "SourceSerif4-Regular.ttf"), 24f);
+            Textures = new PreviewTextures();
+        }
+        else io.Fonts.AddFontDefault();
         byte* pixels;
         int width, height;
         io.Fonts.GetTexDataAsRGBA32(0, &pixels, &width, &height);
@@ -30,6 +42,15 @@ internal sealed unsafe class HeadlessUi : IDisposable
         AtlasPixels = pixels;
         AtlasWidth = width;
         AtlasHeight = height;
+        for (var index = 1; index < io.Fonts.Textures.Size; index++)
+        {
+            io.Fonts.GetTexDataAsRGBA32(index, &pixels, &width, &height);
+            var id = 1000UL + (ulong)index;
+            io.Fonts.SetTexID(index, new ImTextureID(id));
+            var page = new byte[width * height * 4];
+            Marshal.Copy((nint)pixels, page, 0, page.Length);
+            Textures!.Register(id, width, height, page);
+        }
         ImGui.GetStyle().ScaleAllSizes(scale);
     }
 

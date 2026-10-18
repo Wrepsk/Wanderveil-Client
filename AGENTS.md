@@ -4,7 +4,7 @@ This agreement is self-contained. Read [docs/README.md](docs/README.md), [archit
 
 ## Current baseline and scope
 
-The executable project is `src/Wanderveil/Wanderveil.csproj`, referenced by `Wanderveil.slnx`. The shell, saved appearance settings, shared UI primitives, synthetic Passport identity spread, and static Discover card/detail flow are implemented. `tests/Wanderveil.UiChecks` checks real native ImGui layout/input outside the game. Other feature/domain/application folders and assets remain mostly reserved. The next UI task is Studio's static template chooser/postcard preview; collection and persistence remain later work.
+The executable project is `src/Wanderveil/Wanderveil.csproj`, referenced by `Wanderveil.slnx`. Shell/settings, shared UI, Passport identity, and Discover cards/details exist. Passport visual fidelity now takes priority over Studio/Echoes: milestone 1 adds original book materials, heading fonts, stationary presentation, and cover/identity/collection review targets. Read [the milestone record](docs/passport-visual-fidelity.md) before continuing. Review previews between milestones; full identity/collection page composition, entrance/exit, and a separate 2.5D turn experiment follow in that order. CrystalRenderer needs a separate decision. Preserve existing functionality and avoid elaborate chrome work before the core book is established.
 
 The first product loop is one curated offline discovery → one local demo stamp → passport page. Build static UI before online accounts/publication. Backend identity, networking contracts, and renderer integration remain future work. Honor current user scope rather than implementing all roadmap ideas.
 

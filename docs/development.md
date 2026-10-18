@@ -5,6 +5,7 @@ Status: Wanderveil shell, static Passport identity preview, and static Discover 
 ## Prerequisites
 
 - Windows development environment with a compatible .NET 10 SDK. The unchanged `Dalamud.NET.Sdk/15.0.0` project/lock targets `net10.0-windows7.0`; .NET 10.0.100 was used locally.
+- Native checks also use the Windows Desktop runtime for test-only PNG decoding/export, installed with the Windows SDK. Material previews use the local Segoe UI font without redistributing it.
 - FFXIV/XIVLauncher/Dalamud for runtime testing, plus compatible Dalamud development assemblies.
 - Default development-assembly path: `%AppData%/XIVLauncher/addon/Hooks/dev`. For a custom location, use the SDK's `DALAMUD_HOME` configuration and validate discovery.
 
@@ -28,7 +29,7 @@ Use the solution's default platform mapping, which maps the project to x64. Outp
 - Release DLL/manifest: the same filenames under `src/Wanderveil/bin/x64/Release/`.
 - Release distribution package: `src/Wanderveil/bin/x64/Release/Wanderveil/latest.zip`.
 
-The solution maps both projects to x64; direct check-project runs need `-p:Platform=x64` to select that output. [Native UI checks](../tests/README.md) use the installed `Dalamud.Bindings.ImGui.dll` and `cimgui.dll`, with no new NuGet dependency. Optional ignored BMP previews are generated under `artifacts/ui/`. CI runs the checks in Debug/Release and uploads previews separately from plugin artifacts. Hosted execution is not claimed from local results.
+The solution maps both projects to x64; direct check-project runs need `-p:Platform=x64` to select that output. [Native UI checks](../tests/README.md) use the installed `Dalamud.Bindings.ImGui.dll` and `cimgui.dll`, with no new NuGet dependency. Optional BMP/PNG previews are generated under ignored `artifacts/ui/`; reviewed Passport targets are committed under `docs/previews/passport/`. CI runs checks in Debug/Release and uploads both formats separately from plugin artifacts. Hosted execution is not claimed from local results. Bundled assets/fonts build without any image service; their source/license notices accompany releases.
 
 ## Commands and settings
 

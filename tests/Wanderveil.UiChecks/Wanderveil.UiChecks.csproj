@@ -9,10 +9,13 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
     <IsPackable>false</IsPackable>
+    <UseWindowsForms>true</UseWindowsForms>
     <DalamudLibPath>$(appdata)/XIVLauncher/addon/Hooks/dev</DalamudLibPath>
     <DalamudLibPath Condition="'$(DALAMUD_HOME)' != ''">$(DALAMUD_HOME)</DalamudLibPath>
   </PropertyGroup>
   <ItemGroup>
+    <None Include="../../assets/passport/*.png" Link="Assets/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../assets/fonts/*.ttf" Link="Assets/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <Reference Include="Dalamud.Bindings.ImGui">
       <HintPath>$(DalamudLibPath)/Dalamud.Bindings.ImGui.dll</HintPath>
     </Reference>

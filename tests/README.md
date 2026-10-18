@@ -8,9 +8,9 @@ dotnet build Wanderveil.slnx -c Release --no-restore
 dotnet run --project tests/Wanderveil.UiChecks -c Release -p:Platform=x64 --no-build --no-restore -- artifacts/ui
 ```
 
-The final directory argument is optional. With it, the test-only CPU rasterizer writes BMP previews under the ignored artifact directory. Native libraries/test code never enter the plugin package.
+The final directory argument is optional. With it, the test-only CPU rasterizer writes BMP previews and three Passport target PNGs under the ignored artifact directory. Native libraries/test code never enter the plugin package. Material checks use Windows Desktop drawing APIs to decode/export PNGs and local Segoe UI as a body-font surrogate; that font is not redistributed. Assets/heading fonts come from the same files embedded in the plugin.
 
-All 322 checks pass locally in both Debug and Release. Coverage includes:
+All 479 checks pass locally in both Debug and Release. Coverage includes:
 
 - Page geometry across 45 width/scale/text-size combinations, invalid geometry, and spread/stack transitions.
 - Paper body/caption and button-state label contrast.
@@ -20,6 +20,9 @@ All 322 checks pass locally in both Debug and Release. Coverage includes:
 - Native keyboard card selection and focused Back activation, mouse release/cancel, and style restoration.
 - Wide/narrow/enlarged/long-content discovery previews, empty list and missing-image details, and scrolling to the end of long details without horizontal overflow.
 - Disabled collection, long-button wrapping, short labels at fractional font sizes, and opening a scrolled card then restoring browse position through Back.
+- Stationary book content bounds for spreads/page halves and tall measured content; invalid geometry rejection.
+- Asset-backed/fallback Passport frames, heading font stack/fallback, and keyboard Explore activation after long-page scrolling.
+- Cover/identity/demo collection visual targets with actual material/portrait/stamp textures and multiple font-atlas pages. These remain presentation specimens, not runtime collection routes.
 
 This is an executable check suite: failures exit nonzero; use `dotnet run` as above rather than expecting a `dotnet test` adapter. CI runs it for both build configurations and uploads previews. It does not prove game-host lifecycle, localization glyph coverage, GPU output, or performance. Routine commits use appropriate automated evidence and preview review without requiring user in-game testing.
 

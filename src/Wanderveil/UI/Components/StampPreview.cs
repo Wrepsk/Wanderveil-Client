@@ -8,12 +8,12 @@ namespace Wanderveil.UI.Components;
 internal static class StampPreview
 {
     // Original procedural motif, not an issued stamp or game achievement.
-    internal static void Draw(UiRect bounds, UiContext context)
+    internal static void Draw(UiRect bounds, UiContext context, Vector4? color = null)
     {
         var drawList = ImGui.GetWindowDrawList();
         var center = bounds.Position + (bounds.Size / 2f);
         var radius = MathF.Min(bounds.Size.X, bounds.Size.Y) * 0.42f;
-        var ink = ImGui.GetColorU32(UiTheme.Action);
+        var ink = ImGui.GetColorU32(color ?? UiTheme.Action);
         var stroke = MathF.Max(1f, context.Scale);
         drawList.AddCircle(center, radius, ink, 48, stroke * 2f);
         drawList.AddCircle(center, radius * 0.84f, ink, 48, stroke);

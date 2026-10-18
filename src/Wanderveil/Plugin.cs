@@ -5,6 +5,7 @@ using Dalamud.IoC;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 using Wanderveil.Features.Settings;
+using Wanderveil.Infrastructure.Media;
 using Wanderveil.UI;
 
 namespace Wanderveil;
@@ -14,6 +15,7 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] private static IDalamudPluginInterface PluginInterface { get; set; } = null!;
     [PluginService] private static ICommandManager CommandManager { get; set; } = null!;
     [PluginService] private static IPluginLog Log { get; set; } = null!;
+    [PluginService] private static ITextureProvider TextureProvider { get; set; } = null!;
 
     private const string CommandName = "/wanderveil";
 
@@ -21,6 +23,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly Configuration configuration;
     private readonly MainWindow mainWindow;
     private readonly SettingsWindow settingsWindow;
+    private PassportAssets? assets;
     private bool commandRegistered;
     private bool disposed;
 
@@ -28,10 +31,10 @@ public sealed class Plugin : IDalamudPlugin
     {
         configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
         settingsWindow = new SettingsWindow(configuration, SaveConfiguration);
-        mainWindow = new MainWindow(OpenSettings);
-
         try
         {
+            assets = new PassportAssets(TextureProvider, PluginInterface.UiBuilder.FontAtlas);
+            mainWindow = new MainWindow(OpenSettings, assets);
             windowSystem.AddWindow(mainWindow);
             windowSystem.AddWindow(settingsWindow);
 
@@ -71,8 +74,8 @@ public sealed class Plugin : IDalamudPlugin
             commandRegistered = false;
         }
 
-        // These windows own no textures, hooks, subscriptions, or background tasks.
         windowSystem.RemoveAllWindows();
+        assets?.Dispose();
     }
 
     private void OnCommand(string command, string arguments)

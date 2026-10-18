@@ -12,4 +12,11 @@ Early development build: demo Discover cards/details, sample Passport identity s
     <RepoUrl>https://github.com/Wrepsk/Wanderveil-Client</RepoUrl>
     <Tags>exploration;passport;discoveries;journal</Tags>
   </PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="../../assets/passport/*.png" LogicalName="Wanderveil.Assets.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="../../assets/fonts/*.ttf" LogicalName="Wanderveil.Assets.%(Filename)%(Extension)" />
+    <None Include="../../assets/fonts/SourceSerif4-LICENSE.md" Link="SourceSerif4-LICENSE.md" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../assets/passport/PROVENANCE.md" Link="Passport-Assets.md" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../assets/passport/generation-prompts.md" Link="generation-prompts.md" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

@@ -21,7 +21,9 @@ dotnet run --project tests/Wanderveil.UiChecks -c Release -p:Platform=x64 --no-b
 
 Debug output: `src/Wanderveil/bin/x64/Debug/Wanderveil.dll`. Release package: `src/Wanderveil/bin/x64/Release/Wanderveil/latest.zip`. `/wanderveil` toggles the shell; `/wanderveil settings` opens appearance settings. Reduced motion saves through Dalamud configuration; this shell has no animation yet.
 
-All 322 native ImGui checks pass in Debug/Release: responsive geometry, contrast, text reservation, mouse/keyboard navigation, disabled collection, scroll restoration, and style cleanup. Optional software-rendered previews are written under ignored `artifacts/ui/`. These checks run outside FFXIV; live host/fonts/GPU behavior and hosted CI execution are not claimed. Completed slices are committed after appropriate automated verification without requiring routine user in-game testing.
+Passport now has an original asset-backed stationary book surface, Source Serif 4 headings, and illustrated demo portrait. Cover and identity/collection compositions are [inspectable visual targets](docs/passport-visual-fidelity.md); full page composition/routing and motion follow after review. This visual-fidelity milestone precedes Studio/Echoes. Native window chrome remains while the core book is established.
+
+Native ImGui checks cover responsive geometry, contrast, text reservation, mouse/keyboard navigation, disabled collection, scroll restoration, style cleanup, textured/fallback book layouts, and heading-font fallback. Optional software previews are written under ignored `artifacts/ui/`. These checks run outside FFXIV; live host/fonts/GPU behavior and hosted CI execution are not claimed. Completed slices are committed after appropriate automated verification without requiring routine user in-game testing.
 
 ## Repository map
 
