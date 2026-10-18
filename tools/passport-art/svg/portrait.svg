@@ -1,15 +1,28 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1086" height="1448" viewBox="0 0 348 464">
-  <!-- Portrait placeholder: tinted window with an anonymous bust until a real portrait is chosen. -->
-  <defs><clipPath id="win"><rect width="348" height="464"/></clipPath></defs>
+  <!-- Portrait placeholder: a passport-photo window with a soft backdrop and an anonymous
+       head-and-shoulders silhouette, until a real portrait is chosen. -->
+  <defs>
+    <clipPath id="win"><rect width="348" height="464"/></clipPath>
+    <radialGradient id="backdrop" cx="50%" cy="36%" r="70%">
+      <stop offset="0" stop-color="#FFF" stop-opacity=".22"/>
+      <stop offset=".65" stop-color="#FFF" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000" stop-opacity=".10"/>
+    </radialGradient>
+    <linearGradient id="figure" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="{{ink}}" stop-opacity=".78"/>
+      <stop offset="1" stop-color="{{ink}}"/>
+    </linearGradient>
+  </defs>
   <rect width="348" height="464" fill="{{paper}}"/>
-  <rect width="348" height="464" fill="#000" fill-opacity=".08"/>
-  <g clip-path="url(#win)" fill="none" stroke="#000" stroke-opacity=".05">
-    <circle cx="174" cy="190" r="40"/><circle cx="174" cy="190" r="80"/><circle cx="174" cy="190" r="120"/><circle cx="174" cy="190" r="160"/><circle cx="174" cy="190" r="200"/><circle cx="174" cy="190" r="240"/><circle cx="174" cy="190" r="280"/>
+  <rect width="348" height="464" fill="#000" fill-opacity=".06"/>
+  <rect width="348" height="464" fill="url(#backdrop)"/>
+  <!-- Opaque shapes under one group opacity, so where the neck overlaps the head there is no seam. -->
+  <g clip-path="url(#win)" fill="url(#figure)" opacity=".42">
+    <!-- head -->
+    <ellipse cx="174" cy="176" rx="58" ry="66"/>
+    <!-- shoulders, with a neck that widens into them in one outline -->
+    <path d="M150 214C150 250 146 270 136 280C104 288 70 304 52 334C38 360 34 410 34 464H314C314 410 310 360 296 334C278 304 244 288 212 280C202 270 198 250 198 214Z"/>
   </g>
-  <g clip-path="url(#win)" fill="{{ink}}" opacity=".22">
-    <ellipse cx="174" cy="178" rx="58" ry="70"/>
-    <path d="M60 464C60 360 104 300 174 300S288 360 288 464Z"/>
-    <path d="M146 236h56v72h-56z"/>
-  </g>
+  <rect x="10" y="10" width="328" height="444" fill="none" stroke="{{ink}}" stroke-opacity=".18"/>
   <rect x="1.5" y="1.5" width="345" height="461" fill="none" stroke="{{ink}}" stroke-width="3"/>
 </svg>

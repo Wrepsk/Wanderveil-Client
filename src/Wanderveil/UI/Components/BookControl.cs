@@ -101,7 +101,7 @@ internal static class BookControl
     {
         var width = MathF.Round(MathF.Max(7 * context.Scale, tab.Size.Y * 0.36f));
         var right = tab.Max.X - 12 * context.Scale;
-        return new UiRect(new Vector2(right - width, tab.Position.Y + context.Scale), new Vector2(width, tab.Size.Y * 1.85f));
+        return new UiRect(new Vector2(right - width, tab.Position.Y + context.Scale), new Vector2(width, tab.Size.Y + MathF.Max(6 * context.Scale, tab.Size.Y * 0.28f)));
     }
 
     // A small edition-colored ribbon hanging from the selected tab past its foot, over the book's edge.

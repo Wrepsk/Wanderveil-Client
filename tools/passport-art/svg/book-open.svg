@@ -7,18 +7,18 @@
     <filter id="fiber" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="3" seed="11"/><feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 -.9 .5"/></filter>
     <linearGradient id="gutterL" x1="1" x2="0"><stop offset="0" stop-color="#000" stop-opacity=".26"/><stop offset=".12" stop-color="#000" stop-opacity=".06"/><stop offset=".2" stop-color="#000" stop-opacity="0"/><stop offset=".95" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".07"/></linearGradient>
     <linearGradient id="gutterR" x1="0" x2="1"><stop offset="0" stop-color="#000" stop-opacity=".26"/><stop offset=".12" stop-color="#000" stop-opacity=".06"/><stop offset=".2" stop-color="#000" stop-opacity="0"/><stop offset=".95" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".07"/></linearGradient>
-    <clipPath id="pageL"><rect x="66" y="66" width="702" height="892" rx="4"/></clipPath>
-    <clipPath id="pageR"><rect x="768" y="66" width="702" height="892" rx="4"/></clipPath>
+    <clipPath id="pageL"><path d="M70 66H768V958H70A4 4 0 0 1 66 954V70A4 4 0 0 1 70 66Z"/></clipPath>
+    <clipPath id="pageR"><path d="M768 66H1466A4 4 0 0 1 1470 70V954A4 4 0 0 1 1466 958H768Z"/></clipPath>
   </defs>
   <g filter="url(#drop)">
     <rect x="40" y="44" width="1456" height="936" rx="22" fill="{{cover}}"/>
   </g>
   <rect x="40" y="44" width="1456" height="936" rx="22" fill="url(#weave)"/>
   <rect x="40.75" y="44.75" width="1454.5" height="934.5" rx="21.25" fill="none" stroke="#000" stroke-opacity=".4" stroke-width="1.5"/>
-  <!-- page stack thickness at the outer and lower edges -->
+  <!-- page stack thickness at the outer and lower edges; square at the spine so the halves meet cleanly -->
   <g fill="{{paper}}" stroke="#000" stroke-opacity=".18">
-    <rect x="58" y="70" width="710" height="895" rx="4"/><rect x="62" y="68" width="706" height="893" rx="4"/>
-    <rect x="768" y="70" width="710" height="895" rx="4"/><rect x="768" y="68" width="706" height="893" rx="4"/>
+    <path d="M62 70H768V965H62A4 4 0 0 1 58 961V74A4 4 0 0 1 62 70Z"/><path d="M66 68H768V961H66A4 4 0 0 1 62 957V72A4 4 0 0 1 66 68Z"/>
+    <path d="M768 70H1474A4 4 0 0 1 1478 74V961A4 4 0 0 1 1474 965H768Z"/><path d="M768 68H1470A4 4 0 0 1 1474 72V957A4 4 0 0 1 1470 961H768Z"/>
   </g>
   <g clip-path="url(#pageL)">
     <rect x="66" y="66" width="702" height="892" fill="{{paper}}"/>
@@ -32,6 +32,7 @@
     <rect x="768" y="66" width="702" height="892" filter="url(#fiber)" opacity=".06"/>
     <rect x="768" y="66" width="702" height="892" fill="url(#gutterR)"/>
   </g>
-  <path d="M768 62V962" stroke="#000" stroke-opacity=".35" stroke-width="2"/>
-  <path d="M768 40V66M768 958V984" stroke="#000" stroke-opacity=".4" stroke-width="3"/>
+  <path d="M768 66V958" stroke="#000" stroke-opacity=".35" stroke-width="2"/>
+  <!-- the spine crease continues across the page stacks and board, never past the board edge -->
+  <path d="M768 45V66M768 958V979" stroke="#000" stroke-opacity=".3" stroke-width="2"/>
 </svg>
