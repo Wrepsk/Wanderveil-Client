@@ -48,35 +48,33 @@ internal static class RuntimePassportChecks
                 ImGui.GetIO().AddMouseButtonEvent(0, true); Frame();
                 ImGui.GetIO().AddMouseButtonEvent(0, false); Frame(); Frame();
             }
-            Vector2 PagerPoint(float fraction)
-            {
-                var layout = BookShellLayout.Create(bounds, context, shell.VisiblePage);
-                var footer = layout.Footer;
-                var small = MathF.Max(28, context.FontSize + 10);
-                var end = layout.StackControls ? footer.Max.X : footer.Max.X - 3 * small - 15;
-                var settingsWidth = MathF.Min(80, (end - footer.Position.X) * 0.45f);
-                var start = footer.Position.X + settingsWidth + 5;
-                return new Vector2(start + (end - start) * fraction, footer.Position.Y + layout.ControlHeight / 2);
-            }
+            Vector2 Side(bool forward) => BookShellLayout.Create(bounds, context, shell.VisiblePage).TurnPoint(forward, shell.VisiblePage);
             Frame(); Frame();
-            Click(BookShellLayout.OpenButton(bounds, context).Position + BookShellLayout.OpenButton(bounds, context).Size / 2);
+            Click(BookShellLayout.OpenPoint(bounds) - new Vector2(bounds.Size.X * 0.6f, 0));
+            check(!shell.IsBookOpen, "Clicking the left side of the cover opens the passport.");
+            Click(BookShellLayout.OpenPoint(bounds));
             check(shell.IsBookOpen && shell.VisiblePage == 0, "Runtime cover does not open onto the nation spread.");
             if (!single && artifacts != null) SoftwarePreview.Save(Path.Combine(artifacts, "passport-runtime-nation.png"), host);
             var step = single ? 1 : 2;
-            for (var page = 0; page < 2; page += step) Click(PagerPoint(0.98f));
+            for (var page = 0; page < 2; page += step) Click(Side(true));
             check(shell.VisiblePage == 2, "Identity does not follow the nation introduction.");
             ImGui.GetIO().AddMousePosEvent(-100, -100); Frame();
             if (!single && artifacts != null) SoftwarePreview.Save(Path.Combine(artifacts, "passport-runtime-identity.png"), host);
-            for (var page = 0; page < 2; page += step) Click(PagerPoint(0.98f));
+            for (var page = 0; page < 2; page += step) Click(Side(true));
             check(shell.VisiblePage == 4, "Stamp pages do not follow identity.");
             if (!single && artifacts != null) SoftwarePreview.Save(Path.Combine(artifacts, "passport-runtime-collection.png"), host);
-            if (single) Click(PagerPoint(0.98f));
-            Click(PagerPoint(0.98f));
-            check(shell.VisiblePage == (single ? 5 : 4), "Disabled Next escapes the final page.");
-            Click(PagerPoint(0.02f));
-            check(shell.VisiblePage == (single ? 4 : 2), "Previous cannot navigate backward.");
-            Click(PagerPoint(0.5f));
-            check(!shell.IsBookOpen, "Cover control does not close the book.");
+            if (single) Click(Side(true));
+            Click(Side(true));
+            check(shell.VisiblePage == (single ? 5 : 4), "Turning forward escapes the final page.");
+            Click(Side(false));
+            check(shell.VisiblePage == (single ? 4 : 2), "The left side cannot turn backward.");
+            ImGui.GetIO().AddKeyEvent(ImGuiKey.PageDown, true); Frame();
+            ImGui.GetIO().AddKeyEvent(ImGuiKey.PageDown, false); Frame();
+            check(shell.VisiblePage == (single ? 5 : 4), "Page Down does not turn forward.");
+            while (shell.IsBookOpen && shell.VisiblePage > 0) Click(Side(false));
+            check(shell.IsBookOpen && shell.VisiblePage == 0, "Turning back does not stop at the first page.");
+            Click(Side(false));
+            check(!shell.IsBookOpen, "The left side of the first page does not return to the cover.");
             ImGui.GetIO().AddKeyEvent(ImGuiKey.Space, true); Frame();
             ImGui.GetIO().AddKeyEvent(ImGuiKey.Space, false); Frame();
             check(shell.IsBookOpen && shell.VisiblePage == 0, "Returning to cover loses keyboard Open or the first spread.");

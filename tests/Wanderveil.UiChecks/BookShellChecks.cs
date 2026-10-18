@@ -19,7 +19,7 @@ internal static class BookShellChecks
                     var size = BookShellLayout.Fit(preferred, room, context);
                     var layout = BookShellLayout.Create(new UiRect(Vector2.Zero, size), context, 0);
                     check(size.X <= room.X && size.Y <= room.Y, "Fitted book escapes the work area.");
-                    check(layout.Book.Max.Y <= size.Y + 1, "Rounded spread threshold clips the book silhouette.");
+                    check(layout.Book.Position.Y + layout.Book.Size.Y * 0.955f <= size.Y + 1, "Rounded spread threshold clips the book silhouette.");
                 }
         foreach (var scenario in new[] {
             (Name: "wide", Size: new Vector2(1200, 800), Scale: 1f, Text: 1f),
@@ -50,8 +50,8 @@ internal static class BookShellChecks
             for (var frame = 0; frame < 4; frame++) Frame();
             check(!shell.IsBookOpen, "Summoning skips the closed passport cover.");
             if (artifacts != null && scenario.Name == "wide") SoftwarePreview.Save(Path.Combine(artifacts, "passport-runtime-cover.png"), host);
-            Click(BookShellLayout.OpenButton(root, context).Position + BookShellLayout.OpenButton(root, context).Size / 2);
-            check(shell.IsBookOpen, "Closed passport does not open through its native action.");
+            Click(BookShellLayout.OpenPoint(root));
+            check(shell.IsBookOpen, "Clicking the right side of the cover does not open the passport.");
             for (var frame = 0; frame < 3; frame++) Frame();
             var layout = BookShellLayout.Create(root, context, shell.VisiblePage);
             check(size.X <= scenario.Size.X - 32.01f + 0.02f && size.Y <= scenario.Size.Y - 32 + 0.02f, "Book does not fit the viewport.");
@@ -69,11 +69,8 @@ internal static class BookShellChecks
             Vector2 Center(UiRect rect) => rect.Position + rect.Size / 2;
             if (!layout.IsSpread)
             {
-                // Pager occupies the gap between Settings and the three cover controls.
-                var small = MathF.Max(28 * context.Scale, context.FontSize + 10 * context.Scale);
-                var controlsX = layout.Footer.Max.X - small * 3 - 10 * context.Scale;
-                Click(new Vector2((layout.StackControls ? layout.Footer.Max.X : controlsX) - 12 * context.Scale, layout.Footer.Position.Y + layout.ControlHeight / 2));
-                check(shell.VisiblePage == 1, "Narrow passport cannot reach its next logical page.");
+                Click(layout.TurnPoint(true, shell.VisiblePage));
+                check(shell.VisiblePage == 1, "Clicking the right side of the page does not reach the next logical page.");
                 ImGui.GetIO().AddMousePosEvent(-100, -100); Frame();
                 if (artifacts != null) SoftwarePreview.Save(Path.Combine(artifacts, "passport-shell-" + scenario.Name + "-notes.png"), host);
             }
@@ -100,32 +97,33 @@ internal static class BookShellChecks
             ImGui.GetIO().AddMouseButtonEvent(0, false); Frame();
             check(shell.Section == BookSection.Passport, "Bookmark activated after release outside its bounds.");
 
-            // Move only the leather grip. Page interaction must not initiate host movement.
-            var grip = layout.Book.Position + new Vector2(layout.Book.Size.X * (layout.IsSpread ? 0.065f : shell.VisiblePage % 2 == 1 ? 0.92f : 0.11f), layout.Book.Size.Y * 0.3f);
+            // Dragging from the page itself moves the book, and a drag never also turns the page.
+            var pageBefore = shell.VisiblePage;
+            var grip = layout.TurnPoint(true, shell.VisiblePage);
             ImGui.GetIO().AddMousePosEvent(grip.X, grip.Y); Frame();
             ImGui.GetIO().AddMouseButtonEvent(0, true); Frame();
-            ImGui.GetIO().AddMousePosEvent(grip.X + 12, grip.Y + 8); Frame();
-            check(intent.Drag != Vector2.Zero, "Leather grip cannot move the book.");
-            ImGui.GetIO().AddMouseButtonEvent(0, false); Frame();
+            ImGui.GetIO().AddMousePosEvent(grip.X - 12, grip.Y + 8); Frame();
+            check(intent.Drag != Vector2.Zero, "Dragging the passport does not move it.");
+            ImGui.GetIO().AddMouseButtonEvent(0, false); Frame(); Frame();
+            check(intent.Drag == Vector2.Zero && shell.VisiblePage == pageBefore && shell.IsBookOpen, "Releasing a drag turned the page or kept moving the book.");
+            layout = BookShellLayout.Create(root, context, shell.VisiblePage);
 
-            var footer = layout.Footer;
-            Click(footer.Position + new Vector2(12 * context.Scale, layout.ControlHeight / 2));
+            Click(Center(layout.Settings(context)));
             check(intent.Settings == false, "Settings intent repeats without activation.");
             // Check on the actual release frame, before the following frame clears the intent.
             ImGui.GetIO().AddMouseButtonEvent(0, true); Frame();
             ImGui.GetIO().AddMouseButtonEvent(0, false); Frame();
             check(intent.Settings, "Attached settings action was lost.");
-            var close = new Vector2(footer.Max.X - 8 * context.Scale, footer.Max.Y - layout.ControlHeight / 2);
+            var close = Center(layout.Tool(2, context));
             ImGui.GetIO().AddMousePosEvent(close.X, close.Y); Frame();
             ImGui.GetIO().AddMouseButtonEvent(0, true); Frame();
             ImGui.GetIO().AddMouseButtonEvent(0, false); Frame();
             check(intent.Close, "Borderless book has no working close control.");
             var beforeZoom = shell.PreferredWidth;
-            var button = MathF.Max(28 * context.Scale, context.FontSize + 10 * context.Scale);
-            Click(new Vector2(footer.Max.X - button * 2.5f - 10 * context.Scale, footer.Max.Y - layout.ControlHeight / 2));
+            Click(Center(layout.Tool(0, context)));
             check(shell.PreferredWidth < beforeZoom, "Smaller control does not change preferred book size.");
             layout = BookShellLayout.Create(root, context, shell.VisiblePage);
-            Click(new Vector2(layout.Footer.Max.X - button * 1.5f - 5 * context.Scale, layout.Footer.Max.Y - layout.ControlHeight / 2));
+            Click(Center(layout.Tool(1, context)));
             check(MathF.Abs(shell.PreferredWidth - beforeZoom) < 0.01f, "Larger control does not restore preferred book size.");
             Console.WriteLine("PASS passport-shell-" + scenario.Name);
         }

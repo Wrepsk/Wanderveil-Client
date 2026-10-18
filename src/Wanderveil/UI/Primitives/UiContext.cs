@@ -12,4 +12,6 @@ internal readonly record struct UiContext(float Scale, float FontSize)
     internal ImFontPtr DisplayFont { get; init; }
     internal ImFontPtr MonoFont { get; init; }
     internal ImFontPtr SignatureFont { get; init; }
+    // Optional: when present, text draws with fonts built at its exact pixel size.
+    internal IUiFonts? Fonts { get; init; }
 }

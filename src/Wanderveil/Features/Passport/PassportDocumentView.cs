@@ -20,31 +20,31 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportPreview p
 
     internal void DrawCover(UiRect window, UiContext context)
     {
-        context = context with { FontSize = MathF.Min(context.FontSize, MathF.Max(12 * context.Scale, window.Size.X * 18 / 560)) };
         var hasCover = assets.TryGet(BookAsset.EditionCover, out var cover) || assets.TryGet(BookAsset.Cover, out cover);
         if (hasCover)
             ImGui.GetWindowDrawList().AddImage(cover.Texture, window.Position, window.Max);
         else BookSurface.Draw(window, BookFace.Cover, assets, context);
-        // Positions follow the generated cover's board (tools/passport-art): centered, crest above the nation name.
-        var centerX = window.Position.X + window.Size.X * 0.5f;
-        CoverText("EORZEA PASSPORT", 0.255f, TextRole.Caption, 1);
-        if (assets.TryGet(BookAsset.EditionCrest, out var crest)) BookSurface.Illustration(new UiRect(new Vector2(centerX - window.Size.X * 0.165f, window.Position.Y + window.Size.Y * 0.31f), new Vector2(window.Size.X * 0.33f, window.Size.X * 0.33f)), crest);
-        CoverText("GRIDANIA", 0.555f, TextRole.Title, 1.35f);
-        CoverText("THE BLACK SHROUD", 0.635f, TextRole.Caption, 1);
-        CoverText("WANDERVEIL", 0.865f, TextRole.Caption, 0.85f);
+        // Sizes, tops, and letter-spacing come from the Gridania board in the Eorzea Passport design (420 x 560 units).
+        var (board, unit) = BookSurface.CoverBoard(window);
+        var centerX = board.X + 210 * unit;
+        CoverText("EORZEA PASSPORT", 117, 13, 6);
+        if (assets.TryGet(BookAsset.EditionCrest, out var crest)) BookSurface.Illustration(new UiRect(board + new Vector2(135, 153) * unit, new Vector2(150 * unit)), crest);
+        CoverText("GRIDANIA", 321, 44, 8);
+        CoverText("THE BLACK SHROUD", 396, 14, 6);
+        CoverText("WANDERVEIL", 538, 10, 4, 0.7f);
 
-
-        void CoverText(string text, float y, TextRole role, float size)
+        void CoverText(string text, float top, float size, float tracking, float alpha = 1)
         {
-            var type = context with { FontSize = context.FontSize * size, TitleFont = context.DisplayFont, BodyFont = context.DisplayFont };
-            var width = window.Size.X * 0.58f;
-            var measured = UiTypography.Measure(text, role, type, width, false);
-            var position = new Vector2(centerX - measured.X / 2, window.Position.Y + window.Size.Y * y);
+            // Title role at a font size that yields the design pixel size; the display face replaces it.
+            var type = context with { FontSize = MathF.Max(9, size * unit) / 1.65f, TitleFont = context.DisplayFont };
+            var spacing = MathF.Round(tracking * unit);
+            var width = UiTypography.MeasureTracked(text, TextRole.Title, type, spacing);
+            var position = new Vector2(centerX - width / 2, board.Y + top * unit);
             var list = ImGui.GetWindowDrawList();
-            UiTypography.Draw(list, position + new Vector2(0.7f, 1), text, role, type, width, new Vector4(0.04f, 0.06f, 0.03f, 0.9f), false);
-            UiTypography.Draw(list, position, text, role, type, width, hasCover ? new Vector4(0.66f, 0.76f, 0.54f, 1) : UiTheme.Ink, false);
+            var foil = hasCover ? UiTheme.Foil : UiTheme.Ink;
+            UiTypography.DrawTracked(list, position + new Vector2(0, MathF.Max(1, unit)), text, TextRole.Title, type, spacing, new Vector4(0.02f, 0.05f, 0.03f, 0.55f * alpha));
+            UiTypography.DrawTracked(list, position, text, TextRole.Title, type, spacing, foil with { W = alpha });
         }
-
     }
 
     internal float Compose(PassportPage page, UiContext context)

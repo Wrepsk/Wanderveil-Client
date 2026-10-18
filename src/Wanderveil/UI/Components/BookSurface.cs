@@ -14,6 +14,11 @@ internal static class BookSurface
 
     internal static float NaturalHeight(float width, bool spread) => width * (spread ? 2f / 3f : 4f / 3f);
 
+    // The closed cover plate's board sits at 42,141 (940 x 1253) of 1024 x 1536 and is authored in
+    // 420 x 560 design units (tools/passport-art). Returns that board's origin and pixels per design unit.
+    internal static (Vector2 Origin, float Unit) CoverBoard(UiRect cover) =>
+        (cover.Position + new Vector2(cover.Size.X * 42f / 1024f, cover.Size.Y * 141f / 1536f), cover.Size.X * 940f / 1024f / 420f);
+
     internal static float Height(float width, bool spread, float contentHeight)
     {
         if (!float.IsFinite(width) || width < 1f || !float.IsFinite(contentHeight) || contentHeight < 0)

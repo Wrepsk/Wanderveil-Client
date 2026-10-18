@@ -14,6 +14,10 @@ internal static class UiTheme
     internal static readonly Vector4 ActionHovered = Rgb(58, 80, 89);
     internal static readonly Vector4 ActionPressed = Rgb(38, 57, 65);
     internal static readonly Vector4 Shadow = new(0f, 0f, 0f, 0.24f);
+    // Gridania edition cover cloth and foil (tools/passport-art/editions.mjs).
+    internal static readonly Vector4 Edition = Rgb(30, 58, 42);
+    internal static readonly Vector4 Foil = Rgb(169, 194, 138);
+    internal static readonly Vector4 FoilBright = Rgb(205, 222, 180);
 
     private static Vector4 Rgb(byte red, byte green, byte blue) => new(red / 255f, green / 255f, blue / 255f, 1f);
 }
