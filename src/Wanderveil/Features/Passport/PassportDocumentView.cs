@@ -18,17 +18,31 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportPreview p
         new PassportPage("portrait", PassportPageKind.Portrait), new PassportPage("information", PassportPageKind.Information),
         new PassportPage("collection-left", PassportPageKind.CollectionLeft), new PassportPage("collection-right", PassportPageKind.CollectionRight) });
 
-    internal void DrawCover(UiRect window, UiContext context)
+    // window is the cover plate's rectangle. With a leaf, the cover is drawn turning on its spine:
+    // window is then the flat placement whose board the leaf's Source describes.
+    internal void DrawCover(UiRect window, UiContext context, LeafProjection? leaf = null)
     {
+        var list = ImGui.GetWindowDrawList();
+        var light = leaf?.Light ?? 1f;
         var hasCover = assets.TryGet(BookAsset.EditionCover, out var cover, window.Size.X) || assets.TryGet(BookAsset.Cover, out cover, window.Size.X);
-        if (hasCover)
-            ImGui.GetWindowDrawList().AddImage(cover.Texture, window.Position, window.Max);
+        if (leaf is { } turning)
+        {
+            // Only the board turns; the plate's soft shadow margin stays behind.
+            if (hasCover) turning.Leaf(list, cover.Texture, new Vector2(42f / 1024f, 141f / 1536f), new Vector2(982f / 1024f, 1394f / 1536f), LeafProjection.Tint(Vector4.One, light));
+            else list.AddQuadFilled(turning.Project(0, 0), turning.Project(1, 0), turning.Project(1, 1), turning.Project(0, 1), LeafProjection.Tint(UiTheme.Edition, light));
+        }
+        else if (hasCover) list.AddImage(cover.Texture, window.Position, window.Max);
         else BookSurface.Draw(window, BookFace.Cover, assets, context);
         // Sizes, tops, and letter-spacing come from the Gridania board in the Eorzea Passport design (420 x 560 units).
         var (board, unit) = BookSurface.CoverBoard(window);
         var centerX = board.X + 210 * unit;
         CoverText("EORZEA PASSPORT", 117, 13, 6);
-        if (assets.TryGet(BookAsset.EditionCrest, out var crest, 150 * unit)) BookSurface.Illustration(new UiRect(board + new Vector2(135, 153) * unit, new Vector2(150 * unit)), crest);
+        if (assets.TryGet(BookAsset.EditionCrest, out var crest, 150 * unit))
+        {
+            var placement = new UiRect(board + new Vector2(135, 153) * unit, new Vector2(150 * unit));
+            if (leaf is { } crestLeaf) crestLeaf.Image(list, crest.Texture, BookSurface.Fit(placement, crest), LeafProjection.Tint(Vector4.One, light));
+            else BookSurface.Illustration(placement, crest);
+        }
         CoverText("GRIDANIA", 321, 44, 8);
         CoverText("THE BLACK SHROUD", 396, 14, 6);
         CoverText("WANDERVEIL", 492, 10, 5, 0.7f);
@@ -40,9 +54,17 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportPreview p
             var spacing = MathF.Round(tracking * unit);
             var width = UiTypography.MeasureTracked(text, TextRole.Title, type, spacing);
             var position = new Vector2(centerX - width / 2, board.Y + top * unit);
-            var list = ImGui.GetWindowDrawList();
             var foil = hasCover ? UiTheme.Foil : UiTheme.Ink;
-            UiTypography.DrawTracked(list, position + new Vector2(0, MathF.Max(1, unit)), text, TextRole.Title, type, spacing, new Vector4(0.02f, 0.05f, 0.03f, 0.55f * alpha));
+            var shadow = new Vector4(0.02f, 0.05f, 0.03f, 0.55f * alpha);
+            if (leaf is { } textLeaf)
+            {
+                var font = UiTypography.ResolveFont(text, TextRole.Title, type);
+                var pixels = UiTypography.Size(TextRole.Title, type);
+                textLeaf.Text(list, font, pixels, position + new Vector2(0, MathF.Max(1, unit)), text, spacing, ImGui.GetColorU32(shadow));
+                textLeaf.Text(list, font, pixels, position, text, spacing, LeafProjection.Tint(foil with { W = alpha }, light));
+                return;
+            }
+            UiTypography.DrawTracked(list, position + new Vector2(0, MathF.Max(1, unit)), text, TextRole.Title, type, spacing, shadow);
             UiTypography.DrawTracked(list, position, text, TextRole.Title, type, spacing, foil with { W = alpha });
         }
     }

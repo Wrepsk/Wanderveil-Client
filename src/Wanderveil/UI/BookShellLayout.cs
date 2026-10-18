@@ -21,9 +21,11 @@ internal readonly record struct BookShellLayout(UiRect Book, bool IsSpread, floa
         var control = Control(context);
         if (closed)
         {
-            var wanted = MathF.Max(preferredWidth * context.Scale * 0.54f, 300 * MathF.Max(context.Scale, context.FontSize / 18));
-            var coverWidth = MathF.Min(wanted, MathF.Min(room.X, room.Y / 1.5f));
-            return Pixels(coverWidth, MathF.Floor(coverWidth) * 1.5f);
+            // The closed cover is exactly the leaf that swings open, so opening starts where the cover rests.
+            var open = Fit(preferredWidth, room, context);
+            var size = ClosedSize(LeafWidth(Create(new UiRect(Vector2.Zero, open), context, 0)));
+            size *= MathF.Min(1f, MathF.Min(room.X / size.X, room.Y / size.Y));
+            return Pixels(size.X, size.Y);
         }
         var spreadWidth = MathF.Max(1, MathF.Floor(MathF.Min(preferredWidth * context.Scale, MathF.Min(room.X, MathF.Max(1, room.Y - control) / (0.925f * 2f / 3f)))));
         if (Spread(spreadWidth, context)) return Pixels(spreadWidth, control + 0.925f * BookSurface.NaturalHeight(spreadWidth, true));
@@ -77,6 +79,23 @@ internal readonly record struct BookShellLayout(UiRect Book, bool IsSpread, floa
     {
         var x = IsSpread ? forward ? 0.935f : 0.065f : page % 2 == 1 ? forward ? 0.86f : 0.05f : forward ? 0.955f : 0.15f;
         return Book.Position + new Vector2(Book.Size.X * x, Book.Size.Y * 0.5f);
+    }
+
+    // The cover leaf spans the right page's board in a spread (spine to outer edge), or a single page's board.
+    internal static float LeafWidth(BookShellLayout layout) => layout.Book.Size.X * (layout.IsSpread ? 728f / 1536f : 728f / 768f);
+
+    // The closed cover plate whose board (940 of its 1024 width) is a leaf of this width.
+    internal static Vector2 ClosedSize(float leafWidth)
+    {
+        var width = leafWidth * 1024f / 940f;
+        return new Vector2(width, width * 1.5f);
+    }
+
+    // The flat cover plate placement whose board is exactly board.
+    internal static UiRect CoverPlate(UiRect board)
+    {
+        var size = ClosedSize(board.Size.X);
+        return new UiRect(board.Position - new Vector2(size.X * 42f / 1024f, size.Y * 141f / 1536f), size);
     }
 
     internal static Vector2 OpenPoint(UiRect cover) => cover.Position + new Vector2(cover.Size.X * 0.8f, cover.Size.Y * 0.45f);

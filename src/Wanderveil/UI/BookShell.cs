@@ -16,6 +16,7 @@ internal readonly record struct BookShellIntent(bool Close, bool Settings, Vecto
 // The book itself is the control surface: press-and-drag anywhere moves it, a click on its right side
 // opens it or turns forward, and a click on its left side turns back (from the first page, to the cover).
 // Real items (tabs, printed controls, page content) keep their own clicks and keyboard navigation.
+// BookShellMotion sequences arrival, the cover swing, and dismissal; the book takes no input while it moves.
 internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IReadOnlyList<PassportPage>? pages = null)
 {
     internal const ImGuiWindowFlags WindowFlags = ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.NoBackground | ImGuiWindowFlags.NoCollapse |
@@ -24,13 +25,21 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
     private readonly PassportDocumentView passport = new(assets, profile);
     private readonly IReadOnlyList<PassportPage> documentPages = ValidatePages(pages ?? PassportDocumentView.SamplePages);
     private readonly DiscoverView discover = new(DiscoveryPreview.Samples);
+    private readonly BookShellMotion motion = Arrived();
     private bool pressing;
     private bool dragging;
+    private BookSection ribbonSection;
+    private float ribbonExtension;
     // Per-page shrink-to-fit factor, converged from each page's measured content height.
     private readonly Dictionary<string, float> fits = new(StringComparer.Ordinal);
     internal BookSection Section { get; private set; }
     internal int VisiblePage { get; private set; }
-    internal bool IsBookOpen { get; private set; }
+    // The logical state: true from the moment opening is requested, even while the cover still swings.
+    internal bool IsBookOpen => motion.WantsOpen;
+    internal BookPhase Phase => motion.Phase;
+    // Eased 0 (below the screen) to 1 (at rest); the host window offsets itself by it.
+    internal float Lift => BookShellMotion.Ease(motion.Lift);
+    internal bool ReducedMotion { get => motion.ReducedMotion; set => motion.ReducedMotion = value; }
     private bool focusSection;
     internal int PageCount => documentPages.Count;
     internal float PreferredWidth { get; private set; } = 1040;
@@ -38,14 +47,21 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
     // Largest scroll range among the pages drawn last frame; zero when every page fits its paper.
     internal float PageOverflow { get; private set; }
 
+    // Advances motion; the host calls it before sizing the window so size and drawing agree each frame.
+    internal void Advance(float seconds) => motion.Update(seconds);
+
     internal BookShellIntent Draw(UiRect bounds, UiContext context)
     {
-        if (!IsBookOpen) return DrawClosed(bounds, context);
+        if (motion.Phase == BookPhase.Hidden) return new BookShellIntent(true, false, Vector2.Zero);
+        if (motion.Cover <= 0f) return DrawClosed(bounds, context);
+        if (motion.Cover < 1f || !motion.WantsOpen) return DrawTurning(bounds, context);
         var layout = BookShellLayout.Create(bounds, context, Section == BookSection.Passport ? VisiblePage : 0);
         PageOverflow = 0;
         if (layout.IsSpread) VisiblePage -= VisiblePage % 2;
         var step = layout.IsSpread ? 2 : 1;
 
+        // Pages, tabs, and controls fade in once the cover has landed.
+        ImGui.PushStyleVar(ImGuiStyleVar.Alpha, MathF.Max(0.01f, motion.Reveal));
         // Tabs first: the book surface drawn next covers their feet, so they read as tucked behind the pages.
         var next = Section;
         for (var index = 0; index < Labels.Length; index++)
@@ -55,7 +71,15 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
         }
         focusSection = false;
         BookSurface.Draw(layout.Book, layout.IsSpread ? BookFace.Spread : Section == BookSection.Passport && VisiblePage % 2 == 1 ? BookFace.Right : BookFace.Left, assets, context);
-        BookControl.Ribbon(layout.Bookmark((int)next), context);
+        // The selected tab's ribbon unrolls after the pages appear and rerolls before moving to another tab.
+        var dt = Math.Clamp(ImGui.GetIO().DeltaTime, 0f, 0.1f);
+        if (ribbonSection != next)
+        {
+            ribbonExtension = ReducedMotion ? 0f : ribbonExtension - dt / 0.12f;
+            if (ribbonExtension <= 0f) { ribbonSection = next; ribbonExtension = 0f; }
+        }
+        if (ribbonSection == next) ribbonExtension = ReducedMotion ? 1f : motion.Reveal < 0.5f ? 0f : MathF.Min(1f, ribbonExtension + dt / 0.22f);
+        BookControl.Ribbon(layout.Bookmark((int)ribbonSection), context, BookShellMotion.Ease(ribbonExtension));
 
         // Page contents scale with the paper like printed matter: a smaller book shows smaller text,
         // spacing, and artwork rather than scrolling. Enlarged host text still enlarges it (and may scroll).
@@ -91,7 +115,9 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
         if (BookControl.Draw("Smaller", "-", layout.Tool(0, context), page, BookControlStyle.Ink, hint: "Smaller passport")) PreferredWidth = MathF.Max(420, PreferredWidth / 1.15f);
         if (BookControl.Draw("Larger", "+", layout.Tool(1, context), page, BookControlStyle.Ink, hint: "Larger passport")) PreferredWidth = MathF.Min(1400, PreferredWidth * 1.15f);
         var close = BookControl.Draw("Close", "×", layout.Tool(2, context), page, BookControlStyle.Ink, hint: "Close passport (Escape)");
+        ImGui.PopStyleVar();
         Section = next;
+        if (close) motion.Dismiss();
 
         var turns = Section == BookSection.Passport;
         var drag = Gesture(layout.Book, turns, out var click);
@@ -102,7 +128,7 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
             if (Keys(ImGuiKey.PageUp)) Turn(-1, step);
             if (Keys(ImGuiKey.Home)) CloseBook();
         }
-        return new BookShellIntent(close, settings, drag);
+        return new BookShellIntent(motion.Phase == BookPhase.Hidden, settings, drag);
 
         void DocumentPage(int index, UiRect region)
         {
@@ -158,13 +184,26 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
 
     internal void BeginSession()
     {
-        IsBookOpen = false;
-        Section = BookSection.Passport;
+        Section = ribbonSection = BookSection.Passport;
         VisiblePage = 0;
+        ribbonExtension = 0f;
         pressing = dragging = false;
+        motion.Summon();
     }
 
-    internal Vector2 FitSize(Vector2 room, UiContext context) => BookShellLayout.Fit(PreferredWidth, room, context, !IsBookOpen);
+    // Summons again (reversing a slide away in progress) or starts the full dismissal sequence.
+    internal void Summon() => motion.Summon();
+    internal void RequestDismiss() => motion.Dismiss();
+
+    // The open size is used from the moment opening is requested until the cover has fully closed.
+    internal Vector2 FitSize(Vector2 room, UiContext context) => BookShellLayout.Fit(PreferredWidth, room, context, !(motion.WantsOpen || motion.Cover > 0f));
+
+    private static BookShellMotion Arrived()
+    {
+        var arrived = new BookShellMotion();
+        arrived.Summon();
+        return arrived;
+    }
 
     private void Turn(int direction, int step)
     {
@@ -178,13 +217,13 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
 
     private void CloseBook()
     {
-        IsBookOpen = false;
+        motion.CloseToCover();
         pressing = dragging = false;
     }
 
     private void OpenBook()
     {
-        IsBookOpen = true;
+        motion.Open();
         VisiblePage = 0;
         focusSection = true;
         pressing = dragging = false;
@@ -193,6 +232,8 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
     private BookShellIntent DrawClosed(UiRect bounds, UiContext context)
     {
         passport.DrawCover(bounds, context);
+        var moving = motion.IsMoving;
+        ImGui.BeginDisabled(moving);
         // Settings and window controls are stamped into the cover's lower band, beneath its arc.
         var (board, unit) = BookSurface.CoverBoard(bounds);
         var stamp = context with { FontSize = MathF.Max(context.FontSize, MathF.Round(15 * unit)) };
@@ -208,12 +249,75 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
         if (BookControl.Draw("Larger", "+", new UiRect(new Vector2(x, top), new Vector2(small, height)), stamp, BookControlStyle.Foil, hint: "Larger passport")) PreferredWidth = MathF.Min(1400, PreferredWidth * 1.15f);
         x += small + spacing;
         var close = BookControl.Draw("Close", "×", new UiRect(new Vector2(x, top), new Vector2(small, height)), stamp, BookControlStyle.Foil, hint: "Close passport (Escape)");
+        ImGui.EndDisabled();
+        if (close) motion.Dismiss();
+        if (moving) { pressing = dragging = false; return new BookShellIntent(motion.Phase == BookPhase.Hidden, false, Vector2.Zero); }
 
         var cover = new UiRect(board, new Vector2(420, 560) * unit);
         var drag = Gesture(cover, true, out var click, opensOnly: true);
         if (click > 0) OpenBook();
         else if (!ImGui.IsAnyItemFocused() && (Keys(ImGuiKey.Space) || Keys(ImGuiKey.Enter) || Keys(ImGuiKey.KeypadEnter) || Keys(ImGuiKey.PageDown))) OpenBook();
-        return new BookShellIntent(close, settings, drag);
+        return new BookShellIntent(motion.Phase == BookPhase.Hidden, settings, drag);
+    }
+
+    // The cover swinging open on its spine (or closed again), with no page content or input until it lands.
+    // At the start it sits exactly where the closed cover was, then the book glides so the spread ends centred.
+    private BookShellIntent DrawTurning(UiRect bounds, UiContext context)
+    {
+        pressing = dragging = false;
+        var layout = BookShellLayout.Create(bounds, context, 0);
+        var eased = BookShellMotion.Ease(motion.Cover);
+        var angle = MathF.PI * eased;
+        var book = layout.Book;
+        var spread = layout.IsSpread;
+        var hingeX = book.Position.X + book.Size.X * (spread ? 0.5f : 40f / 768f);
+        var leafWidth = BookShellLayout.LeafWidth(layout);
+        var centerY = book.Position.Y + book.Size.Y * 0.5f;
+        var coverHeight = leafWidth * 4f / 3f;
+        // The closed cover shares this window's bottom centre, as the host anchors the window.
+        var closedSize = BookShellLayout.ClosedSize(leafWidth);
+        var closed = new UiRect(new Vector2(bounds.Position.X + (bounds.Size.X - closedSize.X) / 2, bounds.Max.Y - closedSize.Y), closedSize);
+        var shift = (BookSurface.CoverBoard(closed).Origin - new Vector2(hingeX, centerY - coverHeight / 2)) * (1 - eased);
+        var list = ImGui.GetWindowDrawList();
+        var viewport = ImGui.GetMainViewport();
+        list.PushClipRect(viewport.Pos, viewport.Pos + viewport.Size, false);
+        try
+        {
+            var moved = book with { Position = book.Position + shift };
+            var hinge = new Vector2(hingeX, centerY) + shift;
+            var hasOpen = assets.TryGet(BookAsset.Open, out var open, moved.Size.X * (spread ? 1 : 2));
+            // Beneath the leaf: the right half of the spread, or the single first page.
+            if (hasOpen)
+            {
+                if (spread) list.AddImage(open.Texture, moved.Position + new Vector2(moved.Size.X / 2, 0), moved.Max, new Vector2(0.5f, 0), Vector2.One);
+                else list.AddImage(open.Texture, moved.Position, moved.Max, Vector2.Zero, new Vector2(0.5f, 1));
+            }
+            // The lifted leaf shades the paper next to the spine.
+            var dark = ImGui.GetColorU32(new Vector4(0, 0, 0, 0.30f * MathF.Sin(angle)));
+            var clear = ImGui.GetColorU32(Vector4.Zero);
+            list.AddRectFilledMultiColor(new Vector2(hinge.X, moved.Position.Y + moved.Size.Y * 0.065f), new Vector2(hinge.X + leafWidth * 0.3f, moved.Position.Y + moved.Size.Y * 0.935f), dark, clear, clear, dark);
+            if (angle <= MathF.PI / 2)
+            {
+                var source = new UiRect(new Vector2(hinge.X, hinge.Y - coverHeight / 2), new Vector2(leafWidth, coverHeight));
+                passport.DrawCover(BookShellLayout.CoverPlate(source), context, new LeafProjection(source, hinge, leafWidth, coverHeight, angle, 1));
+            }
+            else if (spread && hasOpen)
+            {
+                // The cover's inside is the first left page; it lands exactly where the open spread draws it.
+                var pageHeight = moved.Size.Y * 936f / 1024f;
+                var leaf = new LeafProjection(new UiRect(new Vector2(hinge.X, hinge.Y - pageHeight / 2), new Vector2(leafWidth, pageHeight)), hinge, leafWidth, pageHeight, angle, 1);
+                leaf.Leaf(list, open.Texture, new Vector2(768f / 1536f, 44f / 1024f), new Vector2(40f / 1536f, 980f / 1024f), LeafProjection.Tint(Vector4.One, leaf.Light));
+            }
+            else
+            {
+                // A single page has nowhere for the cover to land, so its inside fades as it swings away.
+                var leaf = new LeafProjection(default, hinge, leafWidth, coverHeight, angle, 1);
+                var fade = 1f - (angle - MathF.PI / 2) / (MathF.PI / 2);
+                list.AddQuadFilled(leaf.Project(0, 0), leaf.Project(1, 0), leaf.Project(1, 1), leaf.Project(0, 1), LeafProjection.Tint(UiTheme.Edition with { W = fade }, leaf.Light));
+            }
+        }
+        finally { list.PopClipRect(); }
+        return new BookShellIntent(motion.Phase == BookPhase.Hidden, false, Vector2.Zero);
     }
 
     // Press anywhere on the book that is not an item. Moving past the drag threshold moves the book;

@@ -24,7 +24,21 @@ Type also follows the design. Cinzel Bold is used for cover lettering. Cormorant
 
 ## Controls on the book
 
-There are no buttons around the book anymore. The sections (Passport, Discover, Echoes, Studio) are paper index tabs tucked behind the pages. The selected tab carries a small edition-colored ribbon at its right end that peeks just below the tab onto the book; `BookControl.Ribbon` takes an extension amount (0-1) so its entrance and exit can be animated later. Settings, smaller, larger, and close (`- + x`) are printed in the paper's lower margin, with page numbers (folios) between them. On the closed cover they are foil-stamped beneath the lower arc. **x** and the host's Escape handling dismiss immediately. Sliding, cover opening/closing motion, and page-turn animations remain separate milestones; turns are immediate.
+There are no buttons around the book anymore. The sections (Passport, Discover, Echoes, Studio) are paper index tabs tucked behind the pages. The selected tab carries a small edition-colored ribbon at its right end that peeks just below the tab onto the book; it unrolls after the pages appear and rerolls before moving to a newly selected tab. Settings, smaller, larger, and close (`- + x`) are printed in the paper's lower margin, with page numbers (folios) between them. On the closed cover they are foil-stamped beneath the lower arc. **x**, Escape, and `/wanderveil` play the dismissal sequence below. Page turns are still immediate; the page-turn experiment is a separate milestone.
+
+## Motion (branch `feat/passport-motion`)
+
+Summoning slides the closed passport up from the bottom center; it waits closed until you click its right side (or press Space/Enter). The cover then swings open on its spine with perspective, its artwork, crest, and lettering turning with it, while the book glides so the spread ends centered; the cover's inside lands as the first left page. Pages, tabs, controls, and the tab ribbon fade in once it lands. Dismissing from an open book closes the cover first, then slides the closed book down off the screen and hides the window; a closed book slides down directly. Clicking the first page's left side or pressing Home closes back to the cover without dismissing.
+
+Any request can interrupt a motion and reverse it from where it is, for example summoning again while the book slides away. The book takes no clicks, drags, or page keys while it moves. The **Reduced motion** setting makes every step instant with the same results, including explicit opening. In a single-page layout the cover swings away to the left and fades, since there is no left page for it to land on.
+
+`BookShellMotion` holds the timing (slide 0.42 s, cover 0.6 s, page reveal 0.18 s) without ImGui; `LeafProjection` draws a leaf turning on a hinge as textured strips and per-glyph quads. The host window applies the slide offset and keeps the bottom center anchored while the book changes between closed and open sizes; the closed cover is sized to be exactly the leaf that swings open.
+
+- [Cover swinging open](previews/passport/motion-opening-early.png)
+- [Inside landing as the left page](previews/passport/motion-opening-late.png)
+- [Closing back to the cover](previews/passport/motion-closing.png)
+
+The headless preview window is pinned at the top left rather than anchored at the bottom center, so the book's glide toward center is offset in these frames. Frame pacing, smoothness, and GPU appearance in game are not yet observed.
 
 The first page is a full-height nation pennant hung from the top edge of the paper down to the lower margin, with the crest and foil lettering drawn live over the generated banner plate.
 

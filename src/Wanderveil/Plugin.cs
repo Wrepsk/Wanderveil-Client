@@ -34,7 +34,7 @@ public sealed class Plugin : IDalamudPlugin
         try
         {
             assets = new PassportAssets(TextureProvider, PluginInterface.UiBuilder.FontAtlas);
-            mainWindow = new MainWindow(OpenSettings, assets);
+            mainWindow = new MainWindow(OpenSettings, () => configuration.ReducedMotion, assets);
             windowSystem.AddWindow(mainWindow);
             windowSystem.AddWindow(settingsWindow);
 
@@ -83,10 +83,10 @@ public sealed class Plugin : IDalamudPlugin
         if (string.Equals(arguments.Trim(), "settings", StringComparison.OrdinalIgnoreCase))
             OpenSettings();
         else
-            mainWindow.Toggle();
+            mainWindow.ToggleAnimated();
     }
 
-    private void OpenMain() => mainWindow.IsOpen = true;
+    private void OpenMain() => mainWindow.Summon();
 
     private void OpenSettings() => settingsWindow.IsOpen = true;
 

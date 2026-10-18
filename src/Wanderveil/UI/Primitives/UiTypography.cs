@@ -76,6 +76,9 @@ internal static class UiTypography
         finally { ImGui.PopFont(); }
     }
 
+    // The font Draw would use for this text and role, for callers that lay glyphs out themselves.
+    internal static ImFontPtr ResolveFont(string text, TextRole role, UiContext context) => Font(text, role, context);
+
     private static Vector2 Snap(Vector2 position) => new(MathF.Round(position.X), MathF.Round(position.Y));
 
     private static unsafe ImFontPtr Font(string text, TextRole role, UiContext context)

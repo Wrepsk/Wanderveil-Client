@@ -29,7 +29,7 @@ internal static class BookShellChecks
             (Name: "host-scale", Size: new Vector2(1280, 1000), Scale: 2f, Text: 1f) })
         {
             using var host = new HeadlessUi(scenario.Size, scenario.Scale, scenario.Text, materials: true);
-            var shell = new BookShell(host.Textures!, PassportPreview.Sample);
+            var shell = new BookShell(host.Textures!, PassportPreview.Sample) { ReducedMotion = true };
             var context = new UiContext(scenario.Scale, 18 * scenario.Scale * scenario.Text) { TitleFont = host.TitleFont, HeadingFont = host.HeadingFont, BodyFont = host.BodyFont, DisplayFont = host.DisplayFont, MonoFont = host.MonoFont, SignatureFont = host.SignatureFont };
             var size = BookShellLayout.Fit(shell.PreferredWidth, scenario.Size - new Vector2(32), context);
             UiRect root = default;
@@ -123,6 +123,14 @@ internal static class BookShellChecks
             ImGui.GetIO().AddMouseButtonEvent(0, true); Frame();
             ImGui.GetIO().AddMouseButtonEvent(0, false); Frame();
             check(intent.Close, "Borderless book has no working close control.");
+            check(shell.Phase == BookPhase.Hidden, "Close does not dismiss the passport.");
+            // Summon again and reopen for the size controls.
+            shell.BeginSession(); Frame(); Frame();
+            var reopen = BookShellLayout.OpenPoint(root);
+            ImGui.GetIO().AddMousePosEvent(reopen.X, reopen.Y); Frame();
+            Click(reopen);
+            check(shell.IsBookOpen, "A resummoned passport cannot reopen.");
+            layout = BookShellLayout.Create(root, context, shell.VisiblePage);
             var beforeZoom = shell.PreferredWidth;
             Click(Center(layout.Tool(0, context)));
             check(shell.PreferredWidth < beforeZoom, "Smaller control does not change preferred book size.");
@@ -135,7 +143,7 @@ internal static class BookShellChecks
         using (var host = new HeadlessUi(new Vector2(1200, 900), materials: true))
         {
             var profile = PassportPreview.Sample with { Bio = string.Concat(Enumerable.Repeat("A story about the long way around. ", 50)) };
-            var shell = new BookShell(host.Textures!, profile);
+            var shell = new BookShell(host.Textures!, profile) { ReducedMotion = true };
             var context = new UiContext(1, 18) { TitleFont = host.TitleFont, HeadingFont = host.HeadingFont, BodyFont = host.BodyFont, DisplayFont = host.DisplayFont, MonoFont = host.MonoFont };
             var size = BookShellLayout.Fit(1040, new Vector2(1168, 868), context);
             // Opening focuses the selected bookmark; native directional navigation reaches its peer.
@@ -181,7 +189,7 @@ internal static class BookShellChecks
         }
         using (var host = new HeadlessUi(new Vector2(1200, 800), materials: true))
         {
-            var shell = new BookShell(new MissingAssets(), PassportPreview.Sample);
+            var shell = new BookShell(new MissingAssets(), PassportPreview.Sample) { ReducedMotion = true };
             var context = new UiContext(1, 18);
             var size = BookShellLayout.Fit(1040, new Vector2(1168, 768), context);
             for (var frame = 0; frame < 4; frame++) host.BookFrame(size, () =>

@@ -50,7 +50,7 @@ internal static class RuntimePassportChecks
         {
             var viewport = single ? new Vector2(452, 760) : new Vector2(1200, 900);
             using var host = new HeadlessUi(viewport, materials: true);
-            var shell = new BookShell(host.Textures!, PassportPreview.Sample);
+            var shell = new BookShell(host.Textures!, PassportPreview.Sample) { ReducedMotion = true };
             var context = new UiContext(1, 18) { TitleFont = host.TitleFont, HeadingFont = host.HeadingFont, BodyFont = host.BodyFont, DisplayFont = host.DisplayFont, MonoFont = host.MonoFont, SignatureFont = host.SignatureFont };
             UiRect bounds = default;
             void Frame() => host.BookFrame(shell.FitSize(viewport - new Vector2(32), context), () =>
@@ -103,7 +103,7 @@ internal static class RuntimePassportChecks
         foreach (var steps in new[] { 0, 3, 6, 9 })
         {
             using var host = new HeadlessUi(new Vector2(1600, 1100), materials: true);
-            var shell = new BookShell(host.Textures!, PassportPreview.Sample);
+            var shell = new BookShell(host.Textures!, PassportPreview.Sample) { ReducedMotion = true };
             var context = new UiContext(1, 18) { TitleFont = host.TitleFont, HeadingFont = host.HeadingFont, BodyFont = host.BodyFont, DisplayFont = host.DisplayFont, MonoFont = host.MonoFont, SignatureFont = host.SignatureFont };
             UiRect bounds = default;
             void Frame() => host.BookFrame(shell.FitSize(new Vector2(1568, 1068), context), () => { bounds = new UiRect(ImGui.GetWindowPos(), ImGui.GetWindowSize()); shell.Draw(bounds, context); });
