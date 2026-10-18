@@ -55,6 +55,7 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
         }
         focusSection = false;
         BookSurface.Draw(layout.Book, layout.IsSpread ? BookFace.Spread : Section == BookSection.Passport && VisiblePage % 2 == 1 ? BookFace.Right : BookFace.Left, assets, context);
+        BookControl.Ribbon(layout.Bookmark((int)next), context);
 
         // Page contents scale with the paper like printed matter: a smaller book shows smaller text,
         // spacing, and artwork rather than scrolling. Enlarged host text still enlarges it (and may scroll).

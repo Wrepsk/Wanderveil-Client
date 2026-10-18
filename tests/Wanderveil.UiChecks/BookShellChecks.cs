@@ -57,6 +57,8 @@ internal static class BookShellChecks
             check(size.X <= scenario.Size.X - 32.01f + 0.02f && size.Y <= scenario.Size.Y - 32 + 0.02f, "Book does not fit the viewport.");
             check(layout.LeftPage.Size.Y > 60 && layout.LeftPage.Max.Y < layout.Footer.Position.Y, "Page content collides with book controls.");
             check(layout.RightPage.Max.X <= root.Max.X, "Right content escapes the host.");
+            var ribbon = BookControl.RibbonBounds(layout.Bookmark(0), context);
+            check(ribbon.Max.Y > layout.Bookmark(0).Max.Y && ribbon.Max.Y < layout.LeftPage.Position.Y && ribbon.Max.X <= layout.Bookmark(0).Max.X, "Selected-tab ribbon does not hang just past its tab without covering page content.");
             check(ImGui.GetStyle().WindowPadding == style, "Book host style leaks into other windows.");
             if (artifacts != null) SoftwarePreview.Save(Path.Combine(artifacts, "passport-shell-" + scenario.Name + ".png"), host);
 

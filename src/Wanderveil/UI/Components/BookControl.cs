@@ -1,3 +1,4 @@
+using System;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using Wanderveil.UI.Primitives;
@@ -38,6 +39,11 @@ internal static class BookControl
             var width = bounds.Size.X - 4 * context.Scale;
             var measured = UiTypography.Measure(label, TextRole.Caption, context, width, false);
             var origin = bounds.Position + (bounds.Size - measured) / 2;
+            if (style == BookControlStyle.Tab && selected)
+            {
+                var ribbonLeft = RibbonBounds(bounds, context).Position.X - 3 * context.Scale;
+                if (origin.X + measured.X > ribbonLeft) origin.X = MathF.Max(bounds.Position.X + 2 * context.Scale, (bounds.Position.X + ribbonLeft - measured.X) / 2);
+            }
             list.PushClipRect(bounds.Position, bounds.Max, true);
             UiTypography.Draw(list, origin, label, TextRole.Caption, context, width, ink, false);
             list.PopClipRect();
@@ -88,7 +94,53 @@ internal static class BookControl
         list.AddRectFilled(top + new Vector2(1, 2) * context.Scale, foot + new Vector2(1, 0) * context.Scale, ImGui.GetColorU32(UiTheme.Shadow), radius, ImDrawFlags.RoundCornersTop);
         list.AddRectFilled(top, foot, ImGui.GetColorU32(fill), radius, ImDrawFlags.RoundCornersTop);
         list.AddRect(top, foot, ImGui.GetColorU32(UiTheme.Ink with { W = 0.22f }), radius, ImDrawFlags.RoundCornersTop, context.Scale);
-        if (selected)
-            list.AddRectFilled(top + new Vector2(radius, 0), new Vector2(bounds.Max.X - radius, top.Y + 3 * context.Scale), ImGui.GetColorU32(UiTheme.Edition));
+    }
+
+    // The selected tab's ribbon: full length, before any extension is applied.
+    internal static UiRect RibbonBounds(UiRect tab, UiContext context)
+    {
+        var width = MathF.Round(MathF.Max(7 * context.Scale, tab.Size.Y * 0.36f));
+        var right = tab.Max.X - 12 * context.Scale;
+        return new UiRect(new Vector2(right - width, tab.Position.Y + context.Scale), new Vector2(width, tab.Size.Y * 1.85f));
+    }
+
+    // A small edition-colored ribbon hanging from the selected tab past its foot, over the book's edge.
+    // Drawn after the book surface so it overlaps it. extension (0-1) is how far it has unrolled, for later
+    // entrance/exit motion; 0 draws nothing.
+    internal static void Ribbon(UiRect tab, UiContext context, float extension = 1f)
+    {
+        if (extension <= 0f) return;
+        var full = RibbonBounds(tab, context);
+        var length = full.Size.Y * MathF.Min(1f, extension);
+        var notch = MathF.Min(full.Size.X * 0.5f, length * 0.4f);
+        var list = ImGui.GetWindowDrawList();
+        var shadow = new Vector2(1.5f, 2f) * context.Scale;
+        Shape(full.Position + shadow, ImGui.GetColorU32(UiTheme.Shadow));
+        Shape(full.Position, ImGui.GetColorU32(UiTheme.Edition));
+        // A faint foil edge keeps the ribbon legible where it crosses the same-colored board.
+        var edge = ImGui.GetColorU32(UiTheme.Foil with { W = 0.45f });
+        var foot = full.Position.Y + length;
+        var cut = foot - notch;
+        var thin = MathF.Max(1, context.Scale);
+        list.AddLine(full.Position, new Vector2(full.Position.X, foot), edge, thin);
+        list.AddLine(new Vector2(full.Max.X, full.Position.Y), new Vector2(full.Max.X, foot), edge, thin);
+        list.AddLine(new Vector2(full.Position.X, foot), new Vector2(full.Position.X + full.Size.X / 2, cut), edge, thin);
+        list.AddLine(new Vector2(full.Position.X + full.Size.X / 2, cut), new Vector2(full.Max.X, foot), edge, thin);
+        // A foil thread down the middle and a darker fold on the left edge.
+        var middle = full.Position.X + full.Size.X / 2;
+        list.AddLine(new Vector2(middle, full.Position.Y + 2 * context.Scale), new Vector2(middle, full.Position.Y + length - notch - 2 * context.Scale), ImGui.GetColorU32(UiTheme.Foil with { W = 0.55f }), MathF.Max(1, context.Scale));
+        list.AddRectFilled(full.Position, new Vector2(full.Position.X + MathF.Max(1, context.Scale * 1.5f), full.Position.Y + length - notch), ImGui.GetColorU32(new Vector4(0, 0, 0, 0.22f)));
+
+        void Shape(Vector2 origin, uint color)
+        {
+            var left = origin.X;
+            var right = origin.X + full.Size.X;
+            var center = origin.X + full.Size.X / 2;
+            var body = origin.Y + length - notch;
+            list.AddRectFilled(origin, new Vector2(right, body), color);
+            // Swallow-tailed foot: two triangles leave a V notch.
+            list.AddTriangleFilled(new Vector2(left, body), new Vector2(center, body), new Vector2(left, origin.Y + length), color);
+            list.AddTriangleFilled(new Vector2(center, body), new Vector2(right, body), new Vector2(right, origin.Y + length), color);
+        }
     }
 }
