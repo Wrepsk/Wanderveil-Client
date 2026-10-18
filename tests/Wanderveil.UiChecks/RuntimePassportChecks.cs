@@ -19,7 +19,7 @@ internal static class RuntimePassportChecks
 #endif
         var root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../.."));
         var plugin = Assembly.LoadFile(Path.Combine(root, "src", "Wanderveil", "bin", "x64", configuration, "Wanderveil.dll"));
-        foreach (var asset in new[] { (Resource: "gridania-cover.png", File: "Studies/Gridania/cover.png"), (Resource: "gridania-banner.png", File: "Studies/Gridania/banner.png"), (Resource: "gridania-map.png", File: "Studies/Gridania/map-overhead.png"), (Resource: "gridania-crest.png", File: "Studies/Gridania/crest.png"), (Resource: "Caveat.ttf", File: "Caveat.ttf") })
+        foreach (var asset in new[] { (Resource: "gridania-cover.png", File: "Studies/Gridania/cover.png"), (Resource: "gridania-banner.png", File: "Studies/Gridania/banner.png"), (Resource: "gridania-map.png", File: "Studies/Gridania/map-overhead.png"), (Resource: "gridania-crest.png", File: "Studies/Gridania/crest.png"), (Resource: "Caveat.ttf", File: "Caveat.ttf"), (Resource: "CormorantGaramond-Bold.ttf", File: "CormorantGaramond-Bold.ttf"), (Resource: "CormorantGaramond-SemiBold.ttf", File: "CormorantGaramond-SemiBold.ttf"), (Resource: "CormorantGaramond-Medium.ttf", File: "CormorantGaramond-Medium.ttf"), (Resource: "Cinzel-Bold.ttf", File: "Cinzel-Bold.ttf"), (Resource: "CourierPrime-Regular.ttf", File: "CourierPrime-Regular.ttf") })
         {
             using var stream = plugin.GetManifestResourceStream("Wanderveil.Assets." + asset.Resource);
             check(stream != null, "Installed-client resource missing: " + asset.Resource);
@@ -27,13 +27,14 @@ internal static class RuntimePassportChecks
             check(SHA256.HashData(stream!).SequenceEqual(SHA256.HashData(original)), "Runtime and preview asset differ: " + asset.Resource);
         }
         check(!plugin.GetManifestResourceNames().Any(name => name.Contains("plum", StringComparison.OrdinalIgnoreCase)), "Unused colorway study entered the runtime assembly.");
+        check(!plugin.GetManifestResourceNames().Any(name => name.Contains("SourceSerif4", StringComparison.Ordinal)), "Replaced Source Serif 4 font entered the runtime assembly.");
 
         foreach (var single in new[] { false, true })
         {
             var viewport = single ? new Vector2(452, 760) : new Vector2(1200, 900);
             using var host = new HeadlessUi(viewport, materials: true);
             var shell = new BookShell(host.Textures!, PassportPreview.Sample);
-            var context = new UiContext(1, 18) { TitleFont = host.TitleFont, HeadingFont = host.HeadingFont, SignatureFont = host.SignatureFont };
+            var context = new UiContext(1, 18) { TitleFont = host.TitleFont, HeadingFont = host.HeadingFont, BodyFont = host.BodyFont, DisplayFont = host.DisplayFont, MonoFont = host.MonoFont, SignatureFont = host.SignatureFont };
             UiRect bounds = default;
             void Frame() => host.BookFrame(shell.FitSize(viewport - new Vector2(32), context), () =>
             {

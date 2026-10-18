@@ -52,7 +52,7 @@ internal sealed class MainWindow : Window
     public override void Draw()
     {
         using var fonts = assets.LockFonts();
-        var context = new UiContext(ShellStyle.Scale, ImGui.GetFontSize()) { TitleFont = fonts.Title, HeadingFont = fonts.Heading, SignatureFont = fonts.Signature };
+        var context = new UiContext(ShellStyle.Scale, ImGui.GetFontSize()) { TitleFont = fonts.Title, HeadingFont = fonts.Heading, BodyFont = fonts.Body, DisplayFont = fonts.Display, MonoFont = fonts.Mono, SignatureFont = fonts.Signature };
         var intent = shell.Draw(new UiRect(ImGui.GetWindowPos(), ImGui.GetWindowSize()), context);
         if (intent.Drag != Vector2.Zero) ImGui.SetWindowPos(ImGui.GetWindowPos() + intent.Drag);
         lastPosition = ImGui.GetWindowPos();

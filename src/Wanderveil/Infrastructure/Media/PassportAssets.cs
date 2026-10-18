@@ -11,9 +11,10 @@ namespace Wanderveil.Infrastructure.Media;
 internal sealed class PassportAssets : IBookAssets, IDisposable
 {
     private readonly ISharedImmediateTexture[] textures;
-    private readonly IFontHandle title;
-    private readonly IFontHandle heading;
-    private readonly IFontHandle signature;
+    // Order matches FontScope: title, heading, body, display, mono, signature.
+    private static readonly string[] FontFiles = ["CormorantGaramond-Bold.ttf", "CormorantGaramond-SemiBold.ttf",
+        "CormorantGaramond-Medium.ttf", "Cinzel-Bold.ttf", "CourierPrime-Regular.ttf", "Caveat.ttf"];
+    private readonly IFontHandle[] fonts;
 
     internal PassportAssets(ITextureProvider provider, IFontAtlas atlas)
     {
@@ -26,11 +27,9 @@ internal sealed class PassportAssets : IBookAssets, IDisposable
             provider.GetFromManifestResource(assembly, "Wanderveil.Assets.gridania-banner.png"),
             provider.GetFromManifestResource(assembly, "Wanderveil.Assets.gridania-map.png"),
             provider.GetFromManifestResource(assembly, "Wanderveil.Assets.gridania-crest.png")];
-        title = CreateFont(atlas, assembly, "SourceSerif4-Semibold.ttf");
-        try { heading = CreateFont(atlas, assembly, "SourceSerif4-Regular.ttf"); }
-        catch { title.Dispose(); throw; }
-        try { signature = CreateFont(atlas, assembly, "Caveat.ttf"); }
-        catch { heading.Dispose(); title.Dispose(); throw; }
+        fonts = new IFontHandle[FontFiles.Length];
+        try { for (var index = 0; index < fonts.Length; index++) fonts[index] = CreateFont(atlas, assembly, FontFiles[index]); }
+        catch { DisposeFonts(); throw; }
     }
 
     public bool TryGet(BookAsset asset, out BookImage image)
@@ -42,13 +41,13 @@ internal sealed class PassportAssets : IBookAssets, IDisposable
         return wrap != null;
     }
 
-    internal FontScope LockFonts() => new(title, heading, signature);
+    internal FontScope LockFonts() => new(fonts);
 
-    public void Dispose()
+    public void Dispose() => DisposeFonts();
+
+    private void DisposeFonts()
     {
-        signature.Dispose();
-        heading.Dispose();
-        title.Dispose();
+        for (var index = fonts.Length - 1; index >= 0; index--) fonts[index]?.Dispose();
     }
 
     private static IFontHandle CreateFont(IFontAtlas atlas, Assembly assembly, string name)
@@ -64,20 +63,20 @@ internal sealed class PassportAssets : IBookAssets, IDisposable
 
     internal readonly struct FontScope : IDisposable
     {
-        private readonly ILockedImFont? title;
-        private readonly ILockedImFont? heading;
-        private readonly ILockedImFont? signature;
-        internal FontScope(IFontHandle titleHandle, IFontHandle headingHandle, IFontHandle signatureHandle)
+        private readonly ILockedImFont?[] locks;
+        internal FontScope(IFontHandle[] handles)
         {
-            title = titleHandle.Available ? titleHandle.Lock() : null;
-            try { heading = headingHandle.Available ? headingHandle.Lock() : null; }
-            catch { title?.Dispose(); throw; }
-            try { signature = signatureHandle.Available ? signatureHandle.Lock() : null; }
-            catch { heading?.Dispose(); title?.Dispose(); throw; }
+            locks = new ILockedImFont?[handles.Length];
+            try { for (var index = 0; index < handles.Length; index++) locks[index] = handles[index].Available ? handles[index].Lock() : null; }
+            catch { Dispose(); throw; }
         }
-        internal Dalamud.Bindings.ImGui.ImFontPtr Title => title?.ImFont ?? default;
-        internal Dalamud.Bindings.ImGui.ImFontPtr Heading => heading?.ImFont ?? default;
-        internal Dalamud.Bindings.ImGui.ImFontPtr Signature => signature?.ImFont ?? default;
-        public void Dispose() { signature?.Dispose(); heading?.Dispose(); title?.Dispose(); }
+        internal Dalamud.Bindings.ImGui.ImFontPtr Title => Font(0);
+        internal Dalamud.Bindings.ImGui.ImFontPtr Heading => Font(1);
+        internal Dalamud.Bindings.ImGui.ImFontPtr Body => Font(2);
+        internal Dalamud.Bindings.ImGui.ImFontPtr Display => Font(3);
+        internal Dalamud.Bindings.ImGui.ImFontPtr Mono => Font(4);
+        internal Dalamud.Bindings.ImGui.ImFontPtr Signature => Font(5);
+        private Dalamud.Bindings.ImGui.ImFontPtr Font(int index) => locks[index]?.ImFont ?? default;
+        public void Dispose() { for (var index = locks.Length - 1; index >= 0; index--) locks[index]?.Dispose(); }
     }
 }

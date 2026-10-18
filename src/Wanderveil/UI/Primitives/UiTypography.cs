@@ -43,7 +43,7 @@ internal static class UiTypography
 
     private static unsafe ImFontPtr Font(string text, TextRole role, UiContext context)
     {
-        var font = role == TextRole.Title ? context.TitleFont : role == TextRole.Heading ? context.HeadingFont : default;
+        var font = role switch { TextRole.Title => context.TitleFont, TextRole.Heading => context.HeadingFont, _ => context.BodyFont };
         if (font.IsNull)
             return ImGui.GetFont();
         // A decorative font must never replace an unsupported name with missing-glyph boxes.

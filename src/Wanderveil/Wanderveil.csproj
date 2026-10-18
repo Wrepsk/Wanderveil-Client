@@ -20,8 +20,10 @@ Early development build: demo Discover cards/details, sample Passport identity s
     <EmbeddedResource Include="../../assets/passport/vector/editions/gridania/banner.png" LogicalName="Wanderveil.Assets.gridania-banner.png" />
     <EmbeddedResource Include="../../assets/passport/vector/editions/gridania/map-overhead.png" LogicalName="Wanderveil.Assets.gridania-map.png" />
     <EmbeddedResource Include="../../assets/passport/vector/editions/gridania/crest.png" LogicalName="Wanderveil.Assets.gridania-crest.png" />
-    <EmbeddedResource Include="../../assets/fonts/*.ttf" LogicalName="Wanderveil.Assets.%(Filename)%(Extension)" />
-    <None Include="../../assets/fonts/SourceSerif4-LICENSE.md" Link="SourceSerif4-LICENSE.md" CopyToOutputDirectory="PreserveNewest" />
+    <EmbeddedResource Include="../../assets/fonts/*.ttf" Exclude="../../assets/fonts/SourceSerif4-*.ttf" LogicalName="Wanderveil.Assets.%(Filename)%(Extension)" />
+    <None Include="../../assets/fonts/CormorantGaramond-LICENSE.md" Link="CormorantGaramond-LICENSE.md" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../assets/fonts/Cinzel-LICENSE.md" Link="Cinzel-LICENSE.md" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../assets/fonts/CourierPrime-LICENSE.md" Link="CourierPrime-LICENSE.md" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../../assets/fonts/Caveat-LICENSE.md" Link="Caveat-LICENSE.md" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../../assets/passport/studies/gridania/PROVENANCE.md" Link="Gridania-Assets.md" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../../assets/passport/studies/gridania/generation-prompts.md" Link="Gridania-generation-prompts.md" CopyToOutputDirectory="PreserveNewest" />

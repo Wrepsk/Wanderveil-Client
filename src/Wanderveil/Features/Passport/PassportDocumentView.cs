@@ -36,7 +36,7 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportPreview p
 
         void CoverText(string text, float y, TextRole role, float size)
         {
-            var type = context with { FontSize = context.FontSize * size };
+            var type = context with { FontSize = context.FontSize * size, TitleFont = context.DisplayFont, BodyFont = context.DisplayFont };
             var width = window.Size.X * 0.58f;
             var measured = UiTypography.Measure(text, role, type, width, false);
             var position = new Vector2(centerX - measured.X / 2, window.Position.Y + window.Size.Y * y);
@@ -108,7 +108,7 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportPreview p
         flow.Gap(16);
         Pair(ref flow, "FAVORITE JOB", profile.FavoriteJobs, "FREE COMPANY", "Unassigned", width, context);
         flow.Gap(16);
-        Pair(ref flow, "DATE OF ISSUE", "18 OCT 2026 / DEMO", "PASSPORT NO.", "WV-GR-0001", width, context);
+        Pair(ref flow, "DATE OF ISSUE", "18 OCT 2026 / DEMO", "PASSPORT NO.", "WV-GR-0001", width, context, true);
         flow.Rule();
         flow.Text("A WISH FOR THE ROAD", TextRole.Caption, true);
         flow.Gap(8);
@@ -118,20 +118,23 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportPreview p
         flow.Gap(8);
         flow.Text(profile.Bio);
         flow.Rule();
-        flow.Text("WV / GRIDANIA / SAMPLE IDENTITY / 0001", TextRole.Caption, true);
+        var mono = new PageFlow(flow.Reserve(0).Position, width, context with { BodyFont = context.MonoFont }, flow.IsDrawing);
+        mono.Text("P<WV<GRIDANIA<SAMPLE<IDENTITY<<0001", TextRole.Caption, true);
+        flow.Reserve(mono.Height);
     }
 
-    private void Pair(ref PageFlow flow, string label1, string value1, string label2, string value2, float width, UiContext context)
+    private void Pair(ref PageFlow flow, string label1, string value1, string label2, string value2, float width, UiContext context, bool monoSecond = false)
     {
+        var second = monoSecond ? context with { BodyFont = context.MonoFont } : context;
         var gap = 16 * context.Scale;
         var column = (width - gap) / 2;
         var a = new PageFlow(Vector2.Zero, column, context, false);
-        var b = new PageFlow(Vector2.Zero, column, context, false);
-        Field(ref a, label1, value1, context); Field(ref b, label2, value2, context);
+        var b = new PageFlow(Vector2.Zero, column, second, false);
+        Field(ref a, label1, value1, context); Field(ref b, label2, value2, second);
         var row = flow.Reserve(MathF.Max(a.Height, b.Height));
         a = new PageFlow(row.Position, column, context, true);
-        b = new PageFlow(row.Position + new Vector2(column + gap, 0), column, context, true);
-        Field(ref a, label1, value1, context); Field(ref b, label2, value2, context);
+        b = new PageFlow(row.Position + new Vector2(column + gap, 0), column, second, true);
+        Field(ref a, label1, value1, context); Field(ref b, label2, value2, second);
     }
 
     private void Field(ref PageFlow flow, string label, string value, UiContext context)

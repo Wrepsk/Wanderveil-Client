@@ -16,6 +16,9 @@ internal sealed unsafe class HeadlessUi : IDisposable
     internal ImFontPtr TitleFont { get; }
     internal ImFontPtr HeadingFont { get; }
     internal ImFontPtr SignatureFont { get; }
+    internal ImFontPtr BodyFont { get; }
+    internal ImFontPtr DisplayFont { get; }
+    internal ImFontPtr MonoFont { get; }
 
     internal HeadlessUi(Vector2 size, float scale = 1f, float textScale = 1f, bool materials = false)
     {
@@ -32,8 +35,11 @@ internal sealed unsafe class HeadlessUi : IDisposable
         {
             // A local Windows UI font is a preview surrogate for the host font, never a shipped asset.
             io.Fonts.AddFontFromFileTTF(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Fonts), "segoeui.ttf"), 18f);
-            TitleFont = io.Fonts.AddFontFromFileTTF(Path.Combine(AppContext.BaseDirectory, "Assets", "SourceSerif4-Semibold.ttf"), 30f);
-            HeadingFont = io.Fonts.AddFontFromFileTTF(Path.Combine(AppContext.BaseDirectory, "Assets", "SourceSerif4-Regular.ttf"), 24f);
+            TitleFont = io.Fonts.AddFontFromFileTTF(Path.Combine(AppContext.BaseDirectory, "Assets", "CormorantGaramond-Bold.ttf"), 30f);
+            HeadingFont = io.Fonts.AddFontFromFileTTF(Path.Combine(AppContext.BaseDirectory, "Assets", "CormorantGaramond-SemiBold.ttf"), 24f);
+            BodyFont = io.Fonts.AddFontFromFileTTF(Path.Combine(AppContext.BaseDirectory, "Assets", "CormorantGaramond-Medium.ttf"), 24f);
+            DisplayFont = io.Fonts.AddFontFromFileTTF(Path.Combine(AppContext.BaseDirectory, "Assets", "Cinzel-Bold.ttf"), 30f);
+            MonoFont = io.Fonts.AddFontFromFileTTF(Path.Combine(AppContext.BaseDirectory, "Assets", "CourierPrime-Regular.ttf"), 24f);
             SignatureFont = io.Fonts.AddFontFromFileTTF(Path.Combine(AppContext.BaseDirectory, "Assets", "Caveat.ttf"), 30f);
             Textures = new PreviewTextures();
         }

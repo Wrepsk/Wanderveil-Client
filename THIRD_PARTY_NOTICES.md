@@ -22,6 +22,16 @@ Source Serif 4 Regular/Semibold are unmodified Adobe font files from [revision 8
 
 The runtime passport plates in `assets/passport/vector/` are rasterized by `tools/passport-art` from original SVG sources adapted from the user's "Eorzea Passport" Claude Design canvas; see [their provenance](assets/passport/vector/PROVENANCE.md). The generator's structure follows the approach of Aetherphone's `tools/` asset generators; no Aetherphone code or art was copied. The tool's only dependency is [sharp](https://github.com/lovell/sharp) 0.35.5 (Apache-2.0, bundling libvips/librsvg under LGPL), used at authoring time only and never shipped with the plugin.
 
+## Passport design fonts
+
+These fonts follow the "Eorzea Passport" Claude Design. All are unmodified and licensed under the SIL Open Font License 1.1, and each license ships with the plugin.
+
+- **Cormorant Garamond** Bold, SemiBold, and Medium, from [CatharsisFonts/Cormorant revision 016784836d2ad47bc4c62b7f504a0a5875d85aeb](https://github.com/CatharsisFonts/Cormorant/tree/016784836d2ad47bc4c62b7f504a0a5875d85aeb/fonts/ttf), version 4.004. Copyright 2015 the Cormorant Project Authors. Used for page titles, headings, and body text. [License](assets/fonts/CormorantGaramond-LICENSE.md). The upstream static files are used because Google Fonts ships only a variable font whose default weight is Light.
+- **Cinzel** Bold, from [NDISCOVER/Cinzel revision dd598495b0fb2ad84270d5cc75d642d2f1e8eabf](https://github.com/NDISCOVER/Cinzel/tree/dd598495b0fb2ad84270d5cc75d642d2f1e8eabf/fonts/ttf), version 2.000. Copyright 2020 The Cinzel Project Authors. Used for cover lettering. [License](assets/fonts/Cinzel-LICENSE.md). The reserved font name "Cinzel Decorative" applies only to modified versions.
+- **Courier Prime** Regular, from [Google Fonts revision 47d54ca1ebb14fd864695f1d39dc734f39017c33](https://github.com/google/fonts/tree/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/courierprime), version 3.018. Copyright 2015 The Courier Prime Project Authors. Used for the passport number and the identity line. [License](assets/fonts/CourierPrime-LICENSE.md).
+
+Source Serif 4 stays in `assets/fonts/` but is no longer embedded or shipped.
+
 ## When adding material
 
 The [Gridania studies](assets/passport/studies/gridania/PROVENANCE.md) add generated cover colorways, banner/crest interpretations, and schematic map art. The selected green cover/banner/overhead map/crest are now embedded for the static runtime prototype; plum/intermediate studies stay excluded. Prompts/edit lineage and research references are recorded separately and accompany the package. Setting names/heraldic concepts are attributable to Square Enix; no downloaded reference artwork or extracted game pixels were reused.

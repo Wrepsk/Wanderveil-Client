@@ -30,7 +30,7 @@ internal static class BookShellChecks
         {
             using var host = new HeadlessUi(scenario.Size, scenario.Scale, scenario.Text, materials: true);
             var shell = new BookShell(host.Textures!, PassportPreview.Sample);
-            var context = new UiContext(scenario.Scale, 18 * scenario.Scale * scenario.Text) { TitleFont = host.TitleFont, HeadingFont = host.HeadingFont, SignatureFont = host.SignatureFont };
+            var context = new UiContext(scenario.Scale, 18 * scenario.Scale * scenario.Text) { TitleFont = host.TitleFont, HeadingFont = host.HeadingFont, BodyFont = host.BodyFont, DisplayFont = host.DisplayFont, MonoFont = host.MonoFont, SignatureFont = host.SignatureFont };
             var size = BookShellLayout.Fit(shell.PreferredWidth, scenario.Size - new Vector2(32), context);
             UiRect root = default;
             BookShellIntent intent = default;
@@ -134,7 +134,7 @@ internal static class BookShellChecks
         {
             var profile = PassportPreview.Sample with { Bio = string.Concat(Enumerable.Repeat("A story about the long way around. ", 50)) };
             var shell = new BookShell(host.Textures!, profile);
-            var context = new UiContext(1, 18) { TitleFont = host.TitleFont, HeadingFont = host.HeadingFont };
+            var context = new UiContext(1, 18) { TitleFont = host.TitleFont, HeadingFont = host.HeadingFont, BodyFont = host.BodyFont, DisplayFont = host.DisplayFont, MonoFont = host.MonoFont };
             var size = BookShellLayout.Fit(1040, new Vector2(1168, 868), context);
             // Opening focuses the selected bookmark; native directional navigation reaches its peer.
             void Frame() => host.BookFrame(shell.FitSize(new Vector2(1168, 868), context), () => shell.Draw(new UiRect(ImGui.GetWindowPos(), ImGui.GetWindowSize()), context));
@@ -158,7 +158,7 @@ internal static class BookShellChecks
         {
             var profile = PassportPreview.Sample with { Bio = string.Concat(Enumerable.Repeat("A story about the long way around. ", 50)) };
             var page = new PassportView(profile, host.Textures!);
-            var context = new UiContext(1, 18) { TitleFont = host.TitleFont, HeadingFont = host.HeadingFont };
+            var context = new UiContext(1, 18) { TitleFont = host.TitleFont, HeadingFont = host.HeadingFont, BodyFont = host.BodyFont, DisplayFont = host.DisplayFont, MonoFont = host.MonoFont };
             var activated = 0;
             var childScroll = 0f;
             var focus = false;

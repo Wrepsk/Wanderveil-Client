@@ -35,7 +35,7 @@ internal static class GridaniaChecks
             GridaniaTargets.Reading reading = default;
             void Draw()
             {
-                var context = new UiContext(1, ImGui.GetFontSize()) { TitleFont = host.TitleFont, HeadingFont = host.HeadingFont };
+                var context = new UiContext(1, ImGui.GetFontSize()) { TitleFont = host.TitleFont, HeadingFont = host.HeadingFont, BodyFont = host.BodyFont, DisplayFont = host.DisplayFont, MonoFont = host.MonoFont };
                 var font = ImGui.GetFont();
                 if (cover)
                 {

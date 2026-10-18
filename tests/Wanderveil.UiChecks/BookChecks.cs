@@ -35,7 +35,7 @@ internal static class BookChecks
             using var host = new HeadlessUi(new Vector2(target == "cover" ? 760 : 1140, 960), materials: true);
             void Draw()
             {
-                var context = new UiContext(1, ImGui.GetFontSize()) { TitleFont = host.TitleFont, HeadingFont = host.HeadingFont };
+                var context = new UiContext(1, ImGui.GetFontSize()) { TitleFont = host.TitleFont, HeadingFont = host.HeadingFont, BodyFont = host.BodyFont, DisplayFont = host.DisplayFont, MonoFont = host.MonoFont };
                 var font = ImGui.GetFont();
                 PassportTargets.Draw(target, host.Textures!, context);
                 check(ImGui.GetFont() == font, "Passport typography leaked a font stack entry.");
@@ -54,7 +54,7 @@ internal static class BookChecks
                 var view = new PassportView(PassportPreview.Sample, missing ? new MissingAssets() : host.Textures);
                 void Draw()
                 {
-                    view.Draw(new UiContext(scenario.Scale, ImGui.GetFontSize()) { TitleFont = host.TitleFont, HeadingFont = host.HeadingFont });
+                    view.Draw(new UiContext(scenario.Scale, ImGui.GetFontSize()) { TitleFont = host.TitleFont, HeadingFont = host.HeadingFont, BodyFont = host.BodyFont, DisplayFont = host.DisplayFont, MonoFont = host.MonoFont });
                     check(ImGui.GetScrollMaxX() == 0, "Asset-backed passport has horizontal overflow.");
                 }
                 for (var frame = 0; frame < 4; frame++) host.Frame(Draw);
@@ -68,7 +68,7 @@ internal static class BookChecks
             var activated = 0;
             void Draw()
             {
-                var context = new UiContext(1, ImGui.GetFontSize()) { TitleFont = host.TitleFont, HeadingFont = host.HeadingFont };
+                var context = new UiContext(1, ImGui.GetFontSize()) { TitleFont = host.TitleFont, HeadingFont = host.HeadingFont, BodyFont = host.BodyFont, DisplayFont = host.DisplayFont, MonoFont = host.MonoFont };
                 if (view.Draw(context)) activated++;
                 check(ImGui.GetScrollMaxX() == 0, "Long book text overflows horizontally.");
             }
