@@ -2,6 +2,10 @@
 
 Status: stationary material foundation and user-approved shell correction delivered for visual review, 18 October 2026. The user approved an asset-led physical Eorzean passport direction before Studio/Echoes. This does not record final acceptance of the compositions.
 
+## Intended experience refinement
+
+The user's subsequent cover/map/identity references establish the [passport experience](passport-experience.md): arrive closed from the bottom center and wait for explicit opening; show a banner/map nation introduction spread, then portrait/signature opposite identity information, followed by stampable pages. Dismissal closes to the visible cover before sliding down. Nation editions and substantial user customization, including cover colors, are intended; the five pictured editions are examples of an expandable set. These are planned behaviors, not delivered runtime features. This direction supersedes the earlier identity-first page order and current left-page identity-fields/right-page notes composition.
+
 ## Book shell correction
 
 The initial material milestone placed a book inside the conventional Wanderveil window. The user's in-game screenshot demonstrated the missing root composition. The subsequent approved slice makes the book the visible shell: transparent borderless host, attached section bookmarks, discreet leather-backed Settings/size/close controls, and a simple outer-leather drag grip. The outer book never scrolls. Text and native actions scroll inside bounded transparent page children, leaving the binding, page edges, bookmarks, and controls stationary.
@@ -46,9 +50,9 @@ Run the standard [native UI checks](../tests/README.md) with an artifact directo
 
 ## Remaining milestones
 
-1. Review this stationary visual target and refine it where needed.
-2. Implement the approved identity and demo collection spreads with logical-page navigation and narrow layouts.
-3. Add entrance/exit with explicit focus/input ownership and immediate reduced-motion behavior.
+1. Refine and review one nation cover, banner/map introduction, portrait/signature versus information identity spread, demo collection spread, and one cover palette variation.
+2. Implement closed/open presentation and ordered logical-page navigation with narrow layouts; broader edition/customization controls follow in bounded slices.
+3. Add bottom-center closed arrival, explicit cover opening, and close-to-cover-then-slide-down dismissal with focus/input ownership and immediate reduced-motion behavior.
 4. Separately prototype one bounded 2.5D turn; evaluate intermediate frames, clipping, perspective, text distortion, interruption, and measured performance. Document any limitations before recommending a renderer change.
 
 CrystalRenderer, full paper physics, custom GPU hooks, elaborate window dragging/resizing, collection persistence, and Studio/Echoes are outside this milestone. CrystalRenderer still requires a separate decision.
