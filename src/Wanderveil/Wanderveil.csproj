@@ -8,7 +8,7 @@
     <RootNamespace>Wanderveil</RootNamespace>
     <Punchline>Every place has a story. Leave yours.</Punchline>
     <Description>An adventurer's passport and discovery journal for Eorzea.
-Early development build: demo Discover cards/details, sample Passport identity spread, a Studio draft preview, an Echoes sample dossier, navigation, and motion settings. Collecting the postcard's demo stamp saves it to your passport on this PC. Stamp pages, sharing, and publishing are coming later.</Description>
+Early development build: a Passport whose identity pages you fill in yourself, demo Discover cards/details, a Studio draft preview, an Echoes sample dossier, navigation, and motion settings. Collecting the postcard's demo stamp lets you press it anywhere on your passport's stamp pages; everything is saved on this PC. Sharing and publishing are coming later.</Description>
     <RepoUrl>https://github.com/Wrepsk/Wanderveil-Client</RepoUrl>
     <Tags>exploration;passport;discoveries;journal</Tags>
   </PropertyGroup>

@@ -1,6 +1,6 @@
 # Client architecture
 
-Status: shell, shared UI foundations, synthetic Passport identity preview, and static Discover cards/details under `src/Wanderveil/`, built by root `Wanderveil.slnx`. Product/domain layers remain planned.
+Status: shell, shared UI foundations, an editable, locally saved Passport identity, and static Discover cards/details under `src/Wanderveil/`, built by root `Wanderveil.slnx`. Product/domain layers remain planned.
 
 ## Layers
 

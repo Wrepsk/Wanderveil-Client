@@ -56,19 +56,19 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportProfile h
         CoverText("GRIDANIA", 321, 44, 8);
         CoverText("THE BLACK SHROUD", 396, 14, 6);
         // The holder's own line, if any, embossed in the same foil between the nation and the maker's mark.
-        if (holder.Identity.CoverLine is { Length: > 0 } line) CoverText(line, 440, 15, 4);
+        if (holder.Identity.CoverLine is { Length: > 0 } line) CoverText(line, 440, 15, 4, fit: 280);
         CoverText("WANDERVEIL", 492, 10, 5, 0.7f);
 
-        void CoverText(string text, float top, float size, float tracking, float alpha = 1)
+        void CoverText(string text, float top, float size, float tracking, float alpha = 1, float fit = 360)
         {
             // Title role at a font size that yields the design pixel size; the display face replaces it.
             var type = context with { FontSize = MathF.Max(9, size * unit) / 1.65f, TitleFont = context.DisplayFont };
             var spacing = MathF.Round(tracking * unit);
             var width = UiTypography.MeasureTracked(text, TextRole.Title, type, spacing);
-            // A long line is set smaller to stay within the board's margins.
-            if (width > 360 * unit)
+            // A long line is set smaller to stay within fit design units (inside the vine border).
+            if (width > fit * unit)
             {
-                var shrink = MathF.Max(0.5f, 360 * unit / width);
+                var shrink = MathF.Max(0.5f, fit * unit / width);
                 type = type with { FontSize = MathF.Max(9 / 1.65f, type.FontSize * shrink) };
                 spacing = MathF.Round(spacing * shrink);
                 width = UiTypography.MeasureTracked(text, TextRole.Title, type, spacing);
@@ -111,7 +111,8 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportProfile h
     internal float Compose(PassportPage page, UiContext context, IdentityEditor? editor = null)
     {
         var width = UiLayout.ContentWidth;
-        var flow = new PageFlow(ImGui.GetCursorScreenPos(), width, context, true);
+        var origin = ImGui.GetCursorScreenPos();
+        var flow = new PageFlow(origin, width, context, true);
         switch (page.Kind)
         {
             case PassportPageKind.NationBanner: break; // Drawn on the paper by DrawNationBanner.
@@ -121,6 +122,8 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportProfile h
             case PassportPageKind.Stamps: break; // Blank paper; the owner's stamps are drawn over it.
             default: flow.Text("A place for future memories", TextRole.Title); break;
         }
+        // Fields and links place themselves; the page's extent is the flow's, from its top.
+        ImGui.SetCursorScreenPos(origin);
         ImGui.Dummy(new Vector2(width, flow.Height));
         return flow.Height;
     }
@@ -236,7 +239,8 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportProfile h
         editor?.CharacterLink(ref flow);
         flow.Gap(16);
         if (editor != null) editor.Field(ref flow, IdentityField.Name, TextRole.Title, "Your name");
-        else flow.Text(Shown(identity.Name), TextRole.Title, identity.Name.Length == 0);
+        else if (identity.Name.Length > 0) flow.Text(identity.Name, TextRole.Title);
+        else flow.Text("Not filled in yet. Choose Edit to write your details.", TextRole.Body, true);
         flow.Gap(20);
         Pair(ref flow, new("HOME WORLD", IdentityField.HomeWorld, "Home world"), new("DATA CENTER", IdentityField.DataCenter, "Data center"), width, context, editor);
         flow.Gap(16);
@@ -248,20 +252,17 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportProfile h
         flow.Text("A WISH FOR THE ROAD", TextRole.Caption, true);
         flow.Gap(8);
         if (editor != null) editor.Field(ref flow, IdentityField.Motto, TextRole.Heading, "A wish for the road");
-        else flow.Text(Shown(identity.Motto), TextRole.Heading, identity.Motto.Length == 0);
+        else flow.Text(identity.Motto, TextRole.Heading);
         flow.Gap(20);
         flow.Text("ABOUT THE ADVENTURER", TextRole.Caption, true);
         flow.Gap(8);
         if (editor != null) editor.Field(ref flow, IdentityField.Bio, TextRole.Body, "A few words about you");
-        else flow.Text(Shown(identity.Bio), TextRole.Body, identity.Bio.Length == 0);
+        else flow.Text(identity.Bio);
         flow.Rule();
         var mono = new PageFlow(flow.Reserve(0).Position, width, context with { BodyFont = context.MonoFont }, flow.IsDrawing);
         mono.Text(identity.MachineLine(), TextRole.Caption, true);
         flow.Reserve(mono.Height);
     }
-
-    // An empty field prints as a dash, so the page still reads as a form waiting to be filled in.
-    private static string Shown(string value) => value.Length > 0 ? value : "—";
 
     // One labelled box of the identity form: a field the holder writes (Field set; Text is its placeholder),
     // or fixed text (Field null).
@@ -288,6 +289,7 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportProfile h
         flow.Gap(5);
         if (entry.Field is { } field && editor != null) { editor.Field(ref flow, field, TextRole.Body, entry.Text); return; }
         var value = entry.Field is { } shown ? holder.Identity[shown] : entry.Text;
-        flow.Text(Shown(value), TextRole.Body, value.Length == 0);
+        // An empty field prints blank, keeping its line, so the page still reads as a form to fill in.
+        flow.Text(value);
     }
 }

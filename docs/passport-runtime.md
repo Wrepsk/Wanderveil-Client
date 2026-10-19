@@ -49,11 +49,24 @@ Settings are pages of the book. The printed Settings mark riffles forward to the
 - [A riffle in flight](previews/passport/riffle.png)
 - [Settings pages](previews/passport/settings.png)
 
+## Your identity
+
+The identity spread is yours to fill in. A new passport is issued the first time the plugin loads: blank, dated that day, with its own passport number (*EZ* and eight digits, drawn at random once and never changed). That number is printed on the identity page and engraved on every stamp page. Until you write anything, the information page says *Not filled in yet. Choose Edit to write your details.* Empty fields print blank.
+
+**Editing.** On the identity spread the footer offers **Edit**. The pages are then written on in place: name, home world, data center, favorite job, free company, motto, and the few words about you, each typed over a faint inset in the page's own type, wrapping at word breaks as in print. Enter or Tab leaves a field. Everything you type is kept at once and saved in the background, with no separate save step. **Done**, Escape (outside a field), turning the page, or changing section ends editing. While editing, a click on the paper only leaves a field; it never turns the page. Each field has a limit (40 characters for the name, 24 for home world and data center, 120 for the motto, 400 for the bio). Line breaks are not kept, and spaces are tidied.
+
+- **Fill in from my character** copies the logged-in character's name, home world, and data center (read from Dalamud's player state on the game's thread) once. They are then yours to change. Nothing on the page is treated as verified: the passport is self-reported. Without a logged-in character, nothing changes and the page says so.
+- **Signature.** The signature line signs in the handwriting face (Caveat). Left empty, your name signs, as before. Typing a signature replaces it.
+- **Picture.** **Choose a picture** opens Dalamud's file picker for a PNG, JPEG, WebP, or BMP up to 16 MB. The picture is read, decoded, and copied beside the passport on a background task, so the game never waits on it. A picture taller than 1200 pixels is scaled down once for display. It then fills the 3:4 portrait frame. Drag it to move it, and scroll over it to zoom (up to 4×); it always covers the frame. **Remove picture** takes it out and deletes the copy, and the placeholder returns. A file that is too large or not a picture says so under the frame.
+- **On the cover.** An optional line, up to 28 characters, is embossed in the cover's foil between *The Black Shroud* and the maker's mark, set smaller when long so it stays inside the vine border. **Use my name** fills it with your name; left empty, the cover is as printed.
+
+Previews: [a new passport](previews/passport/identity-blank.png), [editing](previews/passport/identity-edit.png), [filled in from a character](previews/passport/identity-filled.png), [a placed picture](previews/passport/identity-picture.png), [a name on the cover](previews/passport/cover-line.png). The picker, picture loading, and character reading need the game and are not covered by the headless checks; the checks use stand-ins for them.
+
 ## Collecting and placing stamps
 
 The first product loop runs in the book: open Discover, open **The scenic route** postcard, and choose **Collect demo stamp** beneath it. The stamp is issued at once: the postcard's faint proof of the design becomes the inked stamp (*Your stamp*, *Collected 19 OCT 2026 / Local demo*), its card in the list says *Collected*, and a line beneath says whether it is saved. Keyboard focus moves to **Place it in your passport »**.
 
-**Stamp pages** follow the identity pages. They are blank paper with only their page numbers and the passport number, *EZ 0042 1187*, engraved in pale typewriter letters at the lower right as on the printed design (a stamp pressed over it covers it): no fixed places, no printed captions, nothing else the owner did not put there. The passport has 100 pages for now (pages 5 to 100 are stamp pages; turning stops at the last spread), and End jumps to the last page with a stamp. To go to any page, click a page number at the foot of the book, type the page, and press Enter; numbers outside 1 to 100 go to the first or last page, and Escape or clicking away leaves it. A jump of more than one spread riffles through the pages in book order, as when changing sections (End jumps the same way); a neighbouring spread simply turns. This works with a stamp in hand too, limited to the stamp pages. Only pages with stamps are saved (see below). The identity page shows the same passport number.
+**Stamp pages** follow the identity pages. They are blank paper with only their page numbers and the passport number (*EZ 0042 1187* in the sample) engraved in pale typewriter letters at the lower right as on the printed design (a stamp pressed over it covers it): no fixed places, no printed captions, nothing else the owner did not put there. The passport has 100 pages for now (pages 5 to 100 are stamp pages; turning stops at the last spread), and End jumps to the last page with a stamp. To go to any page, click a page number at the foot of the book, type the page, and press Enter; numbers outside 1 to 100 go to the first or last page, and Escape or clicking away leaves it. A jump of more than one spread riffles through the pages in book order, as when changing sections (End jumps the same way); a neighbouring spread simply turns. This works with a stamp in hand too, limited to the stamp pages. Only pages with stamps are saved (see below). The identity page shows the same passport number.
 
 **Placing.** The link opens the first empty page after your last stamp with the new stamp in hand: it follows the mouse, faintly, with a shadow in its own shape. Click anywhere on a stamp page to press it there. While it is in hand the mouse wheel turns it, Page Up/Down turn pages, and resting at the book's outer edge turns the page there, so you can carry it to any page. A held stamp keeps to the stamp pages: the book will not turn or jump back past page 5 or close to its cover until the stamp is put down or back. It keeps its size while pages turn beneath it. Escape, a right click, or **Put back** in the footer returns it. In game the plugin takes Escape from the game's key state whenever the book has a use for it (a stamp in hand, stamp info open, or the book focused), so the game's system menu does not open as well. A stamp not placed yet waits: the footer then offers **Place stamp** (with a count when several wait), which picks the next one up the same way. Once placed, the postcard's link reads **See it in your passport »** and opens its page.
 
@@ -110,7 +123,36 @@ Placements are sparse: one entry per placed stamp, in layer order (the last is o
 - **Failed save.** If writing fails, the stamp stays collected, the line under it says it could not be saved, and **Try saving again** retries. The error goes to the Dalamud log.
 - **Migrations.** Each format bump adds a step that upgrades the older file in memory when it is read; the next save writes the new version, and the backup keeps the old one. Version 1 (before placements) becomes version 2 with every stamp waiting to be placed and no designer or source recorded (the info page says *Not recorded*).
 
-`StampStore` (file format, atomic save, recovery) and `StampPersistence` (load at startup, background saves, state) live in `Infrastructure/Storage/`. The pages see only `ISavedState`: what loading found and whether saving works.
+`StampStore` (file format) and `StampPersistence` (load at startup, background saves, state) live in `Infrastructure/Storage/`. The pages see only `ISavedState`: what loading found and whether saving works.
+
+## Saving your identity
+
+The identity is saved beside the stamps as `passport-local.json`. Your picture, if any, is saved as `portrait-local.image`, a copy of the file you chose. Both are in their own files, apart from the stamps, so a later appearance reset (changing the starting passport) can never touch a stamp. The identity file is versioned JSON:
+
+```json
+{
+  "format": "wanderveil.passport",
+  "version": 1,
+  "number": "EZ 3383 2844",
+  "issued": "2026-10-20",
+  "name": "Wren Halloway",
+  "homeWorld": "Faerie",
+  "dataCenter": "Light",
+  "favoriteJob": "",
+  "freeCompany": "",
+  "motto": "Onwards",
+  "bio": "",
+  "signature": "",
+  "coverLine": "",
+  "portrait": { "x": 0.5, "y": 0.5, "zoom": 1 }
+}
+```
+
+`portrait` is where the picture sits: the picture's point at the frame's centre (0 to 1 across and down) and its zoom past just covering the frame (1 to 4). Without it, the placeholder shows. Text read back is held to the same rules as typing, so an over-long field is cut to its limit.
+
+Both files are saved and recovered the same way as the stamps (`SafeFile`): written to a temporary file, flushed, swapped in with the previous save kept as `.bak`, unreadable files kept aside as `.unreadable-<time>`, and newer or locked files left untouched with saving off. A newly issued passport is saved straight away, so its number stays the same. A picture is written only after it decodes, so a saved picture can always be shown. Settings shows a **Passport** note only when something needs saying (recovered, unreadable, newer, locked, or a failed save with a retry).
+
+`PassportStore` and `PassportPersistence` live in `Infrastructure/Storage/`, beside the stamp store. They share `SafeFile` (atomic writes and recovery) and `BackgroundSaver` (coalesced background saves). `PortraitPicture` (`Infrastructure/Media/`) loads and swaps the picture's texture at the start of a frame, and `GameCharacter` (`Infrastructure/Game/`) reads the character. The pages see only `IPassportPortrait`, `ICharacterSource`, and `ISavedState`.
 
 ## Echoes
 

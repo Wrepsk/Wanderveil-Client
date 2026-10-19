@@ -7,6 +7,7 @@ using Dalamud.IoC;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 using Wanderveil.Features.Settings;
+using Wanderveil.Infrastructure.Game;
 using Wanderveil.Infrastructure.Media;
 using Wanderveil.Infrastructure.Storage;
 using Wanderveil.UI;
@@ -21,6 +22,7 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] private static ITextureProvider TextureProvider { get; set; } = null!;
     [PluginService] private static IFramework Framework { get; set; } = null!;
     [PluginService] private static IKeyState KeyState { get; set; } = null!;
+    [PluginService] private static IPlayerState PlayerState { get; set; } = null!;
 
     private const string CommandName = "/wanderveil";
 
@@ -32,6 +34,7 @@ public sealed class Plugin : IDalamudPlugin
     private const string Profile = "local";
     private StampPersistence? stamps;
     private PassportPersistence? identity;
+    private PortraitPicture? portrait;
     private bool commandRegistered;
     private bool disposed;
 
@@ -45,9 +48,14 @@ public sealed class Plugin : IDalamudPlugin
                 report: exception => Log.Error(exception, "Could not save Wanderveil stamps."));
             if (stamps.Loaded is not (Features.LoadOutcome.New or Features.LoadOutcome.Loaded))
                 Log.Warning("Wanderveil stamps loaded as {Outcome}; files kept aside: {Kept}", stamps.Loaded, string.Join(", ", stamps.Kept.Select(System.IO.Path.GetFileName)));
-            identity = new PassportPersistence(new PassportStore(PluginInterface.GetPluginConfigDirectory()), Profile,
+            var passportStore = new PassportStore(PluginInterface.GetPluginConfigDirectory());
+            identity = new PassportPersistence(passportStore, Profile,
                 report: exception => Log.Error(exception, "Could not save the Wanderveil passport."));
-            mainWindow = new MainWindow(() => configuration.ReducedMotion, new ConfigurationSettings(configuration, SaveConfiguration), assets, stamps.Collection, stamps, identity.Profile, identity);
+            if (identity.Loaded is not (Features.LoadOutcome.New or Features.LoadOutcome.Loaded))
+                Log.Warning("Wanderveil passport loaded as {Outcome}; files kept aside: {Kept}", identity.Loaded, string.Join(", ", identity.Kept.Select(System.IO.Path.GetFileName)));
+            portrait = new PortraitPicture(TextureProvider, passportStore, Profile, identity.Profile, exception => Log.Error(exception, "Could not use the Wanderveil portrait."));
+            mainWindow = new MainWindow(() => configuration.ReducedMotion, new ConfigurationSettings(configuration, SaveConfiguration), assets, stamps.Collection, stamps,
+                new Features.Passport.PassportServices(identity.Profile, identity, portrait, new GameCharacter(Framework, PlayerState)));
             windowSystem.AddWindow(mainWindow);
 
             commandRegistered = CommandManager.AddHandler(CommandName, new CommandInfo(OnCommand)
@@ -58,7 +66,7 @@ public sealed class Plugin : IDalamudPlugin
             if (!commandRegistered)
                 throw new InvalidOperationException("Could not register /wanderveil; the command is already in use.");
 
-            PluginInterface.UiBuilder.Draw += windowSystem.Draw;
+            PluginInterface.UiBuilder.Draw += Draw;
             Framework.Update += OnFrameworkUpdate;
             PluginInterface.UiBuilder.OpenMainUi += OpenMain;
             PluginInterface.UiBuilder.OpenConfigUi += OpenSettings;
@@ -77,7 +85,7 @@ public sealed class Plugin : IDalamudPlugin
             return;
 
         disposed = true;
-        PluginInterface.UiBuilder.Draw -= windowSystem.Draw;
+        PluginInterface.UiBuilder.Draw -= Draw;
         Framework.Update -= OnFrameworkUpdate;
         PluginInterface.UiBuilder.OpenMainUi -= OpenMain;
         PluginInterface.UiBuilder.OpenConfigUi -= OpenSettings;
@@ -92,7 +100,16 @@ public sealed class Plugin : IDalamudPlugin
         // Waits briefly for a stamp save in progress, so collecting just before unloading is not lost.
         stamps?.Dispose();
         identity?.Dispose();
+        portrait?.Dispose();
         assets?.Dispose();
+    }
+
+    // A chosen portrait is swapped in before the windows draw; the file picker draws after them, on top.
+    private void Draw()
+    {
+        portrait?.Poll();
+        windowSystem.Draw();
+        portrait?.DrawDialog();
     }
 
     private void OnCommand(string command, string arguments)

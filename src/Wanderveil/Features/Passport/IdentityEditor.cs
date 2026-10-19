@@ -60,7 +60,7 @@ internal sealed class IdentityEditor
             reading = null;
         }
         flow.Gap(10);
-        if (Link(ref flow, reading != null ? "Reading your character…" : "Fill in from my character", "Copy your logged-in character's name, home world, and data center") && reading == null)
+        if (Link(ref flow, reading != null ? "Reading your character" : "Fill in from my character", "Copy your logged-in character's name, home world, and data center") && reading == null)
         {
             note = null;
             reading = character.Read();
@@ -76,7 +76,7 @@ internal sealed class IdentityEditor
         if (picture == null) return;
         flow.Gap(8);
         var own = profile.Identity.Portrait != null;
-        var choose = own ? "Choose another picture…" : "Choose a picture…";
+        var choose = own ? "Choose another picture" : "Choose a picture";
         var context = flow.Context;
         var first = Measure(choose, context);
         var second = own ? Measure("Remove picture", context) : Vector2.Zero;
@@ -95,7 +95,7 @@ internal sealed class IdentityEditor
         if (own && row.Size.X < first.X + gap + second.X && Link(ref flow, "Remove picture")) picture.Remove();
         var status = picture.State switch
         {
-            PortraitState.Loading => "Reading your picture…",
+            PortraitState.Loading => "Reading your picture",
             PortraitState.Failed => picture.Problem ?? "That picture could not be used.",
             _ => null,
         };

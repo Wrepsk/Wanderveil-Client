@@ -78,6 +78,10 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
     internal PassportProfile Identity => holder;
     // Whether the identity pages are being written on (the footer's Edit / Done).
     internal bool EditingIdentity { get; private set; }
+    // How far a page's printed contents are shrunk to fit its paper (1 when they fit as set).
+    internal float FitOf(string pageId) => fits.GetValueOrDefault(pageId, 1f);
+    // Whether a field of the identity is being typed in.
+    internal bool TypingIdentity => editor.Typing;
     // In game the plugin reads Escape from the game's own key state, so it can keep the game from also opening
     // its system menu, and hands it over with RequestEscape; then the book must not read it from ImGui as well.
     internal bool ReadsEscape { get; init; } = true;

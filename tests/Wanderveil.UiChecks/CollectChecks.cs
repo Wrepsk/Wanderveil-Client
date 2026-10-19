@@ -457,7 +457,7 @@ internal static class CollectChecks
     }
 
     // The production shell in a headless window, driven by mouse and keys as the plugin window is.
-    private sealed class Book : IDisposable
+    internal sealed class Book : IDisposable
     {
         private readonly HeadlessUi host;
         private readonly Vector2 room;
@@ -465,11 +465,12 @@ internal static class CollectChecks
         private UiRect root;
         internal BookShell Shell { get; }
 
-        internal Book(Vector2 room, StampCollection stamps, BookShellContent? content = null, ISavedState? storage = null, bool readsEscape = true, bool motion = false, float textScale = 1f)
+        internal Book(Vector2 room, StampCollection stamps, BookShellContent? content = null, ISavedState? storage = null, bool readsEscape = true, bool motion = false, float textScale = 1f,
+            PassportProfile? identity = null, Func<PreviewTextures, IPassportPortrait>? portrait = null, ICharacterSource? character = null)
         {
             this.room = room;
             host = new HeadlessUi(room, materials: true);
-            Shell = new BookShell(host.Textures!, PassportIdentity.Sample, content: content, stamps: stamps, storage: storage) { ReducedMotion = !motion, ReadsEscape = readsEscape };
+            Shell = new BookShell(host.Textures!, PassportIdentity.Sample, content: content, stamps: stamps, storage: storage, identity: identity, portrait: portrait?.Invoke(host.Textures!), character: character) { ReducedMotion = !motion, ReadsEscape = readsEscape };
             context = new UiContext(1, 18 * textScale) { TitleFont = host.TitleFont, HeadingFont = host.HeadingFont, BodyFont = host.BodyFont, DisplayFont = host.DisplayFont, MonoFont = host.MonoFont, SignatureFont = host.SignatureFont };
             Frames(3);
         }
@@ -570,6 +571,14 @@ internal static class CollectChecks
                 }
             }
             return lowest;
+        }
+
+        internal void Type(string text) { foreach (var character in text) ImGui.GetIO().AddInputCharacter(character); Frames(2); }
+
+        internal void SelectAll()
+        {
+            ImGui.GetIO().AddKeyEvent(ImGuiKey.ModCtrl, true); ImGui.GetIO().AddKeyEvent(ImGuiKey.A, true); Frame();
+            ImGui.GetIO().AddKeyEvent(ImGuiKey.A, false); ImGui.GetIO().AddKeyEvent(ImGuiKey.ModCtrl, false); Frames(2);
         }
 
         internal void Key(ImGuiKey key) { ImGui.GetIO().AddKeyEvent(key, true); Frame(); ImGui.GetIO().AddKeyEvent(key, false); Frames(2); }

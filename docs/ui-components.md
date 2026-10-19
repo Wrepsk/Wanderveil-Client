@@ -18,14 +18,20 @@ Status: implemented foundations for static Passport and Discover previews, 18 Oc
 | `UI/BookShell.cs`, `BookShellLayout.cs`, `Components/BookControl.cs` | Borderless stationary host composition, viewport fitting, bounded live pages, attached native actions, and shell intents |
 | `Infrastructure/Media/PassportAssets.cs` | Embedded shared textures and plugin-owned managed heading fonts |
 | `Features/Passport/PassportLayout.cs` | Responsive page width, spacing, and padding |
-| `PassportView.cs`, `PassportIdentity.cs` | Synthetic identity/notes composition and procedural portrait placeholder |
+| `PassportView.cs` | Earlier identity/notes composition and procedural portrait placeholder (gallery and checks) |
+| `PassportIdentity.cs` | The holder's identity (self-reported fields, number, issue date, portrait placement) with field limits and normalization, `PortraitCrop`, and the `PassportProfile` the pages edit |
+| `IdentityEditor.cs` | Writing on the identity pages in place: soft-wrapped fields over a faint inset, picture placement, the character fill, and the cover line |
+| `PassportServices.cs` | What the host provides the identity pages (`IPassportPortrait`, `ICharacterSource`) and the sentences about the saved identity |
 | `Features/Discover/DiscoveryLayout.cs` | Text-size-aware two-column/stacked card and detail layouts |
 | `DiscoveryCard.cs` | Measured/drawn card composition; returns an open intent |
 | `DiscoverView.cs`, `DiscoveryPreview.cs` | In-memory browse/detail navigation, the collect action, and synthetic fixtures naming each discovery's stamp design |
 | `Features/Stamps/StampDesign.cs`, `StampCollection.cs` | Stamp designs and issued instances with local demo provenance and source, sparse placements (page, place, turn) in layer order, and the collection with its one-per-discovery and placement rules |
 | `UI/BookShellStamps.cs` | Stamps on the stamp pages: drawing, the info page opposite, Arrange mode with drag, turning knobs, and × to take a stamp off its page, and carrying a stamp across page turns |
 | `StampStorage.cs` | What loading found and whether saving works (`ISavedState`), with the sentences the pages print about it |
-| `Infrastructure/Storage/StampStore.cs`, `StampPersistence.cs` | Versioned stamp file per profile with atomic save, backup, and recovery; startup load and background saves |
+| `Infrastructure/Storage/StampStore.cs`, `StampPersistence.cs` | Versioned stamp file per profile; startup load and background saves |
+| `Infrastructure/Storage/PassportStore.cs`, `PassportPersistence.cs` | Versioned identity file and picture copy per profile; issue on first load, startup load and background saves |
+| `Infrastructure/Storage/SafeFile.cs`, `BackgroundSaver.cs` | Shared atomic save with backup and recovery, profile names, and coalesced background saving |
+| `Infrastructure/Media/PortraitPicture.cs`, `Infrastructure/Game/GameCharacter.cs` | The holder's picture (file picker, background decode and copy, texture swap) and the logged-in character, in game only |
 | `StampArt.cs` | A design as a faint square proof or an issued stamp turned as placed, with the procedural motif as fallback |
 | `PostcardArtwork.cs` | Original geometric scenery; no textures or external art |
 | `Features/Studio/StudioTemplate.cs`, `StudioDraft.cs` | Template catalog (Postcard and Stamp Spot available, later templates listed) and in-memory drafts with character limits, missing fields, and unavailable save/publish |

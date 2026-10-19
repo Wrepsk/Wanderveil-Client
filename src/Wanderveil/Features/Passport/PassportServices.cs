@@ -42,3 +42,7 @@ internal static class IdentityStorageText
         _ => storage?.State == SaveState.Failed ? "Your passport details could not be saved." : null,
     };
 }
+
+// What the host provides for the holder's identity: the identity itself, its saved state, their picture,
+// and the logged-in character.
+internal sealed record PassportServices(PassportProfile Profile, ISavedState Storage, IPassportPortrait Portrait, ICharacterSource Character);

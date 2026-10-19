@@ -99,14 +99,18 @@ internal sealed record PassportIdentity(string Name, string HomeWorld, string Fa
     // The machine-readable line under the identity details: name letters and number digits, padded with '<'.
     internal string MachineLine()
     {
+        const int Length = 36;
+        var digits = new StringBuilder();
+        foreach (var character in Number) if (char.IsAsciiDigit(character)) digits.Append(character);
         var builder = new StringBuilder("P<WV<GRIDANIA<");
         foreach (var character in Name.ToUpperInvariant())
             if (character is >= 'A' and <= 'Z') builder.Append(character);
             else if (builder[^1] != '<') builder.Append('<');
-        builder.Append('<');
-        foreach (var character in Number) if (char.IsAsciiDigit(character)) builder.Append(character);
-        while (builder.Length < 36) builder.Append('<');
-        return builder.ToString(0, 36);
+        // A long name is cut, never the number; name and number are set apart by a double filler.
+        builder.Length = Math.Min(builder.Length, Length - 2 - digits.Length);
+        builder.Append(builder[^1] == '<' ? "<" : "<<").Append(digits);
+        while (builder.Length < Length) builder.Append('<');
+        return builder.ToString(0, Length);
     }
 }
 

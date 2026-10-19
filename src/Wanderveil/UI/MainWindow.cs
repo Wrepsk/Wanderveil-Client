@@ -22,11 +22,11 @@ internal sealed class MainWindow : Window
     // The host's settings button can arrive while the window is closed; the book opens to Settings once shown.
     private bool settingsRequested;
 
-    internal MainWindow(Func<bool> reducedMotion, IBookShellSettings settings, PassportAssets assets, StampCollection stamps, ISavedState storage, PassportProfile identity, ISavedState identityStorage) : base("Wanderveil###Wanderveil.Main", BookShell.WindowFlags)
+    internal MainWindow(Func<bool> reducedMotion, IBookShellSettings settings, PassportAssets assets, StampCollection stamps, ISavedState storage, PassportServices passport) : base("Wanderveil###Wanderveil.Main", BookShell.WindowFlags)
     {
         this.reducedMotion = reducedMotion;
         this.assets = assets;
-        shell = new BookShell(assets, PassportIdentity.Sample, settings: settings, stamps: stamps, storage: storage, identity: identity, identityStorage: identityStorage) { ReadsEscape = false };
+        shell = new BookShell(assets, PassportIdentity.Sample, settings: settings, stamps: stamps, storage: storage, identity: passport.Profile, portrait: passport.Portrait, character: passport.Character, identityStorage: passport.Storage) { ReadsEscape = false };
         SizeCondition = ImGuiCond.Always;
         // The shell handles Escape so it plays the dismissal sequence instead of hiding at once.
         RespectCloseHotkey = false;
