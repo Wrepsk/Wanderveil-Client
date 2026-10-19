@@ -1,6 +1,6 @@
 # Client documentation
 
-Status: Phase 01 UI prototype, 18 October 2026. Shared components, static Passport identity spread, and static Discover cards/details are implemented; remaining screens and collection features are planned.
+Status: Phase 01 UI prototype complete, 19 October 2026. The passport book holds Passport, Discover, Studio, Echoes, and Settings pages with motion; collection and persistence are the next phase.
 
 - [Development and current build](development.md)
 - [Client architecture and future layout](architecture.md)
@@ -20,7 +20,7 @@ Status: Phase 01 UI prototype, 18 October 2026. Shared components, static Passpo
 
 1. Review the Gridania cover/colorway, banner/map introduction, portrait/signature versus information identity spread, and stamp collection targets; refine the artwork/material model before broader customization.
 2. Review the connected static runtime prototype, then add closed bottom-center arrival and close-to-cover dismissal motion; separately evaluate a bounded 2.5D page turn. Review previews between milestones; do not introduce CrystalRenderer without a separate decision.
-3. Studio's chooser and draft preview and the Echoes dossier preview are implemented; the remaining Phase 1 controls/states follow. Collection/persistence remain Phase 2.
+3. Phase 1 is complete. Next: collecting a demo stamp into the passport, then local persistence (Phase 2).
 
 No account, private repository, production backend, or advanced renderer is needed for those product steps. Unresolved online contracts, identity proof, and renderer delivery require explicit decisions before implementation.
 
