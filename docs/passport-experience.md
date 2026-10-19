@@ -1,6 +1,6 @@
 # Passport experience
 
-Status: user-selected product/design direction, 18 October 2026. The [static runtime prototype](passport-runtime.md) now starts closed and supports explicit opening and ordered nation/identity/demo-stamp pages. Arrival, cover opening/closing, and dismissal are implemented on the client branch `feat/passport-motion` (see [motion](passport-runtime.md#motion-branch-featpassport-motion)); page turns are prototyped on the same branch (Milestone 4); broader customization remains planned. This refines the [visual-fidelity milestones](passport-visual-fidelity.md).
+Status: user-selected product/design direction, 18 October 2026. The [static runtime prototype](passport-runtime.md) now starts closed and supports explicit opening and ordered nation/identity/demo-stamp pages. Arrival, cover opening/closing, and dismissal are implemented (see [motion](passport-runtime.md#motion)), as are page turns (Milestone 4) and section riffles; broader customization remains planned. This refines the [visual-fidelity milestones](passport-visual-fidelity.md).
 
 First edition selected: **Gridania**. Its [static review previews](passport-gridania-study.md) establish one cover/colorway and the revised spreads. The selected green edition is now connected to the client; the animated sequence below remains the intended experience.
 

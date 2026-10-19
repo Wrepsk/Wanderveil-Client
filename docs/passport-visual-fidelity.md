@@ -8,13 +8,13 @@ The user's subsequent cover/map/identity references establish the [passport expe
 
 ## Book shell correction
 
-Current state (19 October 2026, branch `feat/svg-passport-assets`): runtime art comes from SVG via `tools/passport-art`, following the user's Eorzea Passport Claude Design, instead of the image-generated plates described below. The book is its own control surface: side clicks open, turn, and return to the cover; dragging anywhere moves it; sections are paper index tabs; Settings and size/close controls are printed in the page margin or foil-stamped on the cover. The leather bookmarks, leather-backed controls, Open/Cover/previous/next buttons, and edge drag grip described below are superseded. Page contents scale with the book rather than scrolling, and type is Cinzel, Cormorant Garamond, and Courier Prime instead of Source Serif 4. See [runtime controls](passport-runtime.md) for details.
+Current state (19 October 2026): runtime art comes from SVG via `tools/passport-art`, following the user's Eorzea Passport Claude Design, instead of the image-generated plates described below. The book is its own control surface: side clicks open, turn, and return to the cover; dragging anywhere moves it; sections are paper index tabs; Settings and size/close controls are printed in the page margin or foil-stamped on the cover. The leather bookmarks, leather-backed controls, Open/Cover/previous/next buttons, and edge drag grip described below are superseded. Page contents scale with the book rather than scrolling, and type is Cinzel, Cormorant Garamond, and Courier Prime instead of Source Serif 4. See [runtime controls](passport-runtime.md) for details.
 
 Earlier runtime update: the selected Gridania cover, nation introduction, identity, and demo collection are now connected to `BookShell` through the same composition used by the gallery. See [runtime controls/reload instructions and previews](passport-runtime.md). Static closed/open logical navigation is implemented; motion remains pending. The map remains explicitly unvalidated and the plum colorway remains a study rather than a color picker. Earlier shell/gallery descriptions below record their original scope.
 
 The initial material milestone placed a book inside the conventional Wanderveil window. The user's in-game screenshot demonstrated the missing root composition. The subsequent approved slice makes the book the visible shell: transparent borderless host, attached section bookmarks, discreet leather-backed Settings/size/close controls, and a simple outer-leather drag grip. The outer book never scrolls. Text and native actions scroll inside bounded transparent page children, leaving the binding, page edges, bookmarks, and controls stationary.
 
-The previews below were refreshed for the current branch; the paragraphs after them describe the original shell slice.
+The previews below were refreshed for the current passport; the paragraphs after them describe the original shell slice.
 
 - [Complete book shell](previews/passport/shell.png)
 - [Single page (nation banner)](previews/passport/shell-narrow.png)

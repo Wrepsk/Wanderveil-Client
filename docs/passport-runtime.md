@@ -1,6 +1,6 @@
 # Gridania passport in the client
 
-Status: static runtime prototype, 18 October 2026. The earlier Gridania gallery was not connected to the installed plugin. This slice embeds the selected artwork and uses the same `PassportDocumentView` composition in the gallery and `BookShell`.
+Status: runtime prototype, 19 October 2026. The SVG art, book-surface controls, motion, page turns, section riffles, and in-book Settings were merged into `master` at the user's request on 19 October 2026; live smoothness and GPU appearance are not yet observed. The gallery and `BookShell` share the same `PassportDocumentView` composition.
 
 ## Review in game
 
@@ -16,7 +16,7 @@ Run `/wanderveil`. Each summon starts with the closed Gridania cover; the first 
 
 These are native software previews of the production shell, not live game captures. Real host font/GPU/hotkey/lifecycle behavior remains unobserved here. The map retains its visible unvalidated-geography caption, and identity/signature/stamps are synthetic demo content. No collection or signature input/storage is implemented.
 
-## Vector art (branch `feat/svg-passport-assets`)
+## Vector art
 
 The embedded plates now come from `assets/passport/vector/`, rasterized from SVG by [tools/passport-art](../tools/passport-art/README.md) following the "Eorzea Passport" Claude Design. Canvas sizes are unchanged, so the composition code is shared; cover text and crest were re-centered for the new board and the map's cartouche label was removed. With the design typefaces and reduced-size art copies, the Release package is about 4.6 MB (the image-generated plates made it about 10.9 MB). Gallery checks for the plum colorway still use the earlier image-generated study.
 
@@ -26,7 +26,7 @@ Type also follows the design. Cinzel Bold is used for cover lettering. Cormorant
 
 There are no buttons around the book anymore. The sections (Passport, Discover, Echoes, Studio) are paper index tabs tucked behind the pages. The selected tab carries a small edition-colored ribbon at its right end that peeks just below the tab onto the book; it unrolls after the pages appear and rerolls before moving to a newly selected tab. Settings, smaller, larger, and close (`- + x`) are printed in the paper's lower margin, with page numbers (folios) between them. On the closed cover only `- + x` are foil-stamped beneath the lower arc; there is no separate settings window anymore. **x**, Escape, and `/wanderveil` play the dismissal sequence below. Pages turn with motion; see [page turns](#page-turns-milestone-4-experiment).
 
-## Motion (branch `feat/passport-motion`)
+## Motion
 
 Summoning slides the closed passport up from below the screen to its place (the screen center the first time, then where it was dismissed); it waits closed until you click its right side (or press Space/Enter). The cover then swings open on its spine with perspective, its artwork, crest, and lettering turning with it, while the book glides so the spread ends centered; the cover's inside lands as the first left page. Pages, tabs, controls, and the tab ribbon fade in once it lands. Dismissing from an open book closes the cover first, quickly (0.25 s rather than the 0.6 s of closing back to the cover), then slides the closed book down off the screen and hides the window; a closed book slides down directly. Clicking the first page's left side or pressing Home closes back to the cover without dismissing.
 
