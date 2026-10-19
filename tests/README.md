@@ -19,7 +19,8 @@ All checks pass locally: 4252 in Debug and 4378 in Release when writing previews
 - Discover card/detail geometry across the same width/scale matrix, including large-text stacking.
 - Native keyboard card selection and focused Back activation, mouse release/cancel, and style restoration.
 - Wide/narrow/enlarged/long-content discovery previews, empty list and missing-image details, and scrolling to the end of long details without horizontal overflow.
-- Disabled collection, long-button wrapping, short labels at fractional font sizes, and opening a scrolled card then restoring browse position through Back.
+- Collecting: one stamp per discovery even after its design is revised, separate design and instance identifiers, demo provenance and issue date, invalid discoveries or designs refused, and collection order. In the real shell at wide and narrow sizes: opening the postcard, collecting from its page, following its link to the collection spread, the stamp printed there without overflow, no second collect, an inert stamp spot, and five stamps on a three-place spread.
+- Disabled actions, long-button wrapping, short labels at fractional font sizes, and opening a scrolled card then restoring browse position through Back.
 - Stationary book content bounds for spreads/page halves and tall measured content; invalid geometry rejection.
 - Asset-backed/fallback Passport frames, heading font stack/fallback, and keyboard Explore activation after long-page scrolling.
 - Cover/identity/demo collection visual targets with actual material/portrait/stamp textures and multiple font-atlas pages. These remain presentation specimens, not runtime collection routes.

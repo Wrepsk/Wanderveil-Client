@@ -6,6 +6,7 @@ using Dalamud.Bindings.ImGui;
 using Wanderveil.Features.Discover;
 using Wanderveil.Features.Echoes;
 using Wanderveil.Features.Passport;
+using Wanderveil.Features.Stamps;
 using Wanderveil.Features.Studio;
 using Wanderveil.UI.Components;
 using Wanderveil.UI.Primitives;
@@ -21,15 +22,17 @@ internal readonly record struct BookShellIntent(bool Close, Vector2 Drag);
 // Real items (tabs, printed controls, page content) keep their own clicks and keyboard navigation.
 // BookShellMotion sequences arrival, the cover swing, and dismissal; the book takes no input while it moves.
 // Moving between sections riffles several pages in book direction; Settings are pages of the book too.
-internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IReadOnlyList<PassportPage>? pages = null, IBookShellSettings? settings = null, BookShellContent? content = null)
+internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IReadOnlyList<PassportPage>? pages = null, IBookShellSettings? settings = null, BookShellContent? content = null, StampCollection? stamps = null)
 {
     internal const ImGuiWindowFlags WindowFlags = ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.NoBackground | ImGuiWindowFlags.NoCollapse |
         ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoMove | ImGuiWindowFlags.NoDocking;
     private static readonly string[] Labels = ["Passport", "Discover", "Echoes", "Studio", "Settings"];
     private const int TabCount = 4;
-    private readonly PassportDocumentView passport = new(assets, profile);
+    // The passport's stamps: Discover adds to them and the collection pages print them.
+    private readonly StampCollection collection = stamps ??= new StampCollection();
+    private readonly PassportDocumentView passport = new(assets, profile, stamps);
     private readonly IReadOnlyList<PassportPage> documentPages = ValidatePages(pages ?? PassportDocumentView.SamplePages);
-    private readonly DiscoverView discover = new((content ?? BookShellContent.Sample).Discoveries);
+    private readonly DiscoverView discover = new((content ?? BookShellContent.Sample).Discoveries, stamps, assets);
     private readonly StudioView studio = new((content ?? BookShellContent.Sample).Templates);
     private readonly EchoesView echoes = new((content ?? BookShellContent.Sample).Dossier);
     private readonly BookShellMotion motion = Arrived();
@@ -63,6 +66,7 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
     internal float PreferredWidth { get; private set; } = 1040;
     internal DiscoveryPreview? SelectedDiscovery => discover.SelectedDiscovery;
     internal StudioView Studio => studio;
+    internal StampCollection Stamps => collection;
     // Largest scroll range among the pages drawn last frame; zero when every page fits its paper.
     internal float PageOverflow { get; private set; }
     // Largest sideways overflow among the pages drawn last frame; text must always wrap within its paper.
@@ -139,8 +143,10 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
         var close = BookControl.Draw("Close", "×", layout.Tool(2, context), page, BookControlStyle.Ink, hint: "Close passport (Escape)");
         ImGui.PopStyleVar();
 
+        var showStamps = discover.TakePassportRequest();
         if (chosen is { } tab) Navigate(tab);
         else if (explore) Navigate(BookSection.Discover);
+        else if (showStamps) ShowCollection(layout.IsSpread);
         else if (openSettings) ShowSettings();
         else if (back) GoBack();
         if (close) motion.Dismiss();
@@ -258,7 +264,7 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
         void Contents(PassportPage entry, UiContext type)
         {
             passport.Compose(entry, type);
-            if (entry.Kind == PassportPageKind.Information)
+            if (entry.Kind == PassportPageKind.Information || (entry.Kind == PassportPageKind.CollectionRight && collection.Stamps.Count == 0))
             {
                 ImGui.Dummy(new Vector2(0, 10 * type.Scale));
                 explore |= BookControl.Link("Explore discoveries »", type);
@@ -478,6 +484,16 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
         riffle.Start(Math.Sign(distance), BookShellRiffle.LeavesFor(distance), Section, VisiblePage, ReducedMotion);
         Section = to;
         pressing = dragging = false;
+    }
+
+    // Riffles to the passport's first collection page, where a newly collected stamp is printed.
+    private void ShowCollection(bool spread)
+    {
+        var index = Math.Max(0, documentPages.ToList().FindIndex(entry => entry.Kind == PassportPageKind.CollectionLeft));
+        if (spread) index -= index % 2;
+        Navigate(BookSection.Passport);
+        VisiblePage = index;
+        turn.Reset(index);
     }
 
     // Opens the Settings pages, from the printed Settings mark or the host's settings button. A closed

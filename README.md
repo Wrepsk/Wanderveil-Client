@@ -6,7 +6,7 @@ A planned FFXIV Dalamud plugin for location-based discoveries, a collectible adv
 
 ## Development status
 
-The shell opens to a synthetic Passport identity spread: parchment pages, a portrait placeholder, identity fields, notes, and an empty stamp state. Discover offers two curated demo cards with postcard/details, stamp previews, Back navigation, and missing-art fallback. Cards and detail pages stack when space or text size requires it. Collection is visibly unavailable; no stamp is awarded or saved. Studio offers a template chooser (Postcard and Stamp Spot) and a draft editor with a live framed preview; drafts stay in memory and saving/publishing are visibly unavailable. Echoes shows a clearly labelled, non-playable sample adventure dossier with chapters and objectives. Shared UI components, appearance settings, and original procedural artwork are implemented; persistence, networking, and advanced rendering remain planned.
+The shell opens to a synthetic Passport identity spread: parchment pages, a portrait placeholder, identity fields, notes, and an empty stamp state. Discover offers two curated demo cards with postcard/details, stamp previews, Back navigation, and missing-art fallback. Cards and detail pages stack when space or text size requires it. Collecting the postcard's demo stamp presses it onto the passport's collection pages, one per discovery; it is kept in memory only, so nothing is saved yet. Studio offers a template chooser (Postcard and Stamp Spot) and a draft editor with a live framed preview; drafts stay in memory and saving/publishing are visibly unavailable. Echoes shows a clearly labelled, non-playable sample adventure dossier with chapters and objectives. Shared UI components, appearance settings, and original procedural artwork are implemented; persistence, networking, and advanced rendering remain planned.
 
 ## Build the current baseline
 
@@ -23,7 +23,7 @@ Debug output: `src/Wanderveil/bin/x64/Debug/Wanderveil.dll`. Release package: `s
 
 Passport is a borderless physical book: a Gridania cover and nation/identity/demo-stamp pages whose art is generated from SVG by [tools/passport-art](tools/passport-art/README.md), with Cinzel, Cormorant Garamond, and Courier Prime type. Click its sides to open and turn pages, and drag it from anywhere; see [runtime controls](docs/passport-runtime.md). It opens, turns pages, and moves between sections with motion (instant with Reduced motion).
 
-Native ImGui checks cover responsive geometry, contrast, text reservation, mouse/keyboard navigation, disabled collection, scroll restoration, style cleanup, textured/fallback book layouts, and heading-font fallback. Optional software previews are written under ignored `artifacts/ui/`. These checks run outside FFXIV; live host/fonts/GPU behavior and hosted CI execution are not claimed. Completed slices are committed after appropriate automated verification without requiring routine user in-game testing.
+Native ImGui checks cover responsive geometry, contrast, text reservation, mouse/keyboard navigation, the collect loop and its duplicate policy, scroll restoration, style cleanup, textured/fallback book layouts, and heading-font fallback. Optional software previews are written under ignored `artifacts/ui/`. These checks run outside FFXIV; live host/fonts/GPU behavior and hosted CI execution are not claimed. Completed slices are committed after appropriate automated verification without requiring routine user in-game testing.
 
 ## Repository map
 

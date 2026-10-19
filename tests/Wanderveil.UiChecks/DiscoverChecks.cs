@@ -41,7 +41,7 @@ internal static class DiscoverChecks
             Location = "An imagined overlook along an unusually long and winding coastal path",
             Teaser = string.Concat(Enumerable.Repeat("A quiet path, an old map, and another distant horizon. ", 5)),
             Caption = string.Concat(Enumerable.Repeat("A long postcard about a small moment beside the sea. ", 20)),
-            StampName = "A very long local demo stamp name to keep the memory of an unexpected journey",
+            Stamp = DiscoveryPreview.Postcard.Stamp! with { Name = "A very long local demo stamp name to keep the memory of an unexpected journey" },
         };
         foreach (var scenario in new[]
         {
@@ -115,9 +115,9 @@ internal static class DiscoverChecks
             {
                 var context = new UiContext(1, ImGui.GetFontSize());
                 var width = UiLayout.ContentWidth - 4f;
-                var height = DiscoveryCard.Measure(DiscoveryPreview.Postcard, width, 24f, context);
+                var height = DiscoveryCard.Measure(DiscoveryPreview.Postcard, null, width, 24f, context);
                 var original = ImGui.GetStyle().Colors[(int)ImGuiCol.Button];
-                if (DiscoveryCard.Draw(DiscoveryPreview.Postcard, width, 24f, height, context))
+                if (DiscoveryCard.Draw(DiscoveryPreview.Postcard, null, null, width, 24f, height, context))
                     activations++;
                 center = (ImGui.GetItemRectMin() + ImGui.GetItemRectMax()) / 2f;
                 check(ImGui.GetStyle().Colors[(int)ImGuiCol.Button] == original, "Discovery card leaked its style.");

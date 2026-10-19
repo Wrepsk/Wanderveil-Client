@@ -16,17 +16,17 @@ internal static class BookSurface
     // curled leaf (text glyphs are already small). Set only around a turning leaf's content; UI thread.
     internal static int Strips { get; set; } = 1;
 
-    internal static void Image(ImDrawListPtr list, ImTextureID texture, Vector2 min, Vector2 max, Vector2? uv0 = null, Vector2? uv1 = null)
+    internal static void Image(ImDrawListPtr list, ImTextureID texture, Vector2 min, Vector2 max, Vector2? uv0 = null, Vector2? uv1 = null, uint color = 0xFFFFFFFF)
     {
         var a = uv0 ?? Vector2.Zero;
         var b = uv1 ?? Vector2.One;
-        if (Strips <= 1) { list.AddImage(texture, min, max, a, b); return; }
+        if (Strips <= 1) { list.AddImage(texture, min, max, a, b, color); return; }
         for (var index = 0; index < Strips; index++)
         {
             var t0 = index / (float)Strips;
             var t1 = (index + 1) / (float)Strips;
             list.AddImage(texture, new Vector2(min.X + (max.X - min.X) * t0, min.Y), new Vector2(min.X + (max.X - min.X) * t1, max.Y),
-                new Vector2(a.X + (b.X - a.X) * t0, a.Y), new Vector2(a.X + (b.X - a.X) * t1, b.Y));
+                new Vector2(a.X + (b.X - a.X) * t0, a.Y), new Vector2(a.X + (b.X - a.X) * t1, b.Y), color);
         }
     }
 
@@ -208,16 +208,18 @@ internal static class BookSurface
         return fitted;
     }
 
-    internal static void Stamp(UiRect bounds, int index, IBookAssets assets)
+    // Draws one impression from the atlas; false when it has no such impression or the art is missing.
+    internal static bool Stamp(UiRect bounds, int index, IBookAssets assets, float alpha = 1f)
     {
         if ((uint)index > 2 || !assets.TryGet(BookAsset.Stamps, out var image, MathF.Min(bounds.Size.X, bounds.Size.Y) * 3.2f))
-            return;
+            return false;
         // Authored atlas regions: trim the middle gutter to exclude a neighboring impression's stray ink.
         var region = index == 1 ? new Vector2(0.34f, 0.65f) : new Vector2(index / 3f, (index + 1) / 3f);
         var aspect = (region.Y - region.X) * image.Width / image.Height;
         var size = new Vector2(MathF.Min(bounds.Size.X, bounds.Size.Y * aspect), MathF.Min(bounds.Size.Y, bounds.Size.X / aspect));
         var min = bounds.Position + ((bounds.Size - size) / 2f);
         Image(ImGui.GetWindowDrawList(), image.Texture, min, min + size,
-            new Vector2(region.X, 0f), new Vector2(region.Y, 1f));
+            new Vector2(region.X, 0f), new Vector2(region.Y, 1f), ImGui.GetColorU32(new Vector4(1, 1, 1, alpha)));
+        return true;
     }
 }

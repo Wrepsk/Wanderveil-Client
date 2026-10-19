@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
+using Wanderveil.Features.Stamps;
 using Wanderveil.UI.Components;
 using Wanderveil.UI.Primitives;
 
@@ -10,9 +11,14 @@ namespace Wanderveil.Features.Passport;
 internal enum PassportPageKind { NationBanner, NationMap, Portrait, Information, CollectionLeft, CollectionRight, Blank }
 internal sealed record PassportPage(string Id, PassportPageKind Kind);
 
-// Presentation data and composition; no ownership, collection, persistence, or animation logic.
-internal sealed class PassportDocumentView(IBookAssets assets, PassportPreview profile)
+// Presentation data and composition; no ownership, persistence, or animation logic. The collection
+// pages print the stamps the collection holds, in the order they were collected.
+internal sealed class PassportDocumentView(IBookAssets assets, PassportPreview profile, StampCollection? stamps = null)
 {
+    // Stamp places on the collection spread: two on its left page, one large on its right.
+    internal const int CollectionSlots = 3;
+    internal StampCollection Stamps { get; } = stamps ?? new StampCollection();
+
     internal static readonly IReadOnlyList<PassportPage> SamplePages = Array.AsReadOnly(new[] {
         new PassportPage("nation-banner", PassportPageKind.NationBanner), new PassportPage("nation-map", PassportPageKind.NationMap),
         new PassportPage("portrait", PassportPageKind.Portrait), new PassportPage("information", PassportPageKind.Information),
@@ -209,26 +215,39 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportPreview p
         flow.Gap(16);
         flow.Text(isLeft ? "By root & river" : "Under another sky", TextRole.Title);
         flow.Gap(20);
+        var held = Stamps.Stamps;
         if (isLeft)
         {
-            BookSurface.Stamp(flow.Reserve(140 * context.Scale), 1, assets);
-            flow.Gap(8);
-            flow.Text("Woodland wanderer / Demo specimen", TextRole.Caption, true);
+            Slot(ref flow, 0, 140, context);
             flow.Gap(24);
-            BookSurface.Stamp(flow.Reserve(140 * context.Scale), 0, assets);
-            flow.Gap(8);
-            flow.Text("Salt & starlight / Demo specimen", TextRole.Caption, true);
+            Slot(ref flow, 1, 140, context);
+            return;
         }
-        else
+        Slot(ref flow, 2, 240, context);
+        flow.Rule();
+        flow.Text(held.Count == 0 ? "These pages are waiting for their first stamp. Collect one from a discovery and it is pressed here."
+            : "A place, a moment, a reason to return. Every impression holds a small story.");
+        flow.Gap(24);
+        flow.Text(held.Count == 0 ? "NO STAMPS YET" : held.Count == 1 ? "1 LOCAL DEMO STAMP / NOT SAVED YET" : $"{held.Count} LOCAL DEMO STAMPS / NOT SAVED YET", TextRole.Caption, true);
+        if (held.Count > CollectionSlots)
         {
-            BookSurface.Stamp(flow.Reserve(240 * context.Scale), 2, assets);
-            flow.Gap(12);
-            flow.Text("A sky full of possibilities", TextRole.Heading);
-            flow.Rule();
-            flow.Text("A place, a moment, a reason to return. Every impression holds a small story.");
-            flow.Gap(24);
-            flow.Text("DEMO COLLECTION / NOT COLLECTED OR ISSUED", TextRole.Caption, true);
+            flow.Gap(8);
+            flow.Text($"{held.Count - CollectionSlots} more are held. Further stamp pages arrive in a later update.", TextRole.Caption, true);
         }
+    }
+
+    // One stamp place: the stamp collected in that order with its name and date, or an empty ring.
+    private void Slot(ref PageFlow flow, int index, float size, UiContext context)
+    {
+        var place = flow.Reserve(size * context.Scale);
+        var stamp = index < Stamps.Stamps.Count ? Stamps.Stamps[index] : null;
+        if (flow.IsDrawing)
+        {
+            if (stamp != null) StampArt.Issued(place, stamp, assets, context);
+            else StampArt.Empty(place, context);
+        }
+        flow.Gap(8);
+        flow.Text(stamp != null ? $"{stamp.Design.Name} / {StampArt.Date(stamp.CollectedAt)}" : "Awaiting a stamp", TextRole.Caption, true);
     }
 
 }

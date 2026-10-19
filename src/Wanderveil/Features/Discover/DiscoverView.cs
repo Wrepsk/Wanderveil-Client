@@ -2,17 +2,30 @@ using System;
 using System.Collections.Generic;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
+using Wanderveil.Features.Stamps;
 using Wanderveil.UI.Components;
 using Wanderveil.UI.Primitives;
 
 namespace Wanderveil.Features.Discover;
 
-internal sealed class DiscoverView(IReadOnlyList<DiscoveryPreview> previews)
+// Browsing and reading discoveries, and collecting a discovery's stamp into the passport's collection.
+internal sealed class DiscoverView(IReadOnlyList<DiscoveryPreview> previews, StampCollection? stamps = null, IBookAssets? assets = null)
 {
     internal DiscoveryPreview? SelectedDiscovery { get; private set; }
+    internal StampCollection Stamps { get; } = stamps ?? new StampCollection();
     private float browseScroll;
     private float? requestedScroll;
     private bool focusDetails;
+    private bool focusPassportLink;
+    private bool passportRequested;
+
+    // True once after the reader asks to see a collected stamp in their passport.
+    internal bool TakePassportRequest()
+    {
+        var requested = passportRequested;
+        passportRequested = false;
+        return requested;
+    }
 
     internal void Draw(UiContext context, bool onPaper = false)
     {
@@ -49,16 +62,16 @@ internal sealed class DiscoverView(IReadOnlyList<DiscoveryPreview> previews)
         {
             var left = previews[index];
             var right = layout.IsSplit && index + 1 < previews.Count ? previews[index + 1] : null;
-            var height = DiscoveryCard.Measure(left, layout.ColumnWidth, layout.Padding, context);
+            var height = DiscoveryCard.Measure(left, Stamps.For(left.Id), layout.ColumnWidth, layout.Padding, context);
             if (right != null)
-                height = MathF.Max(height, DiscoveryCard.Measure(right, layout.ColumnWidth, layout.Padding, context));
+                height = MathF.Max(height, DiscoveryCard.Measure(right, Stamps.For(right.Id), layout.ColumnWidth, layout.Padding, context));
             var origin = ImGui.GetCursorScreenPos();
-            if (DiscoveryCard.Draw(left, layout.ColumnWidth, layout.Padding, height, context))
+            if (DiscoveryCard.Draw(left, Stamps.For(left.Id), assets, layout.ColumnWidth, layout.Padding, height, context))
                 opened = left;
             if (right != null)
             {
                 ImGui.SetCursorScreenPos(origin + new Vector2(layout.ColumnWidth + layout.Gap, 0f));
-                if (DiscoveryCard.Draw(right, layout.ColumnWidth, layout.Padding, height, context))
+                if (DiscoveryCard.Draw(right, Stamps.For(right.Id), assets, layout.ColumnWidth, layout.Padding, height, context))
                     opened = right;
             }
             ImGui.SetCursorScreenPos(origin);
@@ -93,10 +106,11 @@ internal sealed class DiscoverView(IReadOnlyList<DiscoveryPreview> previews)
         var width = MathF.Max(1f, UiLayout.ContentWidth - (4f * context.Scale));
         var layout = DiscoveryLayout.Create(width, context);
         var contentWidth = layout.ColumnWidth - (layout.Padding * 2f);
+        var held = Stamps.For(preview.Id);
         var leftMeasure = new PageFlow(Vector2.Zero, contentWidth, context, false);
         var rightMeasure = new PageFlow(Vector2.Zero, contentWidth, context, false);
         ComposePostcard(ref leftMeasure, preview, contentWidth);
-        ComposeReward(ref rightMeasure, preview, context);
+        ComposeReward(ref rightMeasure, preview, held, null, context);
         var leftHeight = leftMeasure.Height + (layout.Padding * 2f);
         var rightHeight = rightMeasure.Height + (layout.Padding * 2f);
         var height = MathF.Max(leftHeight, rightHeight);
@@ -105,23 +119,44 @@ internal sealed class DiscoverView(IReadOnlyList<DiscoveryPreview> previews)
         var right = new UiRect(origin + (layout.IsSplit
             ? new Vector2(layout.ColumnWidth + layout.Gap, 0f)
             : new Vector2(0f, leftHeight + layout.Gap)), new Vector2(layout.ColumnWidth, layout.IsSplit ? height : rightHeight));
-        DrawPage(left, layout.Padding, preview, context, true);
-        DrawPage(right, layout.Padding, preview, context, false);
+        DrawPage(left, layout.Padding, preview, held, context, true);
+        DrawPage(right, layout.Padding, preview, held, context, false);
         ImGui.Dummy(new Vector2(width, (layout.IsSplit ? height : leftHeight + rightHeight + layout.Gap) + (4f * context.Scale)));
         ImGui.Dummy(new Vector2(0f, UiMetrics.Medium * context.Scale));
-        ImGui.BeginDisabled();
-        try
-        {
-            UiButton.Draw("Collect demo stamp", context);
-        }
-        finally
-        {
-            ImGui.EndDisabled();
-        }
-        UiTypography.Text("Collection is unavailable in this UI preview. No stamp is awarded or saved.", TextRole.Body, context, onPaper ? UiTheme.Ink : UiTheme.Paper);
+        DrawCollect(preview, held, context, onPaper ? UiTheme.Ink : UiTheme.Paper);
     }
 
-    private static void DrawPage(UiRect bounds, float padding, DiscoveryPreview preview, UiContext context, bool postcard)
+    // The collect action under a discovery: collect, already collected, or not collectible here.
+    private void DrawCollect(DiscoveryPreview preview, StampInstance? held, UiContext context, Vector4 ink)
+    {
+        if (preview.Stamp == null) return;
+        if (held != null)
+        {
+            UiTypography.Text($"Collected on {StampArt.Date(held.CollectedAt)}. It is kept until the game closes; saving it comes in a later update.", TextRole.Body, context, ink);
+            ImGui.Dummy(new Vector2(0f, UiMetrics.Small * context.Scale));
+            if (focusPassportLink)
+            {
+                ImGui.SetKeyboardFocusHere();
+                focusPassportLink = false;
+            }
+            passportRequested |= BookControl.Link("See it in your passport »", context);
+            return;
+        }
+        if (!preview.CollectOnReading)
+        {
+            ImGui.BeginDisabled();
+            try { UiButton.Draw("Collect stamp", context); }
+            finally { ImGui.EndDisabled(); }
+            UiTypography.Text("This stamp is collected at the place itself, which needs location awareness Wanderveil does not have yet.", TextRole.Body, context, ink);
+            return;
+        }
+        // The action disappears once used, so keyboard focus moves on to the passport link.
+        if (UiButton.Draw("Collect demo stamp", context) && Stamps.Collect(preview.Id, preview.Stamp).Outcome == CollectOutcome.Collected)
+            focusPassportLink = true;
+        UiTypography.Text("Adds one local demo stamp to your passport. It is not an official achievement.", TextRole.Body, context, ink);
+    }
+
+    private void DrawPage(UiRect bounds, float padding, DiscoveryPreview preview, StampInstance? held, UiContext context, bool postcard)
     {
         var drawList = ImGui.GetWindowDrawList();
         PageSurface.Draw(drawList, bounds, context);
@@ -133,7 +168,7 @@ internal sealed class DiscoverView(IReadOnlyList<DiscoveryPreview> previews)
             if (postcard)
                 ComposePostcard(ref flow, preview, contentWidth);
             else
-                ComposeReward(ref flow, preview, context);
+                ComposeReward(ref flow, preview, held, assets, context);
         }
         finally
         {
@@ -163,7 +198,7 @@ internal sealed class DiscoverView(IReadOnlyList<DiscoveryPreview> previews)
         flow.Text(preview.Creator, TextRole.Caption, true);
     }
 
-    private static void ComposeReward(ref PageFlow flow, DiscoveryPreview preview, UiContext context)
+    private static void ComposeReward(ref PageFlow flow, DiscoveryPreview preview, StampInstance? held, IBookAssets? assets, UiContext context)
     {
         flow.Text(preview.Kind, TextRole.Caption, true);
         flow.Gap();
@@ -173,16 +208,27 @@ internal sealed class DiscoverView(IReadOnlyList<DiscoveryPreview> previews)
         flow.Gap();
         flow.Text("Imagined location only. No nearby detection or travel instructions.", TextRole.Body, true);
         flow.Rule();
-        flow.Text("Stamp preview", TextRole.Heading);
+        if (preview.Stamp is not { } design)
+        {
+            flow.Text("No stamp", TextRole.Heading);
+            flow.Gap();
+            flow.Text("This discovery is for reading; it has no stamp to collect.", TextRole.Body, true);
+            return;
+        }
+        flow.Text(held != null ? "Your stamp" : "Stamp preview", TextRole.Heading);
         flow.Gap();
         var stamp = flow.Reserve(context.FontSize * 7f);
         if (flow.IsDrawing)
-            StampPreview.Draw(stamp, context);
+        {
+            if (held != null) StampArt.Issued(stamp, held, assets, context);
+            else StampArt.Proof(stamp, design, assets, context);
+        }
         flow.Gap();
-        flow.Text(preview.StampName);
+        flow.Text(design.Name);
         flow.Gap();
-        flow.Text("NOT COLLECTED / LOCAL DEMO DESIGN", TextRole.Caption, true);
+        flow.Text(DiscoveryCard.Status(preview, held), TextRole.Caption, true);
         flow.Gap();
-        flow.Text("A preview of a future collectible, not an official achievement or an issued stamp.", TextRole.Body, true);
+        flow.Text(held != null ? "Issued to this passport from a local demo design. Not an official achievement."
+            : "A faint proof of the design. Not an official achievement or an issued stamp.", TextRole.Body, true);
     }
 }

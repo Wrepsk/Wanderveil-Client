@@ -129,6 +129,7 @@ MotionChecks.Run(Check, artifacts);
 StudioChecks.Run(Check, artifacts);
 EchoesChecks.Run(Check, artifacts);
 StatesChecks.Run(Check, artifacts);
+CollectChecks.Run(Check, artifacts);
 InputChecks.Run(Check);
 StabilityChecks.Run(Check);
 Console.WriteLine($"PASS {checks} checks using the real ImGui native context.");

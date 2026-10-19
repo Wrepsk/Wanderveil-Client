@@ -40,7 +40,7 @@ internal static class StatesChecks
             Location = "Ein erdachter Aussichtspunkt " + LongWord,
             Teaser = string.Concat(Enumerable.Repeat("Ein stiller Pfad und eine Brise vom Meer. ", 4)),
             Caption = string.Concat(Enumerable.Repeat(LongWord + " am Abend über dem Meer. ", 8)),
-            StampName = LongWord + " / Demo stamp",
+            Stamp = DiscoveryPreview.Postcard.Stamp! with { Name = LongWord + " / Demo stamp" },
         };
         var longDossier = EchoPreview.Sample with
         {
@@ -68,7 +68,7 @@ internal static class StatesChecks
             Location = "想像上の海辺の展望台",
             Teaser = "静かな小道と潮風、そして寄り道する価値のある水平線。",
             Caption = "長い道を選んで帰ったら、ひと休みできる場所を見つけた。小道の下では、海がその日最後の光を抱いていた。",
-            StampName = "遠回りの道 / デモスタンプ",
+            Stamp = DiscoveryPreview.Postcard.Stamp! with { Name = "遠回りの道 / デモスタンプ" },
         };
         var japaneseDossier = EchoPreview.Sample with
         {

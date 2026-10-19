@@ -14,7 +14,7 @@ Run `/wanderveil`. Each summon starts with the closed Gridania cover; the first 
 - [Runtime collection spread](previews/passport/runtime-collection.png)
 - [Smallest book size, contents scaled down](previews/passport/runtime-smallest.png)
 
-These are native software previews of the production shell, not live game captures. Real host font/GPU/hotkey/lifecycle behavior remains unobserved here. The map retains its visible unvalidated-geography caption, and identity/signature/stamps are synthetic demo content. No collection or signature input/storage is implemented.
+These are native software previews of the production shell, not live game captures. Real host font/GPU/hotkey/lifecycle behavior remains unobserved here. The map retains its visible unvalidated-geography caption, and identity/signature are synthetic demo content. Stamps are collected in memory only (see below); signature input and all storage are not implemented.
 
 ## Vector art
 
@@ -48,6 +48,20 @@ Settings are pages of the book. The printed Settings mark riffles forward to the
 
 - [A riffle in flight](previews/passport/riffle.png)
 - [Settings pages](previews/passport/settings.png)
+
+## Collecting a stamp
+
+The first product loop runs in the book: open Discover, open **The scenic route** postcard, and choose **Collect demo stamp** beneath it. The stamp is issued at once: the postcard's faint proof of the design becomes the inked stamp (*Your stamp*, *Collected 19 OCT 2026 / Local demo*), its card in the list says *Collected*, and a line beneath says it is kept until the game closes and saving comes later. Keyboard focus moves to **See it in your passport »**, which riffles back to the passport's collection spread, where the stamp is pressed in the first of three places with its name and date. Empty places are faint dashed rings marked *Awaiting a stamp*; with no stamps the right page invites you to collect one and offers **Explore discoveries »**. A count of local demo stamps (*not saved yet*) closes the spread, and stamps past the third are counted rather than shown until stamp paging exists.
+
+Duplicate policy: a passport holds at most one stamp per discovery. Once collected, the postcard offers no Collect action, and collecting again (even after its design is revised) returns the stamp already held unchanged. **Where the lanterns wait** is a stamp spot: its stamp is collected at the place itself, which needs location awareness Wanderveil does not have, so its Collect action is printed but inert with that reason.
+
+`StampDesign` (identifier, revision, name, artwork, provenance), `StampInstance` (its own identifier, the design revision it was issued with, the discovery, the date, provenance), and `StampCollection` (the in-memory stamps and the collect rule) hold no ImGui state; `DiscoveryPreview` names the design a discovery awards and whether reading it is enough to collect. `StampArt` draws a design as a faint proof or an issued stamp, falling back to the procedural motif without art. Everything is local demo provenance and nothing is saved: closing the game, or reloading the plugin, empties the collection. Versioned local persistence is the next slice.
+
+- [Collected postcard](previews/passport/collect-discover.png)
+- [The stamp on the collection spread](previews/passport/collect-passport.png)
+- [The stamp on a single page](previews/passport/collect-narrow.png)
+- [More stamps than places, with a long name](previews/passport/collect-full.png)
+- [An empty collection spread](previews/passport/runtime-collection.png)
 
 ## Echoes
 
