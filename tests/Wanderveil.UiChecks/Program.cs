@@ -127,6 +127,7 @@ GridaniaChecks.Run(Check, artifacts);
 RuntimePassportChecks.Run(Check, artifacts);
 MotionChecks.Run(Check, artifacts);
 StudioChecks.Run(Check, artifacts);
+EchoesChecks.Run(Check, artifacts);
 Console.WriteLine($"PASS {checks} checks using the real ImGui native context.");
 
 static double Contrast(Vector4 first, Vector4 second)

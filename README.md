@@ -6,7 +6,7 @@ A planned FFXIV Dalamud plugin for location-based discoveries, a collectible adv
 
 ## Development status
 
-The shell opens to a synthetic Passport identity spread: parchment pages, a portrait placeholder, identity fields, notes, and an empty stamp state. Discover offers two curated demo cards with postcard/details, stamp previews, Back navigation, and missing-art fallback. Cards and detail pages stack when space or text size requires it. Collection is visibly unavailable; no stamp is awarded or saved. Studio offers a template chooser (Postcard and Stamp Spot) and a draft editor with a live framed preview; drafts stay in memory and saving/publishing are visibly unavailable. Echoes remains coming soon. Shared UI components, appearance settings, and original procedural artwork are implemented; persistence, networking, and advanced rendering remain planned.
+The shell opens to a synthetic Passport identity spread: parchment pages, a portrait placeholder, identity fields, notes, and an empty stamp state. Discover offers two curated demo cards with postcard/details, stamp previews, Back navigation, and missing-art fallback. Cards and detail pages stack when space or text size requires it. Collection is visibly unavailable; no stamp is awarded or saved. Studio offers a template chooser (Postcard and Stamp Spot) and a draft editor with a live framed preview; drafts stay in memory and saving/publishing are visibly unavailable. Echoes shows a clearly labelled, non-playable sample adventure dossier with chapters and objectives. Shared UI components, appearance settings, and original procedural artwork are implemented; persistence, networking, and advanced rendering remain planned.
 
 ## Build the current baseline
 

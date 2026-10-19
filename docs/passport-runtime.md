@@ -49,6 +49,15 @@ Settings are pages of the book. The printed Settings mark riffles forward to the
 - [A riffle in flight](previews/passport/riffle.png)
 - [Settings pages](previews/passport/settings.png)
 
+## Echoes
+
+The Echoes tab is an honest preview of future adventures. The left page says what Echoes will be and that it cannot be played yet, then shows a framed sample dossier (*The Lantern Keeper's Letter*, a synthetic three-chapter mystery) labelled *Preview / not playable / nothing is tracked*. The right page lists its chapters: the first is open, marked with an inked ring, with its objectives as hollow printed diamonds (never checkboxes) and one hint; the later chapters carry a wax seal, show only their title and when they would open, and reveal no objectives. A closing line says playable adventures, saved progress, and rewards arrive later. The pages have no controls, so clicking them does nothing; on a single page the chapters follow the dossier.
+
+`EchoPreview` holds the sample and validates that a dossier opens on its first chapter and that sealed chapters carry no objectives; it has no ImGui or host state and is not a content contract. `EchoesView` draws it, with a readable fallback when no dossier is given.
+
+- [Echoes spread](previews/passport/echoes.png)
+- [Echoes on a single page](previews/passport/echoes-narrow.png)
+
 ## Studio
 
 The Studio tab opens on a template chooser. The left page introduces Studio and says plainly that drafts stay in memory until the plugin unloads and nothing is saved, published, or sent. The right page lists **Postcard** and **Stamp Spot** with a **Start …** link each, then Riddle, Challenge, and Trail under *Coming later* as plain text that cannot be chosen.

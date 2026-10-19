@@ -4,6 +4,7 @@ using System.Linq;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using Wanderveil.Features.Discover;
+using Wanderveil.Features.Echoes;
 using Wanderveil.Features.Passport;
 using Wanderveil.Features.Studio;
 using Wanderveil.UI.Components;
@@ -30,6 +31,7 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
     private readonly IReadOnlyList<PassportPage> documentPages = ValidatePages(pages ?? PassportDocumentView.SamplePages);
     private readonly DiscoverView discover = new(DiscoveryPreview.Samples);
     private readonly StudioView studio = new();
+    private readonly EchoesView echoes = new(EchoPreview.Sample);
     private readonly BookShellMotion motion = Arrived();
     private readonly BookShellTurn turn = new();
     private readonly BookShellRiffle riffle = new();
@@ -174,13 +176,18 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
                 case BookSection.Discover when side != Side.Left:
                     discover.Draw(type, onPaper: true);
                     break;
+                case BookSection.Echoes:
+                    if (side != Side.Right) echoes.DrawLeft(type);
+                    if (side == Side.Single) ImGui.Dummy(new Vector2(0, 24 * type.Scale));
+                    if (side != Side.Left) echoes.DrawRight(type);
+                    break;
                 case BookSection.Studio:
                     if (side != Side.Right) studio.DrawLeft(type, side == Side.Single);
                     if (side == Side.Single) ImGui.Dummy(new Vector2(0, 24 * type.Scale));
                     if (side != Side.Left) studio.DrawRight(type);
                     break;
                 default:
-                    Introduction(section, type);
+                    DiscoverIntroduction(type);
                     break;
             }
         }
@@ -694,13 +701,13 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
         return Array.AsReadOnly(copy);
     }
 
-    private static void Introduction(BookSection section, UiContext context)
+    private static void DiscoverIntroduction(UiContext context)
     {
-        UiTypography.Text("WANDERVEIL / " + Labels[(int)section].ToUpperInvariant(), TextRole.Caption, context, UiTheme.MutedInk);
+        UiTypography.Text("WANDERVEIL / DISCOVER", TextRole.Caption, context, UiTheme.MutedInk);
         ImGui.Dummy(new Vector2(0, 16 * context.Scale));
-        UiTypography.Text(section == BookSection.Discover ? "Every place has a story." : "Beyond the next horizon", TextRole.Title, context, UiTheme.Ink);
+        UiTypography.Text("Every place has a story.", TextRole.Title, context, UiTheme.Ink);
         ImGui.Dummy(new Vector2(0, 12 * context.Scale));
-        UiTypography.Text(section == BookSection.Discover ? "A journal of imagined places. Curated demo discoveries; no location is read." : "Coming later. Creator-made adventures are unavailable in this preview.", TextRole.Body, context, UiTheme.Ink);
+        UiTypography.Text("A journal of imagined places. Curated demo discoveries; no location is read.", TextRole.Body, context, UiTheme.Ink);
     }
 
     internal static void PrepareWindow(Vector2 size)
