@@ -214,6 +214,20 @@ internal static class MotionChecks
         while (shell.IsTurning) Step();
         check(shell.VisiblePage == 2 && shell.IsBookOpen, "A reversed turn does not land on the spread it returned to.");
 
+        // Clicking quickly: every click turns its own leaf, following the ones in the air, and none is skipped.
+        for (var click = 0; click < 4; click++) Click(BookShellLayout.Create(bounds, context, 2).TurnPoint(true, 2));
+        check(shell.IsTurning && shell.VisiblePage == 10 && shell.LeavesInAir == 4, $"Four quick clicks put {shell.LeavesInAir} leaves in the air toward page {shell.VisiblePage + 1}.");
+        frames = 0;
+        for (; frames < 12; frames++) Step();
+        if (artifacts != null) SoftwarePreview.Save(Path.Combine(artifacts, "passport-motion-burst.png"), host);
+        while (shell.IsTurning && frames++ < 240) Step();
+        check(shell.VisiblePage == 10, "Quick clicks do not land where they lead.");
+        for (var click = 0; click < 4; click++) Click(BookShellLayout.Create(bounds, context, 10).TurnPoint(false, 10));
+        check(shell.IsTurning && shell.VisiblePage == 2 && shell.LeavesInAir == 4, "Quick clicks back are not turned leaf by leaf.");
+        frames = 0;
+        while (shell.IsTurning && frames++ < 240) Step();
+        check(shell.VisiblePage == 2, "Quick clicks back do not land where they lead.");
+
         // Cost of a turn against a still spread: CPU time to build the frame and vertices submitted.
         // Headless and software-only; GPU cost in game is not measured here. The still spread is identity, the
         // page that later turns back into view (stamp pages after it are blank paper, far cheaper).
@@ -282,40 +296,66 @@ internal static class MotionChecks
         check(BookShellPlacement.Slide(dismissed, 1f, workPos, workSize, 24) == dismissed, "A book at rest is not at its remembered place.");
     }
 
-    // One page turn at a time: same-way requests chain, opposite requests reverse mid-turn.
+    // Page turns: quick same-way requests put more leaves in the air instead of skipping the one turning, and
+    // an opposite request reverses the newest leaf from where it is.
     private static void Turns(Action<bool, string> check)
     {
         var turn = new BookShellTurn();
         var page = turn.Request(1, 2, 0, 6, false);
-        check(page == 2 && turn.Active && turn.Base == 0 && turn.Progress == 0f, "A forward turn does not start from the current spread.");
+        check(page == 2 && turn.Active && turn.Leaves is [{ Base: 0, Progress: 0f }], "A forward turn does not start from the current spread.");
         var frames = 0;
         while (turn.Active && frames < 120) { turn.Update(Frame, false); frames++; }
         check(!turn.Active && turn.Target == 2 && Math.Abs(frames - UiMotion.PageTurn * 60) <= 2, "A turn does not land on the next spread in its duration.");
 
         page = turn.Request(-1, 2, 2, 6, false);
-        check(page == 0 && turn.Base == 0 && turn.Progress == 1f, "A backward turn does not start from the later spread.");
+        check(page == 0 && turn.Leaves is [{ Base: 0, Progress: 1f }], "A backward turn does not start from the later spread.");
         for (var frame = 0; frame < 10; frame++) turn.Update(Frame, false);
-        var partway = turn.Progress;
+        var partway = turn.Leaves[0].Progress;
         page = turn.Request(1, 2, 0, 6, false);
-        check(page == 2 && turn.Active && turn.Progress == partway, "Reversing mid-turn jumps instead of turning back from where the leaf is.");
+        check(page == 2 && turn.Leaves.Count == 1 && turn.Leaves[0].Progress == partway, "Reversing mid-turn jumps instead of turning back from where the leaf is.");
         turn.Update(Frame, false);
-        check(turn.Progress > partway, "A reversed turn does not move the other way.");
+        check(turn.Leaves[0].Progress > partway, "A reversed turn does not move the other way.");
 
+        // A second request the same way lifts the next leaf and leaves the first one turning.
+        var first = turn.Leaves[0].Progress;
         page = turn.Request(1, 2, 2, 6, false);
-        check(page == 4 && turn.Active && turn.Base == 2 && turn.Progress == 0f, "A second forward request does not land the turn and start the next.");
+        check(page == 4 && turn.Leaves.Count == 2 && turn.Leaves[0].Progress == first && turn.Leaves[1] is { Base: 2, Progress: 0f }, "A second forward request skips the turn in progress.");
         while (turn.Active) turn.Update(Frame, false);
+        check(turn.Target == 4, "Two leaves in the air do not land two spreads on.");
         page = turn.Request(1, 2, 4, 6, false);
         check(page == 4 && !turn.Active, "Turning past the last spread starts a turn.");
         page = turn.Request(-1, 2, 0, 6, false);
         check(page == 0 && !turn.Active, "Turning before the first spread starts a turn.");
 
+        // A burst of five clicks two frames apart: five leaves in the air, each behind the last, and a click
+        // back sends only the newest one back.
+        turn.Reset(0);
+        for (var click = 0; click < 5; click++) { turn.Request(1, 2, turn.Target, 40, false); turn.Update(Frame, false); turn.Update(Frame, false); }
+        check(turn.Target == 10 && turn.Leaves.Count == 5 && turn.Leaves.Select(leaf => leaf.Base).SequenceEqual([0, 2, 4, 6, 8]), "A burst of clicks does not put a leaf in the air for each.");
+        check(turn.Leaves.Zip(turn.Leaves.Skip(1)).All(pair => pair.First.Progress > pair.Second.Progress), "Leaves in a burst do not follow one another.");
+        page = turn.Request(-1, 2, turn.Target, 40, false);
+        check(page == 8 && !turn.Leaves[^1].Forward && turn.Leaves.Take(4).All(leaf => leaf.Forward), "Turning back in a burst does not reverse just the newest leaf.");
+        frames = 0;
+        while (turn.Active && frames++ < 240) turn.Update(Frame, false);
+        check(!turn.Active && turn.Target == 8, "A burst does not land where its clicks lead.");
+        // A held key cannot pile up pages: past the limit the oldest leaf lands at once.
+        for (var click = 0; click < 10; click++) turn.Request(1, 2, turn.Target, 60, false);
+        check(turn.Leaves.Count == BookShellTurn.MaximumLeaves && turn.Target == 28, $"Ten clicks in one frame leave {turn.Leaves.Count} leaves and target page {turn.Target + 1}.");
+        // The same backwards.
+        turn.Reset(20);
+        turn.Request(-1, 2, 20, 60, false);
+        turn.Update(Frame, false);
+        turn.Request(-1, 2, turn.Target, 60, false);
+        check(turn.Target == 16 && turn.Leaves.Select(leaf => leaf.Base).SequenceEqual([16, 18]) && turn.Leaves[0].Progress == 1f, "A burst back does not lift the earlier leaves in order.");
+
+        turn.Reset(3);
         page = turn.Request(1, 1, 3, 6, true);
         check(page == 4 && !turn.Active, "Reduced motion does not turn instantly.");
         turn.Request(1, 2, 0, 6, false);
         turn.Request(1, 1, 2, 6, false);
-        check(turn.Step == 1 && turn.Base == 2, "Changing between spread and single pages mid-turn does not land the old turn first.");
+        check(turn.Step == 1 && turn.Leaves is [{ Base: 2 }], "Changing between spread and single pages mid-turn does not land the old turn first.");
         turn.Update(5f, false);
-        check(turn.Progress > 0f && turn.Progress <= 0.21f, "A long frame skips most of a page turn.");
+        check(turn.Leaves[0].Progress > 0f && turn.Leaves[0].Progress <= 0.21f, "A long frame skips most of a page turn.");
     }
 
     // On a single page, the page swings away to the left and the next one is revealed beneath.

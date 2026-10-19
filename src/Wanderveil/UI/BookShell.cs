@@ -107,6 +107,8 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
     // Largest sideways overflow among the pages drawn last frame; text must always wrap within its paper.
     internal float PageOverflowX { get; private set; }
     internal bool IsTurning => turn.Active;
+    // How many leaves are turning at once (quick clicks lift one each).
+    internal int LeavesInAir => turn.Leaves.Count;
     internal bool IsRiffling => riffle.Active;
 
     // Advances motion; the host calls it before sizing the window so size and drawing agree each frame.
@@ -155,7 +157,7 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         if (motion.Cover < 1f || !motion.WantsOpen) return DrawTurning(bounds, context);
         var turning = Section == BookSection.Passport && turn.Active && !riffle.Active;
         // On a single page the page beneath a turning leaf decides which half of the plate shows.
-        var layout = BookShellLayout.Create(bounds, context, Section == BookSection.Passport ? turning && turn.Step == 1 ? turn.Base + 1 : VisiblePage : 0);
+        var layout = BookShellLayout.Create(bounds, context, Section == BookSection.Passport ? turning && turn.Step == 1 ? turn.Last + 1 : VisiblePage : 0);
         if (turn.Active && turn.Step != (layout.IsSpread ? 2 : 1)) { turn.Finish(); VisiblePage = turn.Target; turning = false; }
         PageOverflow = PageOverflowX = 0;
         if (layout.IsSpread) VisiblePage -= VisiblePage % 2;
@@ -176,7 +178,7 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         focusSection = false;
         solid.Add(BookSurface.Board(layout.Book, layout.IsSpread ? BookFace.Spread : Section == BookSection.Passport && VisiblePage % 2 == 1 ? BookFace.Right : BookFace.Left));
         for (var index = 0; index < TabCount; index++) solid.Add(layout.Bookmark(index).Union(BookControl.RibbonBounds(layout.Bookmark(index), context)));
-        var surfacePage = turning && !layout.IsSpread ? turn.Base + 1 : VisiblePage;
+        var surfacePage = turning && !layout.IsSpread ? turn.Last + 1 : VisiblePage;
         BookSurface.Draw(layout.Book, layout.IsSpread ? BookFace.Spread : Section == BookSection.Passport && surfacePage % 2 == 1 ? BookFace.Right : BookFace.Left, assets, context);
         Ribbon(layout, context);
 
@@ -415,33 +417,44 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
             TurningLeaf(id, layout.LeftPage, face, leaf, false, uvA, uvB, fade, showsBack ? null : front);
         }
 
-        // A page turn: the two pages that stay put draw normally, then the turning leaf draws its real
-        // page content flat in its own child window and warps those vertices onto the leaf. Child windows
-        // draw in order, so the leaf lands above the pages beneath it.
+        // Page turns: the two pages beneath every leaf in the air draw normally, then each turning leaf draws its
+        // real page content flat in its own child window and warps those vertices onto the leaf. Child windows
+        // draw in order, so later leaves land above earlier ones. Quick clicks put several leaves in the air:
+        // those already over on the left lie with the latest on top, those still on the right with the earliest
+        // on top, as paper does.
         void DrawTurn()
         {
-            var first = turn.Base;
-            var angle = MathF.PI * UiMotion.Ease(turn.Progress);
-            // Paper curls as it turns: its outer edge trails the motion, most while it stands upright.
-            var bend = -0.9f * MathF.Sin(angle) * (turn.Forward ? 1f : -1f);
+            var leaves = turn.Leaves;
             if (layout.IsSpread)
             {
-                DocumentPage(first, layout.LeftPage, false, false);
-                Folio(first, false);
-                if (first + 3 < PageCount) { DocumentPage(first + 3, layout.RightPage, true, false); Folio(first + 3, true); }
-                Sheet("Turning leaf", angle, bend, first, LeafSide(BookSection.Passport, first, Side.Right), LeafSide(BookSection.Passport, first + 2, Side.Left));
+                DocumentPage(turn.First, layout.LeftPage, false, false);
+                Folio(turn.First, false);
+                if (turn.Last + 3 < PageCount) { DocumentPage(turn.Last + 3, layout.RightPage, true, false); Folio(turn.Last + 3, true); }
+                var left = leaves.Where(leaf => Angle(leaf) > MathF.PI / 2).OrderBy(leaf => leaf.Base);
+                var right = leaves.Where(leaf => Angle(leaf) <= MathF.PI / 2).OrderByDescending(leaf => leaf.Base);
+                foreach (var leaf in left.Concat(right))
+                    Sheet(LeafId(leaf), Angle(leaf), Bend(leaf), leaf.Base, LeafSide(BookSection.Passport, leaf.Base, Side.Right), LeafSide(BookSection.Passport, leaf.Base + 2, Side.Left));
+                return;
             }
-            else
+            DocumentPage(turn.Last + 1, layout.LeftPage, false, false);
+            Folio(turn.Last + 1, false);
+            // A single page swings away to the left about its outer edge and fades, revealing the next; the
+            // earliest page is uppermost.
+            foreach (var each in leaves.OrderByDescending(leaf => leaf.Base))
             {
-                DocumentPage(first + 1, layout.LeftPage, false, false);
-                Folio(first + 1, false);
-                // A single page swings away to the left about its outer edge and fades, revealing the next.
-                var region = BookShellLayout.Create(bounds, context, first).LeftPage;
-                var (face, hinge, width, uvA, uvB) = Leaf(false, first);
-                var leaf = new LeafProjection(face, hinge, width, face.Size.Y, angle, 1, bend, 6.5f);
+                var angle = Angle(each);
+                var region = BookShellLayout.Create(bounds, context, each.Base).LeftPage;
+                var (face, hinge, width, uvA, uvB) = Leaf(false, each.Base);
+                var leaf = new LeafProjection(face, hinge, width, face.Size.Y, angle, 1, Bend(each), 6.5f);
                 var fade = angle <= MathF.PI / 2 ? 1f : MathF.Max(0f, 1f - (angle - MathF.PI / 2) / (MathF.PI / 3));
-                TurningLeaf("Turning leaf", region, face, leaf, false, uvA, uvB, fade, angle <= MathF.PI / 2 ? LeafSide(BookSection.Passport, first, Side.Left) : null);
+                TurningLeaf(LeafId(each), region, face, leaf, false, uvA, uvB, fade, angle <= MathF.PI / 2 ? LeafSide(BookSection.Passport, each.Base, Side.Left) : null);
             }
+
+            static float Angle(BookShellTurn.Leaf leaf) => MathF.PI * UiMotion.Ease(leaf.Progress);
+            // Paper curls as it turns: its outer edge trails the motion, most while it stands upright.
+            static float Bend(BookShellTurn.Leaf leaf) => -0.9f * MathF.Sin(Angle(leaf)) * (leaf.Forward ? 1f : -1f);
+            // Leaves in the air are neighbours, so a few ids recycled by page never collide in one frame.
+            static string LeafId(BookShellTurn.Leaf leaf) => "Turning leaf " + leaf.Base % (BookShellTurn.MaximumLeaves * 4);
         }
 
         // A riffle between sections: a burst of leaves. The first leaf carries the old pages away, the
