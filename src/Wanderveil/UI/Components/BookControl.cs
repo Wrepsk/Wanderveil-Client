@@ -77,7 +77,7 @@ internal static class BookControl
             var ink = hovered ? UiTheme.Ink : UiTheme.Edition;
             UiTypography.Draw(list, bounds.Position + new Vector2(2, 2) * context.Scale, label, TextRole.Body, context, measured.X + 1, ink, false);
             var y = bounds.Position.Y + 2 * context.Scale + measured.Y + context.Scale;
-            list.AddLine(new Vector2(bounds.Position.X + 2 * context.Scale, y), new Vector2(bounds.Position.X + 2 * context.Scale + measured.X, y), ImGui.GetColorU32(ink with { W = hovered ? 0.9f : 0.45f }), context.Scale);
+            BookSurface.Line(list, new Vector2(bounds.Position.X + 2 * context.Scale, y), new Vector2(bounds.Position.X + 2 * context.Scale + measured.X, y), ImGui.GetColorU32(ink with { W = hovered ? 0.9f : 0.45f }), context.Scale);
             if (hovered) ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
             return pressed;
         }

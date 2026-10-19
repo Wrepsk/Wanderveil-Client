@@ -42,22 +42,23 @@ The headless preview window is pinned at the top left rather than anchored at th
 
 ## Page turns (Milestone 4 experiment)
 
-Clicking a page side (or Page Up/Down) turns the page as a rigid paper leaf rotating about the spine in 0.5 s, with perspective, lighting, and a shadow on the paper it hangs over. The leaf carries its real page content: the front shows the page being turned, the back the page it lands as, including text, portrait, stamps, and the nation banner. The two pages that stay put remain live and readable throughout. On a single page, the page swings away to the left about its outer edge and fades, revealing the next page beneath it. Clicking the same way again lands the current turn and starts the next; clicking the other way reverses the turn from where the leaf is. Reduced motion turns instantly.
+Clicking a page side (or Page Up/Down) turns the page as a paper leaf rotating about the spine in 0.5 s. It curls as it goes: its outer edge trails the motion, most while it stands upright, so the page bows into an arc and lies flat again as it lands. Perspective, light that varies across the curve, and a shadow on the paper it hangs over complete it. The leaf carries its real page content: the front shows the page being turned, the back the page it lands as, including text, portrait, stamps, and the nation banner. The two pages that stay put remain live and readable throughout. On a single page, the page swings away to the left about its outer edge and fades, revealing the next page beneath it. Clicking the same way again lands the current turn and starts the next; clicking the other way reverses the turn from where the leaf is. Reduced motion turns instantly.
 
-How it works: ImGui draws child windows above their parent and cannot transform a child's contents, so the turning leaf gets its own child window, created after the static pages so it draws above them. Its paper is drawn as perspective strips; its page content is composed flat at the page's resting place exactly as it would be on the page, then every vertex it produced is moved through the same hinge projection (`LeafProjection.Warp`) and its clip rectangles are widened. No render-to-texture, renderer dependency, or GPU hook is involved.
+How it works: ImGui draws child windows above their parent and cannot transform a child's contents, so the turning leaf gets its own child window, created after the static pages so it draws above them. Its paper is drawn as perspective strips; its page content is composed flat at the page's resting place exactly as it would be on the page, then every vertex it produced is moved through the same curled hinge projection (`LeafProjection.Warp`) and its clip rectangles are widened. While on a turning leaf, large art (portrait, stamps, map, banner) and rules are drawn in 16 vertical strips (`BookSurface.Strips`) so they bend with the paper; glyphs are already small. The leaf's child window uses the same padding and scrollbar reservation as a resting page, so content wraps identically and does not shift as a turn starts or lands. No render-to-texture, renderer dependency, or GPU hook is involved.
 
-Measured in the headless checks: about 0.09 ms of CPU and 3,060 vertices to build a turning spread frame, against 0.03 ms and 1,544 for a still spread. GPU cost and frame pacing in game are not measured.
+Measured in the headless checks: about 0.12 ms of CPU and 3,272 vertices to build a turning spread frame, against 0.04 ms and 1,544 for a still spread. GPU cost and frame pacing in game are not measured.
 
 Limitations of this approach:
 
-- The leaf is rigid and flat: no curl or bend along the page. A curl would need the content warped along a curved surface; the per-vertex warp could do it for text, but large images are single quads that would not bend, so it needs finer tessellation first.
-- The warp is perspective-correct at each vertex but straight within each triangle. Text glyphs and paper strips are small enough that this is invisible; a large image drawn as one quad (a stamp) can show a faint kink when sharply foreshortened.
+- The curl is a single circular arc across the page's width; real paper also bends diagonally from a corner. That would need a 2D tessellation of the page rather than vertical strips.
+- The warp is perspective-correct at each vertex but straight within each triangle. Glyphs, paper strips, and stripped art are small enough that this is not visible at normal sizes.
 - Content on the leaf is not interactive while it moves, and it shows the page from its top: a scrolled page (only possible with enlarged host text) is drawn unscrolled during the turn.
 - While a leaf is in motion its geometry may draw a few pixels beyond the book's window, because perspective enlarges the lifted edge; nothing is clipped at the window edge.
 
 Recommendation: this ordinary-ImGui approach is good enough for the passport's page turns, so CrystalRenderer is not needed for them. Revisit a renderer only if curled pages or real lighting become a goal.
 
 - [Identity page lifting with its content](previews/passport/turn-lifting.png)
+- [Page curled while upright](previews/passport/turn-curl.png)
 - [Stamp page landing on the left](previews/passport/turn-landing.png)
 - [Single page swinging away](previews/passport/turn-single.png)
 

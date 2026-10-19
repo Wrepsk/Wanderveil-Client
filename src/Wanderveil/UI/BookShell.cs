@@ -186,6 +186,8 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
         {
             var first = turn.Base;
             var angle = MathF.PI * BookShellMotion.Ease(turn.Progress);
+            // Paper curls as it turns: its outer edge trails the motion, most while it stands upright.
+            var bend = -0.9f * MathF.Sin(angle) * (turn.Forward ? 1f : -1f);
             var book = layout.Book;
             // A leaf is the paper alone (plate y 66-958); the board stays where it is.
             var faceHeight = book.Size.Y * 892f / 1024f;
@@ -199,7 +201,7 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
                 var hinge = new Vector2(book.Position.X + book.Size.X / 2, center);
                 var back = angle > MathF.PI / 2;
                 var face = new UiRect(new Vector2(back ? hinge.X - leafWidth : hinge.X, center - faceHeight / 2), new Vector2(leafWidth, faceHeight));
-                var leaf = new LeafProjection(face, hinge, leafWidth, faceHeight, angle, 1);
+                var leaf = new LeafProjection(face, hinge, leafWidth, faceHeight, angle, 1, bend, 6.5f);
                 TurningLeaf(back ? first + 2 : first + 1, back ? layout.LeftPage : layout.RightPage, face, leaf, back, 0.5f, back ? 66f / 1536f : 1470f / 1536f, 1f, true, !back);
             }
             else
@@ -211,7 +213,7 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
                 var leafWidth = book.Size.X * 702f / 768f;
                 var hinge = new Vector2(book.Position.X + (even ? book.Size.X * 66f / 768f : 0f), center);
                 var face = new UiRect(new Vector2(hinge.X, center - faceHeight / 2), new Vector2(leafWidth, faceHeight));
-                var leaf = new LeafProjection(face, hinge, leafWidth, faceHeight, angle, 1);
+                var leaf = new LeafProjection(face, hinge, leafWidth, faceHeight, angle, 1, bend, 6.5f);
                 var fade = angle <= MathF.PI / 2 ? 1f : MathF.Max(0f, 1f - (angle - MathF.PI / 2) / (MathF.PI / 3));
                 var region = BookShellLayout.Create(bounds, context, first).LeftPage;
                 TurningLeaf(first, region, face, leaf, false, even ? 66f / 1536f : 0.5f, even ? 0.5f : 1470f / 1536f, fade, angle <= MathF.PI / 2, false);
@@ -221,7 +223,9 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
         void TurningLeaf(int index, UiRect region, UiRect face, LeafProjection leaf, bool back, float uvHinge, float uvOuter, float alpha, bool content, bool rightSide)
         {
             ImGui.SetCursorScreenPos(region.Position);
+            // The same padding and scrollbar reservation as a resting page, so content lays out identically.
             ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, Vector2.Zero);
+            ImGui.PushStyleVar(ImGuiStyleVar.ScrollbarSize, 5 * context.Scale);
             try
             {
                 var visible = ImGui.BeginChild("Turning leaf", region.Size, false, ImGuiWindowFlags.NoInputs | ImGuiWindowFlags.NoBackground | ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.NoSavedSettings);
@@ -236,14 +240,19 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
                     if (leaf.Angle <= MathF.PI / 2) list.AddRectFilledMultiColor(new Vector2(leaf.Hinge.X, face.Position.Y), new Vector2(leaf.Hinge.X + reach, face.Max.Y), dark, clear, clear, dark);
                     else list.AddRectFilledMultiColor(new Vector2(leaf.Hinge.X - reach, face.Position.Y), new Vector2(leaf.Hinge.X, face.Max.Y), clear, dark, dark, clear);
                     if (assets.TryGet(BookAsset.Open, out var open, layout.Book.Size.X))
-                        leaf.Leaf(list, open.Texture, new Vector2(uvHinge, 66f / 1024f), new Vector2(uvOuter, 958f / 1024f), LeafProjection.Tint(Vector4.One with { W = alpha }, leaf.Light));
+                        leaf.Leaf(list, open.Texture, new Vector2(uvHinge, 66f / 1024f), new Vector2(uvOuter, 958f / 1024f), Vector4.One with { W = alpha });
                     var start = list.VtxBuffer.Size;
                     if (content && index < documentPages.Count)
                     {
                         var entry = documentPages[index];
-                        if (entry.Kind == PassportPageKind.NationBanner) Banner(index, rightSide);
+                        BookSurface.Strips = 16;
+                        try { if (entry.Kind == PassportPageKind.NationBanner) Banner(index, rightSide); }
+                        finally { BookSurface.Strips = 1; }
                         ImGui.SetCursorScreenPos(region.Position);
-                        Contents(entry, Printed(Fit(entry)));
+                        // Large art is drawn in strips so it bends with the curled paper.
+                        BookSurface.Strips = 16;
+                        try { Contents(entry, Printed(Fit(entry))); }
+                        finally { BookSurface.Strips = 1; }
                     }
                     leaf.Warp(list, start, face, back, alpha);
                     var viewport = ImGui.GetMainViewport();
@@ -251,7 +260,7 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
                 }
                 finally { ImGui.EndChild(); }
             }
-            finally { ImGui.PopStyleVar(); }
+            finally { ImGui.PopStyleVar(2); }
         }
 
         void Folio(int index, bool right)
@@ -401,7 +410,7 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
                 // The cover's inside is the first left page; it lands exactly where the open spread draws it.
                 var pageHeight = moved.Size.Y * 936f / 1024f;
                 var leaf = new LeafProjection(new UiRect(new Vector2(hinge.X, hinge.Y - pageHeight / 2), new Vector2(leafWidth, pageHeight)), hinge, leafWidth, pageHeight, angle, 1);
-                leaf.Leaf(list, open.Texture, new Vector2(768f / 1536f, 44f / 1024f), new Vector2(40f / 1536f, 980f / 1024f), LeafProjection.Tint(Vector4.One, leaf.Light));
+                leaf.Leaf(list, open.Texture, new Vector2(768f / 1536f, 44f / 1024f), new Vector2(40f / 1536f, 980f / 1024f), Vector4.One);
             }
             else
             {

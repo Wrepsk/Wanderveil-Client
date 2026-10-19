@@ -28,7 +28,7 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportPreview p
         if (leaf is { } turning)
         {
             // Only the board turns; the plate's soft shadow margin stays behind.
-            if (hasCover) turning.Leaf(list, cover.Texture, new Vector2(42f / 1024f, 141f / 1536f), new Vector2(982f / 1024f, 1394f / 1536f), LeafProjection.Tint(Vector4.One, light));
+            if (hasCover) turning.Leaf(list, cover.Texture, new Vector2(42f / 1024f, 141f / 1536f), new Vector2(982f / 1024f, 1394f / 1536f), Vector4.One);
             else list.AddQuadFilled(turning.Project(0, 0), turning.Project(1, 0), turning.Project(1, 1), turning.Project(0, 1), LeafProjection.Tint(UiTheme.Edition, light));
         }
         else if (hasCover) list.AddImage(cover.Texture, window.Position, window.Max);
@@ -100,7 +100,7 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportPreview p
         var width = MathF.Min(paper.Size.X * 0.62f, height * image.Width / image.Height);
         height = width * image.Height / image.Width;
         var banner = new UiRect(new Vector2(paper.Position.X + (paper.Size.X - width) / 2, paper.Position.Y), new Vector2(width, height));
-        list.AddImage(image.Texture, banner.Position, banner.Max);
+        BookSurface.Image(list, image.Texture, banner.Position, banner.Max);
         // Proportions are in the banner's 200 x 460 design units.
         var unit = width / 200f;
         Lettering("01 / THE FOREST NATION", 34, 8, 2.5f, 0.85f);

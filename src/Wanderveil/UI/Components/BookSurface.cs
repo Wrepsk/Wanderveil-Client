@@ -12,6 +12,38 @@ internal static class BookSurface
 {
     internal static float ContentWidth(float width, bool spread) => width * (spread ? 0.35f : 0.70f);
 
+    // While a page turns, large page art is drawn in this many vertical strips so it bends with the
+    // curled leaf (text glyphs are already small). Set only around a turning leaf's content; UI thread.
+    internal static int Strips { get; set; } = 1;
+
+    internal static void Image(ImDrawListPtr list, ImTextureID texture, Vector2 min, Vector2 max, Vector2? uv0 = null, Vector2? uv1 = null)
+    {
+        var a = uv0 ?? Vector2.Zero;
+        var b = uv1 ?? Vector2.One;
+        if (Strips <= 1) { list.AddImage(texture, min, max, a, b); return; }
+        for (var index = 0; index < Strips; index++)
+        {
+            var t0 = index / (float)Strips;
+            var t1 = (index + 1) / (float)Strips;
+            list.AddImage(texture, new Vector2(min.X + (max.X - min.X) * t0, min.Y), new Vector2(min.X + (max.X - min.X) * t1, max.Y),
+                new Vector2(a.X + (b.X - a.X) * t0, a.Y), new Vector2(a.X + (b.X - a.X) * t1, b.Y));
+        }
+    }
+
+    internal static void Rect(ImDrawListPtr list, Vector2 min, Vector2 max, uint color)
+    {
+        if (Strips <= 1) { list.AddRectFilled(min, max, color); return; }
+        for (var index = 0; index < Strips; index++)
+            list.AddRectFilled(new Vector2(min.X + (max.X - min.X) * index / Strips, min.Y), new Vector2(min.X + (max.X - min.X) * (index + 1) / Strips, max.Y), color);
+    }
+
+    internal static void Line(ImDrawListPtr list, Vector2 from, Vector2 to, uint color, float thickness = 1f)
+    {
+        var segments = Math.Max(1, Strips);
+        for (var index = 0; index < segments; index++)
+            list.AddLine(Vector2.Lerp(from, to, index / (float)segments), Vector2.Lerp(from, to, (index + 1) / (float)segments), color, thickness);
+    }
+
     // The paper of one page in the open-book plate (pages at x 66-768 and 768-1470, y 66-958 of 1536 x 1024).
     internal static UiRect Paper(UiRect book, BookFace face, bool rightOfSpread = false)
     {
@@ -103,8 +135,8 @@ internal static class BookSurface
         var max = min + size;
         var drawList = ImGui.GetWindowDrawList();
         var mount = new Vector2(4f * context.Scale);
-        drawList.AddRectFilled(min - mount, max + mount, ImGui.GetColorU32(UiTheme.Paper));
-        drawList.AddImage(image.Texture, min, max);
+        Rect(drawList, min - mount, max + mount, ImGui.GetColorU32(UiTheme.Paper));
+        Image(drawList, image.Texture, min, max);
     }
 
     // The aspect-preserving placement Illustration draws, without drawing it.
@@ -120,7 +152,7 @@ internal static class BookSurface
         var aspect = image.Width / (float)image.Height;
         var size = new Vector2(MathF.Min(bounds.Size.X, bounds.Size.Y * aspect), MathF.Min(bounds.Size.Y, bounds.Size.X / aspect));
         var fitted = new UiRect(bounds.Position + (bounds.Size - size) / 2, size);
-        ImGui.GetWindowDrawList().AddImage(image.Texture, fitted.Position, fitted.Max);
+        Image(ImGui.GetWindowDrawList(), image.Texture, fitted.Position, fitted.Max);
         return fitted;
     }
 
@@ -133,7 +165,7 @@ internal static class BookSurface
         var aspect = (region.Y - region.X) * image.Width / image.Height;
         var size = new Vector2(MathF.Min(bounds.Size.X, bounds.Size.Y * aspect), MathF.Min(bounds.Size.Y, bounds.Size.X / aspect));
         var min = bounds.Position + ((bounds.Size - size) / 2f);
-        ImGui.GetWindowDrawList().AddImage(image.Texture, min, min + size,
+        Image(ImGui.GetWindowDrawList(), image.Texture, min, min + size,
             new Vector2(region.X, 0f), new Vector2(region.Y, 1f));
     }
 }

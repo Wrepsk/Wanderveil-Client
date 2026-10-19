@@ -5,24 +5,40 @@ using Wanderveil.UI.Primitives;
 
 namespace Wanderveil.UI.Components;
 
-// A flat leaf (the cover, or a page) rotating about a vertical hinge, drawn with perspective.
+// A leaf (the cover, or a page) rotating about a vertical hinge, drawn with perspective.
 // Source is the leaf's flat rectangle; its hinge-side edge stays on Hinge. Angle 0 lies flat on the
 // Direction side (+1: extends right of the hinge); pi lies flat on the other side, showing its back.
+// Bend curls a paper leaf: the surface direction changes by Bend radians from hinge to outer edge
+// (negative lags behind a turn that increases the angle). A stiff cover uses 0.
+// Depth is the camera distance in leaf heights; a curled page needs more so its bulge does not balloon.
 // Everything is drawn as textured quads, so artwork and lettering turn together.
-internal readonly record struct LeafProjection(UiRect Source, Vector2 Hinge, float Width, float Height, float Angle, int Direction)
+internal readonly record struct LeafProjection(UiRect Source, Vector2 Hinge, float Width, float Height, float Angle, int Direction, float Bend = 0f, float Depth = 3.6f)
 {
     internal bool ShowsBack => Angle > MathF.PI / 2;
 
     // Light falls off as the leaf turns edge-on, on either face.
-    internal float Light => 0.58f + 0.42f * MathF.Abs(MathF.Cos(Angle));
+    internal float Light => LightAt(0.5f);
+
+    // On a curled leaf each part faces the light differently.
+    internal float LightAt(float u) => 0.58f + 0.42f * MathF.Abs(MathF.Cos(Angle + Bend * u));
 
     // u: 0 at the hinge to 1 at the outer edge; v: 0 top to 1 bottom.
     internal Vector2 Project(float u, float v)
     {
         // Camera distance in leaf heights: far enough that the lifted leaf grows only a little.
-        var depth = Height * 3.6f;
-        var x = u * Width * MathF.Cos(Angle);
-        var z = u * Width * MathF.Sin(Angle);
+        var depth = Height * Depth;
+        float x, z;
+        if (MathF.Abs(Bend) < 1e-4f)
+        {
+            x = u * Width * MathF.Cos(Angle);
+            z = u * Width * MathF.Sin(Angle);
+        }
+        else
+        {
+            // The surface direction turns linearly along the leaf, so the leaf is a circular arc.
+            x = Width * (MathF.Sin(Angle + Bend * u) - MathF.Sin(Angle)) / Bend;
+            z = Width * (MathF.Cos(Angle) - MathF.Cos(Angle + Bend * u)) / Bend;
+        }
         var scale = depth / MathF.Max(depth * 0.2f, depth - z);
         return new Vector2(Hinge.X + Direction * x * scale, Hinge.Y + (v - 0.5f) * Height * scale);
     }
@@ -37,7 +53,7 @@ internal readonly record struct LeafProjection(UiRect Source, Vector2 Hinge, flo
 
     // Draws texture region uvHinge..uvOuter across the whole leaf in vertical strips (affine quads
     // bend perspective, so strips keep the distortion invisible).
-    internal void Leaf(ImDrawListPtr list, ImTextureID texture, Vector2 uvHinge, Vector2 uvOuter, uint color, int strips = 16)
+    internal void Leaf(ImDrawListPtr list, ImTextureID texture, Vector2 uvHinge, Vector2 uvOuter, Vector4 color, int strips = 24)
     {
         for (var index = 0; index < strips; index++)
         {
@@ -46,7 +62,7 @@ internal readonly record struct LeafProjection(UiRect Source, Vector2 Hinge, flo
             var x0 = uvHinge.X + (uvOuter.X - uvHinge.X) * u0;
             var x1 = uvHinge.X + (uvOuter.X - uvHinge.X) * u1;
             list.AddImageQuad(texture, Project(u0, 0), Project(u1, 0), Project(u1, 1), Project(u0, 1),
-                new Vector2(x0, uvHinge.Y), new Vector2(x1, uvHinge.Y), new Vector2(x1, uvOuter.Y), new Vector2(x0, uvOuter.Y), color);
+                new Vector2(x0, uvHinge.Y), new Vector2(x1, uvHinge.Y), new Vector2(x1, uvOuter.Y), new Vector2(x0, uvOuter.Y), Tint(color, LightAt((u0 + u1) / 2)));
         }
     }
 
@@ -99,7 +115,7 @@ internal readonly record struct LeafProjection(UiRect Source, Vector2 Hinge, flo
             ref var vertex = ref vertices.Ref(index);
             var u = back ? (flat.Max.X - vertex.Pos.X) / flat.Size.X : (vertex.Pos.X - flat.Position.X) / flat.Size.X;
             vertex.Pos = Project(u, (vertex.Pos.Y - flat.Position.Y) / flat.Size.Y);
-            vertex.Col = Shade(vertex.Col, Light, alpha);
+            vertex.Col = Shade(vertex.Col, LightAt(Math.Clamp(u, 0f, 1f)), alpha);
         }
     }
 

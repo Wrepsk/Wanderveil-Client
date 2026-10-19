@@ -36,7 +36,7 @@ internal struct PageFlow(Vector2 origin, float width, UiContext context, bool is
         if (isDrawing)
         {
             var start = origin + new Vector2(0f, offset);
-            ImGui.GetWindowDrawList().AddLine(start, start + new Vector2(width, 0f), ImGui.GetColorU32(UiTheme.Gold));
+            BookSurface.Line(ImGui.GetWindowDrawList(), start, start + new Vector2(width, 0f), ImGui.GetColorU32(UiTheme.Gold));
         }
         offset += context.Scale;
         Gap();

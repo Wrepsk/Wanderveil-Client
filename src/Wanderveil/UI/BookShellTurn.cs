@@ -18,6 +18,8 @@ internal sealed class BookShellTurn
     internal int Base { get; private set; }
     internal int Step { get; private set; } = 2;
     internal float Progress { get; private set; }
+    // True while heading to the later reading position.
+    internal bool Forward => goal > 0.5f;
     // The page the reader ends on when this turn completes (or now, when idle).
     internal int Target => Active ? Base + (goal > 0.5f ? Step : 0) : target;
     private int target;
