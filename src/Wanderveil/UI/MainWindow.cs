@@ -26,7 +26,7 @@ internal sealed class MainWindow : Window
         this.assets = assets;
         shell = new BookShell(assets, PassportPreview.Sample, settings: settings);
         SizeCondition = ImGuiCond.Always;
-        // Escape is handled in Draw so it plays the dismissal sequence instead of hiding at once.
+        // The shell handles Escape so it plays the dismissal sequence instead of hiding at once.
         RespectCloseHotkey = false;
         ForceMainWindow = true;
     }
@@ -84,7 +84,6 @@ internal sealed class MainWindow : Window
     {
         using var fonts = assets.LockFonts();
         var context = new UiContext(ShellStyle.Scale, ImGui.GetFontSize()) { TitleFont = fonts.Title, HeadingFont = fonts.Heading, BodyFont = fonts.Body, DisplayFont = fonts.Display, MonoFont = fonts.Mono, SignatureFont = fonts.Signature, Fonts = fonts };
-        if (ImGui.IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows) && ImGui.IsKeyPressed(ImGuiKey.Escape, false)) shell.RequestDismiss();
         var intent = shell.Draw(new UiRect(ImGui.GetWindowPos(), ImGui.GetWindowSize()), context);
         if (intent.Drag != Vector2.Zero && rest is { } position) rest = position + intent.Drag;
         if (intent.Close) IsOpen = false;

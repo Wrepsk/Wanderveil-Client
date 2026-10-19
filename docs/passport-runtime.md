@@ -49,6 +49,19 @@ Settings are pages of the book. The printed Settings mark riffles forward to the
 - [A riffle in flight](previews/passport/riffle.png)
 - [Settings pages](previews/passport/settings.png)
 
+## Studio
+
+The Studio tab opens on a template chooser. The left page introduces Studio and says plainly that drafts stay in memory until the plugin unloads and nothing is saved, published, or sent. The right page lists **Postcard** and **Stamp Spot** with a **Start …** link each, then Riddle, Challenge, and Trail under *Coming later* as plain text that cannot be chosen.
+
+Starting a template turns the spread into a draft: printed fields on the left (each a native one-line text input on a ruled line, in the page's own type) and a framed preview card on the right that updates as you type. The cursor starts in the first field; Tab moves between fields. Escape inside a field only leaves it and keeps the text; with no field active it closes the passport as usual. Fields are one line, stripped of control characters, and limited by user-perceived characters (the label shows how many are left near the limit). A status line names the required fields still empty. **Save draft** and **Publish** are printed but inert, with the reason beneath them, so draft, saved, and published stay distinct; the preview is marked *Draft / not saved / not published* and its stamp *a design preview, not an issued stamp*. **« All templates** returns to the chooser and keeps each template's draft (its link becomes **Continue your draft**); visiting other sections keeps the open draft too. A postcard has no picture yet: a placeholder says uploads come later. On a single page the preview follows the fields.
+
+`StudioTemplate` (catalog and fields) and `StudioDraft` (values, limits, missing fields, and the unavailable save/publish states) hold no ImGui or host state; `StudioView` draws them, and `BookControl.Field` is the printed input. Switching between the chooser and a draft is immediate rather than a page turn.
+
+- [Template chooser](previews/passport/studio-templates.png)
+- [Postcard draft and preview](previews/passport/studio-postcard.png)
+- [Stamp spot draft with a missing field](previews/passport/studio-stamp-spot.png)
+- [Postcard draft on a single page](previews/passport/studio-narrow.png)
+
 ## Page turns (Milestone 4 experiment)
 
 Clicking a page side (or Page Up/Down) turns the page as a paper leaf rotating about the spine in 0.5 s. It curls as it goes: its outer edge trails the motion, most while it stands upright, so the page bows into an arc and lies flat again as it lands. Perspective, light that varies across the curve, and a shadow on the paper it hangs over complete it. The leaf carries its real page content: the front shows the page being turned, the back the page it lands as, including text, portrait, stamps, and the nation banner. The two pages that stay put remain live and readable throughout. On a single page, the page swings away to the left about its outer edge and fades, revealing the next page beneath it. Clicking the same way again lands the current turn and starts the next; clicking the other way reverses the turn from where the leaf is. Reduced motion turns instantly.

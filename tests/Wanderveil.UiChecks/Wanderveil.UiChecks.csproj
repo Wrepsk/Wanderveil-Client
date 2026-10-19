@@ -29,5 +29,6 @@
     <Compile Include="../../src/Wanderveil/UI/Components/*.cs" Link="UI/Components/%(Filename)%(Extension)" />
     <Compile Include="../../src/Wanderveil/Features/Passport/*.cs" Link="Passport/%(Filename)%(Extension)" />
     <Compile Include="../../src/Wanderveil/Features/Discover/*.cs" Link="Discover/%(Filename)%(Extension)" />
+    <Compile Include="../../src/Wanderveil/Features/Studio/*.cs" Link="Studio/%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>

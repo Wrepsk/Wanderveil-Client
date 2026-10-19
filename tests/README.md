@@ -1,6 +1,6 @@
 # Automated checks
 
-`Wanderveil.UiChecks` is a package-free console check project included in `Wanderveil.slnx`. It compiles the same shared UI, Passport, and Discover sources as the plugin and uses the installed Dalamud ImGui managed/native libraries. No FFXIV process or backend is required. The prerequisite is Windows/.NET 10 plus development assemblies, using the standard path or `DALAMUD_HOME` as documented in the [development guide](../docs/development.md).
+`Wanderveil.UiChecks` is a package-free console check project included in `Wanderveil.slnx`. It compiles the same shared UI, Passport, Discover, and Studio sources as the plugin and uses the installed Dalamud ImGui managed/native libraries. No FFXIV process or backend is required. The prerequisite is Windows/.NET 10 plus development assemblies, using the standard path or `DALAMUD_HOME` as documented in the [development guide](../docs/development.md).
 
 ```powershell
 dotnet restore Wanderveil.slnx --locked-mode
@@ -10,7 +10,7 @@ dotnet run --project tests/Wanderveil.UiChecks -c Release -p:Platform=x64 --no-b
 
 The final directory argument is optional. With it, the test-only CPU rasterizer writes BMP previews, three Passport target PNGs, and complete-shell PNGs under the ignored artifact directory. Shell previews use production window flags/preparation against an authored backdrop to expose transparency and the actual host composition. Native libraries/test code never enter the plugin package. Material checks use Windows Desktop drawing APIs to decode/export PNGs and local Segoe UI as a body-font surrogate; that font is not redistributed. Assets/heading fonts come from the same files embedded in the plugin.
 
-All 1333 checks pass locally in both Debug and Release. Coverage includes:
+All checks pass locally: 3473 in Debug and 3480 in Release when writing previews (preview capture adds frames that are themselves checked). Coverage includes:
 
 - Page geometry across 45 width/scale/text-size combinations, invalid geometry, and spread/stack transitions.
 - Paper body/caption and button-state label contrast.
@@ -25,6 +25,7 @@ All 1333 checks pass locally in both Debug and Release. Coverage includes:
 - Cover/identity/demo collection visual targets with actual material/portrait/stamp textures and multiple font-atlas pages. These remain presentation specimens, not runtime collection routes.
 - Complete borderless shell at wide/narrow/compact/enlarged-text/doubled-host-scale sizes: viewport fitting and rounded breakpoints, stationary host through size changes, internal page scrolling, identity/notes navigation, bookmark press/release/cancel, native directional/Space activation, Discover detail/Back inside a page, attached settings/close/size actions, outer-leather drag intent, missing-material fallback, and style cleanup.
 - Gridania cover/colorway and nation/identity/collection targets, default page fit, illustration aspect/bounds, narrow pages, font stack cleanup, and enlarged/long information scrolling. Gallery and runtime share composition; selected images and Caveat are bundled, while unused studies/gallery code remain excluded.
+- Studio templates and drafts: Postcard and Stamp Spot lead and later templates cannot start a draft; one-line cleaning, character limits that never split an emoji, missing required fields, and save/publish reported unavailable. In the real shell at wide, narrow, and enlarged-text sizes: the Studio tab, starting a postcard from its printed link, typing into the focused first field, Tab between fields, Escape leaving a field without closing the passport or erasing its text, spreads fitting their paper, drafts kept across templates and sections, and Escape closing the passport once no field is active.
 - Actual built-plugin manifest resource presence and hash equality for the selected Gridania images/font; native cover opening, ordered wide/narrow page navigation, final-page bounds, backward navigation, return-to-cover keyboard focus, new-session reset, expanded catalogs, and invalid/duplicate IDs.
 
 This is an executable check suite: failures exit nonzero; use `dotnet run` as above rather than expecting a `dotnet test` adapter. CI runs it for both build configurations and uploads previews. It does not prove game-host lifecycle, localization glyph coverage, GPU output, or performance. Routine commits use appropriate automated evidence and preview review without requiring user in-game testing.

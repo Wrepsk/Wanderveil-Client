@@ -119,6 +119,51 @@ internal static class BookControl
         finally { ImGui.PopStyleColor(4); ImGui.PopID(); }
     }
 
+    // A labelled line to write on: a native single-line text input with no box, inked on a ruled line.
+    // The page's body font is drawn at the page's size, so typed text matches the printed text around it.
+    // maxLength is in characters; the caller keeps the value within it. id stays stable while the label changes.
+    internal static bool Field(string id, string label, string hint, ref string value, int maxLength, UiContext context, bool focus = false)
+    {
+        UiTypography.Text(label, TextRole.Caption, context, UiTheme.MutedInk);
+        var width = UiLayout.ContentWidth;
+        var list = ImGui.GetWindowDrawList();
+        ImGui.PushID(id);
+        ImGui.PushFont(UiTypography.ResolveFont(value + hint, TextRole.Body, context));
+        ImGui.SetWindowFontScale(UiTypography.Size(TextRole.Body, context) / ImGui.GetFontSize());
+        ImGui.PushStyleVar(ImGuiStyleVar.FramePadding, new Vector2(2, 3) * context.Scale);
+        ImGui.PushStyleVar(ImGuiStyleVar.FrameBorderSize, 0f);
+        ImGui.PushStyleColor(ImGuiCol.FrameBg, Vector4.Zero);
+        ImGui.PushStyleColor(ImGuiCol.FrameBgHovered, UiTheme.PaperInset with { W = 0.35f });
+        ImGui.PushStyleColor(ImGuiCol.FrameBgActive, UiTheme.PaperInset with { W = 0.55f });
+        ImGui.PushStyleColor(ImGuiCol.Text, UiTheme.Ink);
+        ImGui.PushStyleColor(ImGuiCol.TextDisabled, UiTheme.MutedInk with { W = 0.7f });
+        ImGui.PushStyleColor(ImGuiCol.TextSelectedBg, UiTheme.Gold with { W = 0.45f });
+        ImGui.PushStyleColor(ImGuiCol.NavHighlight, UiTheme.Ink);
+        try
+        {
+            ImGui.SetNextItemWidth(width);
+            if (focus) ImGui.SetKeyboardFocusHere();
+            // The native limit is in UTF-8 bytes; four per character leaves room for any script.
+            var before = value;
+            var changed = ImGui.InputTextWithHint("##Field", hint, ref value, maxLength * 4 + 1);
+            // Native Escape reverts the whole edit; here it only leaves the field, keeping what was written.
+            if (ImGui.IsItemDeactivated() && ImGui.IsKeyPressed(ImGuiKey.Escape, false)) { value = before; changed = false; }
+            var min = ImGui.GetItemRectMin();
+            var max = ImGui.GetItemRectMax();
+            var ink = ImGui.IsItemActive() ? UiTheme.Ink : UiTheme.Edition with { W = ImGui.IsItemHovered() ? 0.7f : 0.4f };
+            BookSurface.Line(list, new Vector2(min.X, max.Y), max, ImGui.GetColorU32(ink), MathF.Max(1, context.Scale));
+            return changed;
+        }
+        finally
+        {
+            ImGui.PopStyleColor(7);
+            ImGui.PopStyleVar(2);
+            ImGui.SetWindowFontScale(1f);
+            ImGui.PopFont();
+            ImGui.PopID();
+        }
+    }
+
     private static void Tab(ImDrawListPtr list, UiRect bounds, UiContext context, bool selected, bool hovered)
     {
         // The tab runs down behind the board; the book surface drawn afterwards hides its foot.

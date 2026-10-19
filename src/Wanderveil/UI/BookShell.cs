@@ -5,6 +5,7 @@ using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using Wanderveil.Features.Discover;
 using Wanderveil.Features.Passport;
+using Wanderveil.Features.Studio;
 using Wanderveil.UI.Components;
 using Wanderveil.UI.Primitives;
 
@@ -28,6 +29,7 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
     private readonly PassportDocumentView passport = new(assets, profile);
     private readonly IReadOnlyList<PassportPage> documentPages = ValidatePages(pages ?? PassportDocumentView.SamplePages);
     private readonly DiscoverView discover = new(DiscoveryPreview.Samples);
+    private readonly StudioView studio = new();
     private readonly BookShellMotion motion = Arrived();
     private readonly BookShellTurn turn = new();
     private readonly BookShellRiffle riffle = new();
@@ -53,6 +55,7 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
     internal int PageCount => documentPages.Count;
     internal float PreferredWidth { get; private set; } = 1040;
     internal DiscoveryPreview? SelectedDiscovery => discover.SelectedDiscovery;
+    internal StudioView Studio => studio;
     // Largest scroll range among the pages drawn last frame; zero when every page fits its paper.
     internal float PageOverflow { get; private set; }
     internal bool IsTurning => turn.Active;
@@ -69,6 +72,8 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
     internal BookShellIntent Draw(UiRect bounds, UiContext context)
     {
         if (motion.Phase == BookPhase.Hidden) return new BookShellIntent(true, Vector2.Zero);
+        // Escape plays the dismissal, except while a field is being written in: there it only leaves the field.
+        if (ImGui.IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows) && !ImGui.IsAnyItemActive() && ImGui.IsKeyPressed(ImGuiKey.Escape, false)) motion.Dismiss();
         if (motion.Cover <= 0f) return DrawClosed(bounds, context);
         if (motion.Cover < 1f || !motion.WantsOpen) return DrawTurning(bounds, context);
         var turning = Section == BookSection.Passport && turn.Active && !riffle.Active;
@@ -168,6 +173,11 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
                     break;
                 case BookSection.Discover when side != Side.Left:
                     discover.Draw(type, onPaper: true);
+                    break;
+                case BookSection.Studio:
+                    if (side != Side.Right) studio.DrawLeft(type, side == Side.Single);
+                    if (side == Side.Single) ImGui.Dummy(new Vector2(0, 24 * type.Scale));
+                    if (side != Side.Left) studio.DrawRight(type);
                     break;
                 default:
                     Introduction(section, type);
@@ -688,9 +698,9 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
     {
         UiTypography.Text("WANDERVEIL / " + Labels[(int)section].ToUpperInvariant(), TextRole.Caption, context, UiTheme.MutedInk);
         ImGui.Dummy(new Vector2(0, 16 * context.Scale));
-        UiTypography.Text(section switch { BookSection.Discover => "Every place has a story.", BookSection.Echoes => "Beyond the next horizon", _ => "Leave a discovery" }, TextRole.Title, context, UiTheme.Ink);
+        UiTypography.Text(section == BookSection.Discover ? "Every place has a story." : "Beyond the next horizon", TextRole.Title, context, UiTheme.Ink);
         ImGui.Dummy(new Vector2(0, 12 * context.Scale));
-        UiTypography.Text(section == BookSection.Discover ? "A journal of imagined places. Curated demo discoveries; no location is read." : "Coming later. Creation, publishing, and creator-made adventures are unavailable in this preview.", TextRole.Body, context, UiTheme.Ink);
+        UiTypography.Text(section == BookSection.Discover ? "A journal of imagined places. Curated demo discoveries; no location is read." : "Coming later. Creator-made adventures are unavailable in this preview.", TextRole.Body, context, UiTheme.Ink);
     }
 
     internal static void PrepareWindow(Vector2 size)

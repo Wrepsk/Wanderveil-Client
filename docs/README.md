@@ -20,7 +20,7 @@ Status: Phase 01 UI prototype, 18 October 2026. Shared components, static Passpo
 
 1. Review the Gridania cover/colorway, banner/map introduction, portrait/signature versus information identity spread, and stamp collection targets; refine the artwork/material model before broader customization.
 2. Review the connected static runtime prototype, then add closed bottom-center arrival and close-to-cover dismissal motion; separately evaluate a bounded 2.5D page turn. Review previews between milestones; do not introduce CrystalRenderer without a separate decision.
-3. Resume Studio/Echoes and remaining Phase 1 controls once the visual language is established. Collection/persistence remain Phase 2.
+3. Studio's chooser and draft preview are implemented; Echoes and the remaining Phase 1 controls/states follow. Collection/persistence remain Phase 2.
 
 No account, private repository, production backend, or advanced renderer is needed for those product steps. Unresolved online contracts, identity proof, and renderer delivery require explicit decisions before implementation.
 
