@@ -1,4 +1,5 @@
 using System;
+using Wanderveil.UI.Primitives;
 
 namespace Wanderveil.UI;
 
@@ -10,8 +11,6 @@ namespace Wanderveil.UI;
 // reverses the current turn from where it is. Reduced motion turns instantly with the same result.
 internal sealed class BookShellTurn
 {
-    internal const float TurnSeconds = 0.5f;
-
     private float goal;
 
     internal bool Active { get; private set; }
@@ -57,7 +56,7 @@ internal sealed class BookShellTurn
     {
         if (!Active) return;
         if (reduced) { Finish(); return; }
-        var dt = Math.Clamp(float.IsFinite(seconds) ? seconds : 0f, 0f, 0.1f) / TurnSeconds;
+        var dt = UiMotion.Frame(seconds) / UiMotion.PageTurn;
         Progress = goal > Progress ? MathF.Min(goal, Progress + dt) : MathF.Max(goal, Progress - dt);
         if (Progress == goal) Finish();
     }

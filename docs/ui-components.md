@@ -6,6 +6,7 @@ Status: implemented foundations for static Passport and Discover previews, 18 Oc
 | --- | --- |
 | `UI/Primitives/UiContext.cs` | Host scale and actual font size passed explicitly |
 | `UiTheme.cs`, `UiMetrics.cs` | Semantic ink/paper/action colors and common dimensions |
+| `UiMotion.cs` | Motion tokens: every duration, the shared cubic easing, and the longest frame motion may advance; Reduced motion makes each instant |
 | `UiTypography.cs` | Title/Heading/Body/Caption sizing; matching text measurement/drawing and layout reservation |
 | `UI/Components/PageSurface.cs` | Paper, decorative trim, and shadow |
 | `PageFlow.cs` | One composition for measuring and drawing variable-height content |

@@ -1,16 +1,14 @@
 using System;
+using Wanderveil.UI.Primitives;
 
 namespace Wanderveil.UI;
 
 // Timing for a riffle: several leaves flipping in quick succession when the book jumps to another
-// section, like an old cartoon flipbook settling on a page. Each leaf turns for LeafSeconds, starting
-// Stagger after the previous one. Direction +1 flips right-to-left (to a later section), -1 the reverse.
+// section, like an old cartoon flipbook settling on a page. Each leaf turns for UiMotion.RiffleLeaf,
+// starting UiMotion.RiffleStagger after the previous one. Direction +1 flips right-to-left (to a later section), -1 the reverse.
 // The book is already logically on its destination; this only describes the leaves in between.
 internal sealed class BookShellRiffle
 {
-    internal const float LeafSeconds = 0.34f;
-    internal const float Stagger = 0.07f;
-
     private float elapsed;
 
     internal bool Active { get; private set; }
@@ -18,7 +16,7 @@ internal sealed class BookShellRiffle
     internal int Leaves { get; private set; }
     internal BookSection FromSection { get; private set; }
     internal int FromPage { get; private set; }
-    internal float Seconds => LeafSeconds + Stagger * (Leaves - 1);
+    internal float Seconds => UiMotion.RiffleLeaf + UiMotion.RiffleStagger * (Leaves - 1);
 
     // More leaves for a longer jump: five for a neighbouring section, up to nine.
     internal static int LeavesFor(int distance) => Math.Clamp(3 + 2 * Math.Abs(distance), 5, 9);
@@ -37,12 +35,12 @@ internal sealed class BookShellRiffle
     {
         if (!Active) return;
         if (reduced) { Active = false; return; }
-        elapsed += Math.Clamp(float.IsFinite(seconds) ? seconds : 0f, 0f, 0.1f);
+        elapsed += UiMotion.Frame(seconds);
         if (elapsed >= Seconds) Active = false;
     }
 
     internal void Reset() { Active = false; elapsed = 0f; }
 
     // 0 before leaf index starts to turn, 1 once it has landed.
-    internal float Progress(int index) => !Active ? 1f : Math.Clamp((elapsed - index * Stagger) / LeafSeconds, 0f, 1f);
+    internal float Progress(int index) => !Active ? 1f : Math.Clamp((elapsed - index * UiMotion.RiffleStagger) / UiMotion.RiffleLeaf, 0f, 1f);
 }

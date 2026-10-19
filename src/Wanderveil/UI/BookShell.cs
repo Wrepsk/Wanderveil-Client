@@ -51,7 +51,7 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
     internal bool IsBookOpen => motion.WantsOpen;
     internal BookPhase Phase => motion.Phase;
     // Eased 0 (below the screen) to 1 (at rest); the host window offsets itself by it.
-    internal float Lift => BookShellMotion.Ease(motion.Lift);
+    internal float Lift => UiMotion.Ease(motion.Lift);
     internal bool ReducedMotion { get => motion.ReducedMotion; set => motion.ReducedMotion = value; }
     private bool focusSection;
     internal int PageCount => documentPages.Count;
@@ -289,7 +289,7 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
         void DrawTurn()
         {
             var first = turn.Base;
-            var angle = MathF.PI * BookShellMotion.Ease(turn.Progress);
+            var angle = MathF.PI * UiMotion.Ease(turn.Progress);
             // Paper curls as it turns: its outer edge trails the motion, most while it stands upright.
             var bend = -0.9f * MathF.Sin(angle) * (turn.Forward ? 1f : -1f);
             if (layout.IsSpread)
@@ -339,7 +339,7 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
             // Leaves still on the right lie with the earliest on top; leaves already on the left pile up
             // with the latest on top. Draw from the bottom of each pile.
             var moving = Enumerable.Range(0, count).Where(index => riffle.Progress(index) is > 0f and < 1f).ToArray();
-            var angles = moving.ToDictionary(index => index, index => MathF.PI * (forward ? BookShellMotion.Ease(riffle.Progress(index)) : 1f - BookShellMotion.Ease(riffle.Progress(index))));
+            var angles = moving.ToDictionary(index => index, index => MathF.PI * (forward ? UiMotion.Ease(riffle.Progress(index)) : 1f - UiMotion.Ease(riffle.Progress(index))));
             var left = moving.Where(index => angles[index] > MathF.PI / 2);
             var right = moving.Where(index => angles[index] <= MathF.PI / 2);
             var order = forward ? left.OrderBy(index => index).Concat(right.OrderByDescending(index => index)) : left.OrderByDescending(index => index).Concat(right.OrderBy(index => index));
@@ -439,15 +439,15 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
     // on the Settings pages, which have no tab, it stays rolled up.
     private void Ribbon(BookShellLayout layout, UiContext context)
     {
-        var dt = Math.Clamp(ImGui.GetIO().DeltaTime, 0f, 0.1f);
+        var dt = UiMotion.Frame(ImGui.GetIO().DeltaTime);
         var wanted = Section == BookSection.Settings ? (BookSection?)null : Section;
         if (wanted != ribbonSection || wanted == null)
         {
-            ribbonExtension = ReducedMotion ? 0f : ribbonExtension - dt / 0.12f;
+            ribbonExtension = ReducedMotion ? 0f : ribbonExtension - dt / UiMotion.RibbonRoll;
             if (ribbonExtension <= 0f) { ribbonExtension = 0f; if (wanted is { } next) ribbonSection = next; }
         }
-        else ribbonExtension = ReducedMotion ? 1f : motion.Reveal < 0.5f || riffle.Active ? ribbonExtension : MathF.Min(1f, ribbonExtension + dt / 0.22f);
-        if (ribbonExtension > 0f) BookControl.Ribbon(layout.Bookmark((int)ribbonSection), context, BookShellMotion.Ease(ribbonExtension));
+        else ribbonExtension = ReducedMotion ? 1f : motion.Reveal < 0.5f || riffle.Active ? ribbonExtension : MathF.Min(1f, ribbonExtension + dt / UiMotion.RibbonUnroll);
+        if (ribbonExtension > 0f) BookControl.Ribbon(layout.Bookmark((int)ribbonSection), context, UiMotion.Ease(ribbonExtension));
     }
 
     // Moves to another section by riffling pages in book order: a later section flips right-to-left.
@@ -600,7 +600,7 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
     {
         pressing = dragging = false;
         var layout = BookShellLayout.Create(bounds, context, 0);
-        var eased = BookShellMotion.Ease(motion.Cover);
+        var eased = UiMotion.Ease(motion.Cover);
         var angle = MathF.PI * eased;
         var book = layout.Book;
         var spread = layout.IsSpread;

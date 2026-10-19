@@ -1,4 +1,5 @@
 using System;
+using Wanderveil.UI.Primitives;
 
 namespace Wanderveil.UI;
 
@@ -12,12 +13,6 @@ internal enum BookPhase { Hidden, Entering, Closed, Opening, Open, Closing, Exit
 // straight to the goal with the same results.
 internal sealed class BookShellMotion
 {
-    internal const float SlideSeconds = 0.42f;
-    internal const float CoverSeconds = 0.6f;
-    // Dismissing closes the cover quickly so putting the passport away never feels like waiting.
-    internal const float DismissCoverSeconds = 0.25f;
-    internal const float RevealSeconds = 0.18f;
-
     private enum Goal { Hidden, Closed, Open }
     private Goal goal = Goal.Hidden;
 
@@ -67,23 +62,15 @@ internal sealed class BookShellMotion
 
     internal void Update(float seconds)
     {
-        // A long hitch must not skip a sequence's ordering; at most one frame of a slow display moves.
-        var dt = Math.Clamp(float.IsFinite(seconds) ? seconds : 0f, 0f, 0.1f);
+        var dt = UiMotion.Frame(seconds);
         if (ReducedMotion) { Finish(); return; }
         var target = Target(goal);
         var landed = Cover >= 1f;
-        if (Cover > target.Cover) Cover = MathF.Max(target.Cover, Cover - dt / (goal == Goal.Hidden ? DismissCoverSeconds : CoverSeconds));
-        else if (Lift != target.Lift) Lift = Step(Lift, target.Lift, dt / SlideSeconds);
-        else if (Cover < target.Cover) Cover = MathF.Min(target.Cover, Cover + dt / CoverSeconds);
+        if (Cover > target.Cover) Cover = MathF.Max(target.Cover, Cover - dt / (goal == Goal.Hidden ? UiMotion.QuickCover : UiMotion.Cover));
+        else if (Lift != target.Lift) Lift = Step(Lift, target.Lift, dt / UiMotion.Slide);
+        else if (Cover < target.Cover) Cover = MathF.Min(target.Cover, Cover + dt / UiMotion.Cover);
         // Pages start to appear on the frame after the cover lands.
-        Reveal = landed && Cover >= 1f && goal == Goal.Open ? MathF.Min(1f, Reveal + dt / RevealSeconds) : 0f;
-    }
-
-    // Smooth acceleration and deceleration for both slides and the cover swing.
-    internal static float Ease(float t)
-    {
-        t = Math.Clamp(t, 0f, 1f);
-        return t < 0.5f ? 4f * t * t * t : 1f - MathF.Pow(-2f * t + 2f, 3f) / 2f;
+        Reveal = landed && Cover >= 1f && goal == Goal.Open ? MathF.Min(1f, Reveal + dt / UiMotion.Reveal) : 0f;
     }
 
     // Page content hides the moment the book starts to close; it reappears only after a landing.

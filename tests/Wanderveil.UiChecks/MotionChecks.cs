@@ -33,7 +33,7 @@ internal static class MotionChecks
         check(motion.Phase == BookPhase.Entering && motion.Lift == 0f, "Summoning does not start below the screen.");
         var frames = Until(motion, () => motion.Phase == BookPhase.Closed, check);
         check(motion.Lift == 1f && motion.Cover == 0f, "Arrival does not rest closed.");
-        check(Math.Abs(frames - BookShellMotion.SlideSeconds * 60) <= 2, "Arrival does not take its slide duration.");
+        check(Math.Abs(frames - UiMotion.Slide * 60) <= 2, "Arrival does not take its slide duration.");
         check(!motion.WantsOpen, "Arrival opens the cover by itself.");
 
         motion.Open();
@@ -73,14 +73,14 @@ internal static class MotionChecks
         }
         var dismissFrames = CloseFrames(true);
         var coverFrames = CloseFrames(false);
-        check(Math.Abs(dismissFrames - BookShellMotion.DismissCoverSeconds * 60) <= 2 && Math.Abs(coverFrames - BookShellMotion.CoverSeconds * 60) <= 2 && dismissFrames < coverFrames,
+        check(Math.Abs(dismissFrames - UiMotion.QuickCover * 60) <= 2 && Math.Abs(coverFrames - UiMotion.Cover * 60) <= 2 && dismissFrames < coverFrames,
             "Dismissing does not close the cover quickly, or closing to the cover is not unhurried.");
 
-        check(BookShellMotion.Ease(0) == 0 && BookShellMotion.Ease(1) == 1 && Math.Abs(BookShellMotion.Ease(0.5f) - 0.5f) < 1e-5f, "Easing does not span 0 to 1 symmetrically.");
+        check(UiMotion.Ease(0) == 0 && UiMotion.Ease(1) == 1 && Math.Abs(UiMotion.Ease(0.5f) - 0.5f) < 1e-5f, "Easing does not span 0 to 1 symmetrically.");
         var previous = 0f;
         for (var step = 1; step <= 100; step++)
         {
-            var eased = BookShellMotion.Ease(step / 100f);
+            var eased = UiMotion.Ease(step / 100f);
             check(eased >= previous, "Easing is not monotonic.");
             previous = eased;
         }
@@ -247,7 +247,7 @@ internal static class MotionChecks
             Step();
             closing |= shell.Phase == BookPhase.Closing;
             if (artifacts != null && frame == 14) SoftwarePreview.Save(Path.Combine(artifacts, "passport-motion-closing.png"), host);
-            check(!(shell.Lift < 1f && BookShellMotion.Ease(1) > 0 && shell.Phase == BookPhase.Closing), "The shell slides while closing.");
+            check(!(shell.Lift < 1f && UiMotion.Ease(1) > 0 && shell.Phase == BookPhase.Closing), "The shell slides while closing.");
             hidden = intent.Close;
         }
         check(closing && hidden && shell.Phase == BookPhase.Hidden, "Dismissing the open shell does not close, slide away, and ask the host to hide.");
@@ -288,7 +288,7 @@ internal static class MotionChecks
         check(page == 2 && turn.Active && turn.Base == 0 && turn.Progress == 0f, "A forward turn does not start from the current spread.");
         var frames = 0;
         while (turn.Active && frames < 120) { turn.Update(Frame, false); frames++; }
-        check(!turn.Active && turn.Target == 2 && Math.Abs(frames - BookShellTurn.TurnSeconds * 60) <= 2, "A turn does not land on the next spread in its duration.");
+        check(!turn.Active && turn.Target == 2 && Math.Abs(frames - UiMotion.PageTurn * 60) <= 2, "A turn does not land on the next spread in its duration.");
 
         page = turn.Request(-1, 2, 2, 6, false);
         check(page == 0 && turn.Base == 0 && turn.Progress == 1f, "A backward turn does not start from the later spread.");
@@ -352,11 +352,11 @@ internal static class MotionChecks
         var riffle = new BookShellRiffle();
         riffle.Start(-1, 5, BookSection.Studio, 2, false);
         check(riffle.Active && riffle.Direction == -1 && riffle.FromSection == BookSection.Studio && riffle.FromPage == 2, "A riffle does not remember where it started.");
-        riffle.Update(BookShellRiffle.Stagger * 1.5f, false);
+        riffle.Update(UiMotion.RiffleStagger * 1.5f, false);
         check(riffle.Progress(0) > 0f && riffle.Progress(1) > 0f && riffle.Progress(2) == 0f, "Riffle leaves do not start one after another.");
         var frames = 0;
         while (riffle.Active && frames < 200) { riffle.Update(Frame, false); frames++; }
-        check(Math.Abs(frames - (riffle.Seconds - 0.1f) * 60) <= 2 && riffle.Progress(4) == 1f, "A riffle does not finish in its duration with every leaf landed.");
+        check(Math.Abs(frames - (riffle.Seconds - UiMotion.LongestFrame) * 60) <= 2 && riffle.Progress(4) == 1f, "A riffle does not finish in its duration with every leaf landed.");
         riffle.Start(1, 7, BookSection.Passport, 0, true);
         check(!riffle.Active, "Reduced motion riffles.");
     }
