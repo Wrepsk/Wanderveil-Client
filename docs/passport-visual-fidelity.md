@@ -26,7 +26,7 @@ These previews run the production `BookShell.Draw`, window flags, and host prepa
 
 Viewport fitting and actual font size select a spread or one page. Single-page Passport provides immediate identity/notes navigation. Controls stack when required by compact/enlarged layouts. The selected bookmark receives keyboard focus on opening; native directional navigation and Space activate actions. Details still focus Back and preserve browse scroll. Escape uses Dalamud's existing close handling. Dragging is limited to a leather grip; plus/minus adjust a session-only preferred size. Settings retains its separate conventional window. Reduced motion is fully immediate because this slice adds no animation.
 
-This remains a stationary presentation prototype. Cover and collection are review targets, not runtime routes. Full logical-page/collection composition and motion follow after visual review. The host retains ImGui's rectangular input region, including transparent material margins; this is not per-pixel pointer hit testing. Native previews validate input/layout and style restoration, not live Dalamud hotkey/lifecycle/GPU behavior.
+This remains a stationary presentation prototype. Cover and collection are review targets, not runtime routes. Full logical-page/collection composition and motion follow after visual review. At the time the host kept ImGui's rectangular input region, including transparent material margins; since then only the book's board, tabs, and ribbon take the mouse (see [input ownership](passport-runtime.md#input-ownership)). It is rectangle-based, not per-pixel hit testing. Native previews validate input/layout and style restoration, not live Dalamud hotkey/lifecycle/GPU behavior.
 
 ## Visual targets
 

@@ -71,6 +71,12 @@ Starting a template turns the spread into a draft: printed fields on the left (e
 - [Stamp spot draft with a missing field](previews/passport/studio-stamp-spot.png)
 - [Postcard draft on a single page](previews/passport/studio-narrow.png)
 
+## Input ownership
+
+The passport's window is a transparent rectangle larger than the book (room for the tabs, the plate's shadow, and the closed cover's margin). Only the parts the book actually draws take the mouse: the board of the open book (`BookSurface.Board`, the plate's opaque area), each tab with its ribbon, the closed cover's board, and, while the cover swings, the whole window. Anywhere else the window sets `NoMouseInputs`, so clicks, scrolls, and hovering pass through to the game. A press, drag, or edit that began on the book keeps the mouse until it ends, so dragging the book past its edge keeps moving it, and while a Studio field is active the first click off the book only leaves the field. These regions are rectangles, not per-pixel shapes, and they are decided from the previous frame, so there is one frame of lag as the mouse crosses an edge.
+
+While a Studio field is active ImGui reports that it wants text input, which is what the host uses to keep typed keys from the game; leaving the field hands them back. The book's own keys (Escape, Page Up/Down, Home, Space/Enter on the cover) never act while a field is active. Whether the game still receives movement keys while the book merely has focus (no field active) depends on Dalamud and is not yet observed in game.
+
 ## Empty, missing, long, and Japanese content
 
 Each section explains its own empty state on its pages: Discover says the sample journal is empty, Echoes says there is no sample dossier and that chapters appear once there is one, and Studio says no template can be started when none is available (later templates are still listed). Nothing in these states is fetched. `BookShellContent` carries the discoveries, dossier, and templates into the shell, so these states are exercised in the real book.

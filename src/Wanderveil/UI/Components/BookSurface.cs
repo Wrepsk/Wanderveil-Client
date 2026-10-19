@@ -57,6 +57,16 @@ internal static class BookSurface
         return new UiRect(book.Position + new Vector2(book.Size.X * x0, natural * 66f / 1024f), new Vector2(book.Size.X * (x1 - x0), natural * 892f / 1024f));
     }
 
+    // The opaque board of the open-book plate (x 40-1496, y 44-980 of 1536 x 1024); around it is only shadow.
+    // A single page shows one half of the plate; tall pages stretch between the same top and bottom margins.
+    internal static UiRect Board(UiRect book, BookFace face)
+    {
+        var natural = NaturalHeight(book.Size.X, face == BookFace.Spread);
+        var (x0, x1) = face switch { BookFace.Spread => (40f / 1536f, 1496f / 1536f), BookFace.Right => (0f, 728f / 768f), _ => (40f / 768f, 1f) };
+        var top = natural * 44f / 1024f;
+        return new UiRect(book.Position + new Vector2(book.Size.X * x0, top), new Vector2(book.Size.X * (x1 - x0), book.Size.Y - 2 * top));
+    }
+
     internal static float NaturalHeight(float width, bool spread) => width * (spread ? 2f / 3f : 4f / 3f);
 
     // The closed cover plate's board sits at 42,141 (940 x 1253) of 1024 x 1536 and is authored in
@@ -146,11 +156,9 @@ internal static class BookSurface
         var spread = face == BookFace.Spread;
         var natural = NaturalHeight(bounds.Size.X, spread);
         var width = spread ? 1536f : 768f;
-        var (left, right) = face switch { BookFace.Spread => (24f, 1512f), BookFace.Right => (0f, 744f), _ => (24f, 768f) };
-        var top = bounds.Position.Y + natural * 36f / 1024f;
-        var bottom = bounds.Max.Y - natural * 36f / 1024f;
-        var boardMin = new Vector2(bounds.Position.X + bounds.Size.X * left / width, top);
-        var boardMax = new Vector2(bounds.Position.X + bounds.Size.X * right / width, bottom);
+        var board = Board(bounds, face);
+        var boardMin = board.Position;
+        var boardMax = board.Max;
         list.AddRectFilled(boardMin + new Vector2(3, 5) * context.Scale, boardMax + new Vector2(3, 5) * context.Scale, shadow, 8 * context.Scale);
         list.AddRectFilled(boardMin, boardMax, cloth, 8 * context.Scale);
         var paperTop = bounds.Position.Y + natural * 66f / 1024f;

@@ -40,6 +40,11 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
     private BookSection ribbonSection;
     private float ribbonExtension;
     private bool saveFailed;
+    // Where the book drew itself last frame (board, tabs, ribbon). The host window is a transparent
+    // rectangle; only these parts take the mouse, so clicks on the margins around the book reach the game.
+    private readonly List<UiRect> solid = [];
+    // A press, drag, or edit that started on the book keeps the mouse until it ends, wherever it goes.
+    private bool holding;
     // Per-page shrink-to-fit factor, converged from each page's measured content height.
     private readonly Dictionary<string, float> fits = new(StringComparer.Ordinal);
     internal BookSection Section { get; private set; }
@@ -73,7 +78,19 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
         riffle.Update(seconds, ReducedMotion);
     }
 
+    // The host's window flags for this frame: the book's own, plus pass-through when the mouse is off the book.
+    internal ImGuiWindowFlags HostFlags(Vector2 mouse) => WindowFlags | (OwnsMouse(mouse) ? ImGuiWindowFlags.None : ImGuiWindowFlags.NoMouseInputs);
+
+    internal bool OwnsMouse(Vector2 mouse) => holding || solid.Any(part => part.Contains(mouse));
+
     internal BookShellIntent Draw(UiRect bounds, UiContext context)
+    {
+        solid.Clear();
+        try { return DrawBook(bounds, context); }
+        finally { holding = pressing || dragging || ImGui.IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows) && ImGui.IsAnyItemActive(); }
+    }
+
+    private BookShellIntent DrawBook(UiRect bounds, UiContext context)
     {
         if (motion.Phase == BookPhase.Hidden) return new BookShellIntent(true, Vector2.Zero);
         // Escape plays the dismissal, except while a field is being written in: there it only leaves the field.
@@ -98,6 +115,8 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
             if (BookControl.Draw(Labels[index], Labels[index], layout.Bookmark(index), context, BookControlStyle.Tab, (int)Section == index)) chosen = (BookSection)index;
         }
         focusSection = false;
+        solid.Add(BookSurface.Board(layout.Book, layout.IsSpread ? BookFace.Spread : Section == BookSection.Passport && VisiblePage % 2 == 1 ? BookFace.Right : BookFace.Left));
+        for (var index = 0; index < TabCount; index++) solid.Add(layout.Bookmark(index).Union(BookControl.RibbonBounds(layout.Bookmark(index), context)));
         var surfacePage = turning && !layout.IsSpread ? turn.Base + 1 : VisiblePage;
         BookSurface.Draw(layout.Book, layout.IsSpread ? BookFace.Spread : Section == BookSection.Passport && surfacePage % 2 == 1 ? BookFace.Right : BookFace.Left, assets, context);
         Ribbon(layout, context);
@@ -572,6 +591,7 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
         ImGui.BeginDisabled(moving);
         // Window controls are stamped into the cover's lower band, beneath its arc; Settings live inside the book.
         var (board, unit) = BookSurface.CoverBoard(bounds);
+        solid.Add(new UiRect(board, new Vector2(420, 560) * unit));
         var stamp = context with { FontSize = MathF.Max(context.FontSize, MathF.Round(15 * unit)) };
         var height = MathF.Max(BookShellLayout.Small(context), 22 * unit);
         var top = board.Y + 531 * unit + (22 * unit - height) / 2;
@@ -598,6 +618,8 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
     // At the start it sits exactly where the closed cover was, then the book glides so the spread ends centred.
     private BookShellIntent DrawTurning(UiRect bounds, UiContext context)
     {
+        // The swinging cover takes no input, but clicks during it must not fall through to the game either.
+        solid.Add(bounds);
         pressing = dragging = false;
         var layout = BookShellLayout.Create(bounds, context, 0);
         var eased = UiMotion.Ease(motion.Cover);

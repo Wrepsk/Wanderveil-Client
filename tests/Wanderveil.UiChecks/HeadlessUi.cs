@@ -84,7 +84,7 @@ internal sealed unsafe class HeadlessUi : IDisposable
         ImGui.Render();
     }
 
-    internal void BookFrame(Vector2 size, Action draw, bool studyBackdrop = false)
+    internal void BookFrame(Vector2 size, Action draw, bool studyBackdrop = false, ImGuiWindowFlags? flags = null)
     {
         ImGui.NewFrame();
         // An authored backdrop makes the transparent host and artwork silhouette inspectable.
@@ -96,7 +96,7 @@ internal sealed unsafe class HeadlessUi : IDisposable
         ImGui.SetNextWindowPos(new Vector2(16), ImGuiCond.FirstUseEver);
         ImGui.SetNextWindowSize(size);
         BookShell.PrepareWindow(size);
-        ImGui.Begin("Wanderveil book checks", BookShell.WindowFlags | ImGuiWindowFlags.NoSavedSettings);
+        ImGui.Begin("Wanderveil book checks", (flags ?? BookShell.WindowFlags) | ImGuiWindowFlags.NoSavedSettings);
         try { draw(); }
         finally { ImGui.End(); BookShell.PopWindowStyle(); }
         ImGui.Render();

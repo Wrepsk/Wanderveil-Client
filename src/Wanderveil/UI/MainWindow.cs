@@ -57,6 +57,8 @@ internal sealed class MainWindow : Window
     {
         shell.ReducedMotion = reducedMotion();
         shell.Advance(ImGui.GetIO().DeltaTime);
+        // Off the book itself the window lets the mouse through, so clicks around the passport reach the game.
+        Flags = shell.HostFlags(ImGui.GetIO().MousePos);
         var context = new UiContext(ShellStyle.Scale, ImGui.GetFontSize());
         var viewport = ImGui.GetMainViewport();
         var room = Vector2.Max(Vector2.One, viewport.WorkSize - new Vector2(16 * context.Scale));
