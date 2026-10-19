@@ -24,7 +24,7 @@ Type also follows the design. Cinzel Bold is used for cover lettering. Cormorant
 
 ## Controls on the book
 
-There are no buttons around the book anymore. The sections (Passport, Discover, Echoes, Studio) are paper index tabs tucked behind the pages. The selected tab carries a small edition-colored ribbon at its right end that peeks just below the tab onto the book; it unrolls after the pages appear and rerolls before moving to a newly selected tab. Settings, smaller, larger, and close (`- + x`) are printed in the paper's lower margin, with page numbers (folios) between them. On the closed cover they are foil-stamped beneath the lower arc. **x**, Escape, and `/wanderveil` play the dismissal sequence below. Page turns are still immediate; the page-turn experiment is a separate milestone.
+There are no buttons around the book anymore. The sections (Passport, Discover, Echoes, Studio) are paper index tabs tucked behind the pages. The selected tab carries a small edition-colored ribbon at its right end that peeks just below the tab onto the book; it unrolls after the pages appear and rerolls before moving to a newly selected tab. Settings, smaller, larger, and close (`- + x`) are printed in the paper's lower margin, with page numbers (folios) between them. On the closed cover they are foil-stamped beneath the lower arc. **x**, Escape, and `/wanderveil` play the dismissal sequence below. Pages turn with motion; see [page turns](#page-turns-milestone-4-experiment).
 
 ## Motion (branch `feat/passport-motion`)
 
@@ -39,6 +39,27 @@ Any request can interrupt a motion and reverse it from where it is, for example 
 - [Closing back to the cover](previews/passport/motion-closing.png)
 
 The headless preview window is pinned at the top left rather than anchored at the bottom center, so the book's glide toward center is offset in these frames. Frame pacing, smoothness, and GPU appearance in game are not yet observed.
+
+## Page turns (Milestone 4 experiment)
+
+Clicking a page side (or Page Up/Down) turns the page as a rigid paper leaf rotating about the spine in 0.5 s, with perspective, lighting, and a shadow on the paper it hangs over. The leaf carries its real page content: the front shows the page being turned, the back the page it lands as, including text, portrait, stamps, and the nation banner. The two pages that stay put remain live and readable throughout. On a single page, the page swings away to the left about its outer edge and fades, revealing the next page beneath it. Clicking the same way again lands the current turn and starts the next; clicking the other way reverses the turn from where the leaf is. Reduced motion turns instantly.
+
+How it works: ImGui draws child windows above their parent and cannot transform a child's contents, so the turning leaf gets its own child window, created after the static pages so it draws above them. Its paper is drawn as perspective strips; its page content is composed flat at the page's resting place exactly as it would be on the page, then every vertex it produced is moved through the same hinge projection (`LeafProjection.Warp`) and its clip rectangles are widened. No render-to-texture, renderer dependency, or GPU hook is involved.
+
+Measured in the headless checks: about 0.09 ms of CPU and 3,060 vertices to build a turning spread frame, against 0.03 ms and 1,544 for a still spread. GPU cost and frame pacing in game are not measured.
+
+Limitations of this approach:
+
+- The leaf is rigid and flat: no curl or bend along the page. A curl would need the content warped along a curved surface; the per-vertex warp could do it for text, but large images are single quads that would not bend, so it needs finer tessellation first.
+- The warp is perspective-correct at each vertex but straight within each triangle. Text glyphs and paper strips are small enough that this is invisible; a large image drawn as one quad (a stamp) can show a faint kink when sharply foreshortened.
+- Content on the leaf is not interactive while it moves, and it shows the page from its top: a scrolled page (only possible with enlarged host text) is drawn unscrolled during the turn.
+- While a leaf is in motion its geometry may draw a few pixels beyond the book's window, because perspective enlarges the lifted edge; nothing is clipped at the window edge.
+
+Recommendation: this ordinary-ImGui approach is good enough for the passport's page turns, so CrystalRenderer is not needed for them. Revisit a renderer only if curled pages or real lighting become a goal.
+
+- [Identity page lifting with its content](previews/passport/turn-lifting.png)
+- [Stamp page landing on the left](previews/passport/turn-landing.png)
+- [Single page swinging away](previews/passport/turn-single.png)
 
 The first page is a full-height nation pennant hung from the top edge of the paper down to the lower margin, with the crest and foil lettering drawn live over the generated banner plate.
 

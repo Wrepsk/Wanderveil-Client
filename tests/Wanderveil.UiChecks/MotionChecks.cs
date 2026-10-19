@@ -15,8 +15,10 @@ internal static class MotionChecks
         Sequence(check);
         Interruption(check);
         Reduced(check);
+        Turns(check);
         Placement(check);
         Shell(check, artifacts);
+        SingleTurn(check, artifacts);
         Console.WriteLine("PASS passport-motion");
     }
 
@@ -201,6 +203,40 @@ internal static class MotionChecks
         Click(BookShellLayout.Create(bounds, context, 0).TurnPoint(true, 0));
         check(shell.VisiblePage == 2, "Pages do not turn once the cover has landed.");
 
+        // Turn back with motion, reversing mid-turn, and keep the page content on the turning leaf.
+        Click(BookShellLayout.Create(bounds, context, 2).TurnPoint(false, 2));
+        check(shell.IsTurning && shell.VisiblePage == 0, "Clicking the left side does not start turning back.");
+        for (var frame = 0; frame < 8; frame++) Step();
+        Click(BookShellLayout.Create(bounds, context, 0).TurnPoint(true, 0));
+        check(shell.IsTurning && shell.VisiblePage == 2, "Clicking forward mid-turn does not reverse the turn.");
+        while (shell.IsTurning) Step();
+        check(shell.VisiblePage == 2 && shell.IsBookOpen, "A reversed turn does not land on the spread it returned to.");
+        Click(BookShellLayout.Create(bounds, context, 2).TurnPoint(true, 2));
+        var turning = 0;
+        while (shell.IsTurning && turning < 120)
+        {
+            Step();
+            turning++;
+            if (artifacts != null && turning is 8 or 15 or 22) SoftwarePreview.Save(Path.Combine(artifacts, $"passport-motion-turn-{turning}.png"), host);
+        }
+        check(shell.VisiblePage == 4 && !shell.IsTurning, "A forward turn does not land on the stamp spread.");
+
+        // Cost of a turn against a still spread: CPU time to build the frame and vertices submitted.
+        // Headless and software-only; GPU cost in game is not measured here.
+        (double Milliseconds, int Vertices) Measure(Action between)
+        {
+            var timer = System.Diagnostics.Stopwatch.StartNew();
+            var vertices = 0;
+            for (var frame = 0; frame < 24; frame++) { between(); Step(); vertices = Math.Max(vertices, ImGui.GetDrawData().TotalVtxCount); }
+            return (timer.Elapsed.TotalMilliseconds / 24, vertices);
+        }
+        var still = Measure(() => { });
+        Click(BookShellLayout.Create(bounds, context, 4).TurnPoint(false, 4));
+        var moving = Measure(() => { });
+        Console.WriteLine($"INFO passport-turn still {still.Milliseconds:0.00} ms/{still.Vertices} vertices, turning {moving.Milliseconds:0.00} ms/{moving.Vertices} vertices per frame (headless CPU)");
+        check(moving.Vertices < still.Vertices * 3 && moving.Milliseconds < Math.Max(4, still.Milliseconds * 4), "A page turn costs far more than a still spread.");
+        while (shell.IsTurning) Step();
+
         shell.RequestDismiss();
         var closing = false;
         var hidden = false;
@@ -240,6 +276,71 @@ internal static class MotionChecks
         var below = BookShellPlacement.Slide(dismissed, 0f, workPos, workSize, 24);
         check(below.X == dismissed.X && below.Y >= workPos.Y + workSize.Y, "The book does not slide from below the screen toward its remembered place.");
         check(BookShellPlacement.Slide(dismissed, 1f, workPos, workSize, 24) == dismissed, "A book at rest is not at its remembered place.");
+    }
+
+    // One page turn at a time: same-way requests chain, opposite requests reverse mid-turn.
+    private static void Turns(Action<bool, string> check)
+    {
+        var turn = new BookShellTurn();
+        var page = turn.Request(1, 2, 0, 6, false);
+        check(page == 2 && turn.Active && turn.Base == 0 && turn.Progress == 0f, "A forward turn does not start from the current spread.");
+        var frames = 0;
+        while (turn.Active && frames < 120) { turn.Update(Frame, false); frames++; }
+        check(!turn.Active && turn.Target == 2 && Math.Abs(frames - BookShellTurn.TurnSeconds * 60) <= 2, "A turn does not land on the next spread in its duration.");
+
+        page = turn.Request(-1, 2, 2, 6, false);
+        check(page == 0 && turn.Base == 0 && turn.Progress == 1f, "A backward turn does not start from the later spread.");
+        for (var frame = 0; frame < 10; frame++) turn.Update(Frame, false);
+        var partway = turn.Progress;
+        page = turn.Request(1, 2, 0, 6, false);
+        check(page == 2 && turn.Active && turn.Progress == partway, "Reversing mid-turn jumps instead of turning back from where the leaf is.");
+        turn.Update(Frame, false);
+        check(turn.Progress > partway, "A reversed turn does not move the other way.");
+
+        page = turn.Request(1, 2, 2, 6, false);
+        check(page == 4 && turn.Active && turn.Base == 2 && turn.Progress == 0f, "A second forward request does not land the turn and start the next.");
+        while (turn.Active) turn.Update(Frame, false);
+        page = turn.Request(1, 2, 4, 6, false);
+        check(page == 4 && !turn.Active, "Turning past the last spread starts a turn.");
+        page = turn.Request(-1, 2, 0, 6, false);
+        check(page == 0 && !turn.Active, "Turning before the first spread starts a turn.");
+
+        page = turn.Request(1, 1, 3, 6, true);
+        check(page == 4 && !turn.Active, "Reduced motion does not turn instantly.");
+        turn.Request(1, 2, 0, 6, false);
+        turn.Request(1, 1, 2, 6, false);
+        check(turn.Step == 1 && turn.Base == 2, "Changing between spread and single pages mid-turn does not land the old turn first.");
+        turn.Update(5f, false);
+        check(turn.Progress > 0f && turn.Progress <= 0.21f, "A long frame skips most of a page turn.");
+    }
+
+    // On a single page, the page swings away to the left and the next one is revealed beneath.
+    private static void SingleTurn(Action<bool, string> check, string? artifacts)
+    {
+        using var host = new HeadlessUi(new Vector2(452, 760), materials: true);
+        var shell = new BookShell(host.Textures!, PassportPreview.Sample);
+        var context = new UiContext(1, 18) { TitleFont = host.TitleFont, HeadingFont = host.HeadingFont, BodyFont = host.BodyFont, DisplayFont = host.DisplayFont, MonoFont = host.MonoFont, SignatureFont = host.SignatureFont };
+        UiRect bounds = default;
+        void Step()
+        {
+            shell.Advance(Frame);
+            host.BookFrame(shell.FitSize(new Vector2(420, 728), context), () => { bounds = new UiRect(ImGui.GetWindowPos(), ImGui.GetWindowSize()); shell.Draw(bounds, context); });
+        }
+        void Press(ImGuiKey key) { ImGui.GetIO().AddKeyEvent(key, true); Step(); ImGui.GetIO().AddKeyEvent(key, false); Step(); }
+        shell.BeginSession();
+        for (var frame = 0; frame < 40; frame++) Step();
+        Press(ImGuiKey.Space);
+        for (var frame = 0; frame < 70; frame++) Step();
+        check(shell.Phase == BookPhase.Open, "The single-page passport does not open.");
+        Press(ImGuiKey.PageDown);
+        check(shell.IsTurning && shell.VisiblePage == 1, "Page Down does not turn a single page.");
+        var frames = 0;
+        while (shell.IsTurning && frames++ < 120)
+        {
+            Step();
+            if (artifacts != null && frames == 9) SoftwarePreview.Save(Path.Combine(artifacts, "passport-motion-turn-single.png"), host);
+        }
+        check(!shell.IsTurning && shell.VisiblePage == 1, "A single-page turn does not land on the next page.");
     }
 
     private static int Until(BookShellMotion motion, Func<bool> done, Action<bool, string> check)

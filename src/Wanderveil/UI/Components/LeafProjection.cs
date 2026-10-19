@@ -89,5 +89,36 @@ internal readonly record struct LeafProjection(UiRect Source, Vector2 Hinge, flo
         }
     }
 
+    // Moves vertices already drawn flat (from vtxStart on) onto the turning leaf and dims them with its light.
+    // flat is the face's rest rectangle; its hinge is the left edge for the front, the right edge for the back.
+    internal void Warp(ImDrawListPtr list, int vtxStart, UiRect flat, bool back, float alpha = 1f)
+    {
+        ref var vertices = ref list.VtxBuffer;
+        for (var index = vtxStart; index < vertices.Size; index++)
+        {
+            ref var vertex = ref vertices.Ref(index);
+            var u = back ? (flat.Max.X - vertex.Pos.X) / flat.Size.X : (vertex.Pos.X - flat.Position.X) / flat.Size.X;
+            vertex.Pos = Project(u, (vertex.Pos.Y - flat.Position.Y) / flat.Size.Y);
+            vertex.Col = Shade(vertex.Col, Light, alpha);
+        }
+    }
+
+    // Widens every clip rectangle in a draw list, for geometry warped outside the window it was drawn in.
+    internal static void Unclip(ImDrawListPtr list, Vector4 rect)
+    {
+        ref var commands = ref list.CmdBuffer;
+        for (var index = 0; index < commands.Size; index++) commands.Ref(index).ClipRect = rect;
+    }
+
+    // Packed ImGui colors are 0xAABBGGRR.
+    private static uint Shade(uint color, float light, float alpha)
+    {
+        var r = (uint)MathF.Round((color & 0xFF) * light);
+        var g = (uint)MathF.Round(((color >> 8) & 0xFF) * light);
+        var b = (uint)MathF.Round(((color >> 16) & 0xFF) * light);
+        var a = (uint)MathF.Round((color >> 24) * Math.Clamp(alpha, 0f, 1f));
+        return (a << 24) | (Math.Min(b, 255u) << 16) | (Math.Min(g, 255u) << 8) | Math.Min(r, 255u);
+    }
+
     internal static uint Tint(Vector4 color, float light) => ImGui.GetColorU32(new Vector4(color.X * light, color.Y * light, color.Z * light, color.W));
 }
