@@ -6,7 +6,7 @@ Status: runtime prototype, 19 October 2026. The SVG art, book-surface controls, 
 
 Build the client, then reload Wanderveil in Dalamud so it loads the new DLL. The Debug developer-plugin DLL is `src/Wanderveil/bin/x64/Debug/Wanderveil.dll`; the Release package is `src/Wanderveil/bin/x64/Release/Wanderveil/latest.zip`. Compilation does not replace an already loaded plugin instance.
 
-Run `/wanderveil`. Each summon starts with the closed Gridania cover; the first summon of a plugin session centers it on the screen, and later summons return it to where it was last dismissed (or dragged). The book itself is the control surface. Click the right side of the cover to open it. When open, click the right side to turn forward (nation banner/map, then portrait/signature and identity information, then demo stamp pages) and the left side to turn back. Clicking the left side of the first page returns to the cover. Narrow views turn one logical page; wider views turn a spread. Press and drag anywhere on the book that is not a control to move it; a drag never turns a page. A soft shadow on the outer edge and a hand cursor show which way a click will go. On the keyboard, Space or Enter opens the cover, Page Down and Page Up turn pages, and Home returns to the cover.
+Run `/wanderveil`. Each summon starts with the closed Gridania cover; the first summon of a plugin session centers it on the screen, and later summons return it to where it was last dismissed (or dragged). The book itself is the control surface. Click the right side of the cover to open it. When open, click the right side to turn forward (nation banner/map, then portrait/signature and identity information, then demo stamp pages) and the left side to turn back. Clicking the left side of the first page returns to the cover. Narrow views turn one logical page; wider views turn a spread. Press and drag anywhere on the book that is not a control to move it; a drag never turns a page. A soft shadow on the outer edge and a hand cursor show which way a click will go. On the keyboard, Space or Enter opens the cover, Page Down and Page Up turn pages, End jumps to the last stamp page, and Home returns to the cover.
 
 - [Runtime closed cover](previews/passport/runtime-cover.png)
 - [Runtime nation spread](previews/passport/runtime-nation.png)
@@ -51,7 +51,9 @@ Settings are pages of the book. The printed Settings mark riffles forward to the
 
 ## Collecting a stamp
 
-The first product loop runs in the book: open Discover, open **The scenic route** postcard, and choose **Collect demo stamp** beneath it. The stamp is issued at once: the postcard's faint proof of the design becomes the inked stamp (*Your stamp*, *Collected 19 OCT 2026 / Local demo*), its card in the list says *Collected*, and a line beneath says whether it is saved to your passport on this PC. Keyboard focus moves to **See it in your passport »**, which riffles back to the passport's collection spread, where the stamp is pressed in the first of three places with its name and date. Empty places are faint dashed rings marked *Awaiting a stamp*; with no stamps the right page invites you to collect one and offers **Explore discoveries »**. A count of local demo stamps (*saved on this PC*, or *not saved*) closes the spread, and stamps past the third are counted rather than shown until stamp paging exists.
+The first product loop runs in the book: open Discover, open **The scenic route** postcard, and choose **Collect demo stamp** beneath it. The stamp is issued at once: the postcard's faint proof of the design becomes the inked stamp (*Your stamp*, *Collected 19 OCT 2026 / Local demo*), its card in the list says *Collected*, and a line beneath says whether it is saved to your passport on this PC. Keyboard focus moves to **See it in your passport »**, which riffles back to the passport page that holds the stamp, pressed there with its name and date. An issued stamp is full ink at a slight tilt (up to five degrees, the same every time for that stamp), while a design not yet collected is a faint, square proof. Empty places are faint dashed rings marked *Awaiting a stamp*; with no stamps the right page invites you to collect one and offers **Explore discoveries »**. A count of local demo stamps (*saved on this PC*, or *not saved*) closes the spread.
+
+The collection spread has three places (two on the left, one large on the right), in collection order. Once it is full, stamp pages follow it in pairs, numbered on from it (*05 / More impressions*), each with four places in two rows. There are always enough for every stamp plus at least one empty place, so the book grows as you collect. Turn through them like any page, or press End for the last one. Only the pages on screen are drawn, so a large collection costs no more per frame than a small one.
 
 Duplicate policy: a passport holds at most one stamp per discovery. Once collected, the postcard offers no Collect action, and collecting again (even after its design is revised) returns the stamp already held unchanged. **Where the lanterns wait** is a stamp spot: its stamp is collected at the place itself, which needs location awareness Wanderveil does not have, so its Collect action is printed but inert with that reason.
 
@@ -60,7 +62,9 @@ Duplicate policy: a passport holds at most one stamp per discovery. Once collect
 - [Collected postcard](previews/passport/collect-discover.png)
 - [The stamp on the collection spread](previews/passport/collect-passport.png)
 - [The stamp on a single page](previews/passport/collect-narrow.png)
-- [More stamps than places, with a long name](previews/passport/collect-full.png)
+- [A full collection spread, with a long name](previews/passport/collect-full.png)
+- [The stamp pages that follow it](previews/passport/collect-stamp-page.png)
+- [A fourth stamp, opened on its page](previews/passport/collect-fourth.png)
 - [An empty collection spread](previews/passport/runtime-collection.png)
 
 ## Saving stamps

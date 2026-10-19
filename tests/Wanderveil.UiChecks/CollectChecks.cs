@@ -20,6 +20,7 @@ internal static class CollectChecks
             Loop(check, artifacts, name, room);
         Spot(check);
         Full(check, artifacts);
+        Large(check);
         Unsaved(check);
     }
 
@@ -130,14 +131,14 @@ internal static class CollectChecks
         public void Retry() => Retries++;
     }
 
-    // More stamps than the spread has places: the first three are printed and the rest are counted.
+    // More stamps than the spread has places: stamp pages follow it, four places each, with one left empty.
     private static void Full(Action<bool, string> check, string? artifacts)
     {
-        var stamps = new StampCollection(() => Issued);
-        for (var index = 0; index < 5; index++)
-            stamps.Collect($"demo-{index}", new StampDesign($"demo-design-{index}", 1, index == 2 ? "An unusually long stamp name for a quiet evening beyond the last lantern" : $"Demo stamp {index + 1}", index % 4, StampProvenance.LocalDemo));
-        check(stamps.Stamps.Count == 5, "Five different discoveries do not give five stamps.");
+        check(PassportDocumentView.StampPages(2).Count == 0 && PassportDocumentView.StampPages(3).Count == 2 && PassportDocumentView.StampPages(10).Count == 2 && PassportDocumentView.StampPages(11).Count == 4,
+            "Stamp pages are not added in pairs as the collection fills, with an empty place always left.");
+        var stamps = Seeded(5);
         using var book = new Book(new Vector2(1200, 800), stamps);
+        check(book.Shell.PageCount == PassportDocumentView.SamplePages.Count + 2, "Five stamps do not add one stamp spread.");
         book.Open();
         book.Key(ImGuiKey.PageDown);
         book.Key(ImGuiKey.PageDown);
@@ -145,7 +146,58 @@ internal static class CollectChecks
         check(book.Shell.VisiblePage == 4, "The collection spread cannot be reached by turning pages.");
         check(book.Shell.PageOverflow == 0 && book.Shell.PageOverflowX == 0, "A full collection spread overflows its paper.");
         book.Save(artifacts, "collect-full-passport.png");
+        book.Key(ImGuiKey.PageDown);
+        book.Frames(4);
+        check(book.Shell.VisiblePage == 6, "The stamp page does not follow the collection spread.");
+        check(book.Shell.PageOverflow == 0 && book.Shell.PageOverflowX == 0, "A stamp page overflows its paper.");
+        book.Save(artifacts, "collect-stamp-page.png");
+        book.Key(ImGuiKey.PageDown);
+        check(book.Shell.VisiblePage == 6, "Turning forward escapes the last stamp spread.");
+
+        // A stamp collected once the spread is full lands on the next stamp page, and the link opens it.
+        var content = BookShellContent.Sample with { Discoveries = [DiscoveryPreview.Postcard] };
+        using var fourth = new Book(new Vector2(1200, 800), Seeded(3), content);
+        fourth.Open();
+        fourth.Click(fourth.Tab(1));
+        fourth.OpenFirstCard();
+        fourth.Probe(() => fourth.Shell.Stamps.Stamps.Count > 3);
+        check(fourth.Shell.PageCount == PassportDocumentView.SamplePages.Count + 2, "A fourth stamp does not keep its stamp spread.");
+        fourth.Probe(() => fourth.Shell.Section == BookSection.Passport || fourth.Shell.SelectedDiscovery == null);
+        check(fourth.Shell.Section == BookSection.Passport && fourth.Shell.VisiblePage == 6, "The passport link does not open the page holding the new stamp.");
+        fourth.Save(artifacts, "collect-fourth.png");
         Console.WriteLine("PASS collect-full");
+    }
+
+    // A representative larger collection: the book grows to fit and End reaches its last page, which costs
+    // no more to draw than the first stamp page, since only the visible pages are drawn.
+    private static void Large(Action<bool, string> check)
+    {
+        const int Count = 500;
+        using var book = new Book(new Vector2(1200, 800), Seeded(Count));
+        var expected = PassportDocumentView.SamplePages.Count + PassportDocumentView.StampPages(Count).Count;
+        check(expected == 132, "500 stamps do not need 63 stamp spreads after the collection spread.");
+        check(book.Shell.PageCount == expected, $"{Count} stamps give {book.Shell.PageCount} pages, not {expected}.");
+        book.Open();
+        for (var turn = 0; turn < 3; turn++) book.Key(ImGuiKey.PageDown);
+        var first = book.Measure();
+        book.Key(ImGuiKey.End);
+        book.Frames(4);
+        check(book.Shell.VisiblePage == expected - 1 - ((expected - 1) % 2), "End does not reach the last stamp spread.");
+        check(book.Shell.PageOverflow == 0 && book.Shell.PageOverflowX == 0, "The last stamp page overflows its paper.");
+        var last = book.Measure();
+        check(last < first * 3 + 1, $"The last of {expected} pages costs {last:0.00} ms against {first:0.00} ms for the first stamp page.");
+        book.Key(ImGuiKey.PageUp);
+        check(book.Shell.VisiblePage == expected - 3 - ((expected - 1) % 2), "Page Up does not turn back from the last stamp spread.");
+        Console.WriteLine($"INFO collect-large {Count} stamps on {expected} pages: first stamp spread {first:0.00} ms, last {last:0.00} ms per frame (headless CPU)");
+        Console.WriteLine("PASS collect-large");
+    }
+
+    private static StampCollection Seeded(int count)
+    {
+        var stamps = new StampCollection(() => Issued);
+        for (var index = 0; index < count; index++)
+            stamps.Collect($"demo-{index}", new StampDesign($"demo-design-{index}", 1, index == 2 ? "An unusually long stamp name for a quiet evening beyond the last lantern" : $"Demo stamp {index + 1}", index % 3, StampProvenance.LocalDemo));
+        return stamps;
     }
 
     // The production shell in a headless window, driven by mouse and keys as the plugin window is.
@@ -183,6 +235,16 @@ internal static class CollectChecks
             ImGui.GetIO().AddMousePosEvent(point.X, point.Y); Frame();
             ImGui.GetIO().AddMouseButtonEvent(0, true); Frame();
             ImGui.GetIO().AddMouseButtonEvent(0, false); Frames(2);
+        }
+
+        // Mean milliseconds per resting frame, after a warm-up.
+        internal double Measure()
+        {
+            ImGui.GetIO().AddMousePosEvent(-100, -100);
+            Frames(5);
+            var timer = System.Diagnostics.Stopwatch.StartNew();
+            Frames(30);
+            return timer.Elapsed.TotalMilliseconds / 30;
         }
 
         internal void Key(ImGuiKey key) { ImGui.GetIO().AddKeyEvent(key, true); Frame(); ImGui.GetIO().AddKeyEvent(key, false); Frames(2); }

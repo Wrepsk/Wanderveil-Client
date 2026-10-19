@@ -31,7 +31,10 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
     // The passport's stamps: Discover adds to them and the collection pages print them.
     private readonly StampCollection collection = stamps ??= new StampCollection();
     private readonly PassportDocumentView passport = new(assets, profile, stamps, storage);
-    private readonly IReadOnlyList<PassportPage> documentPages = ValidatePages(pages ?? PassportDocumentView.SamplePages);
+    private readonly IReadOnlyList<PassportPage> fixedPages = ValidatePages(pages ?? PassportDocumentView.SamplePages);
+    // The fixed pages with the stamp pages the collection needs after its spread; grows as stamps are collected.
+    private IReadOnlyList<PassportPage> documentPages = [];
+    private int pagedStamps = -1;
     private readonly DiscoverView discover = new((content ?? BookShellContent.Sample).Discoveries, stamps, assets, storage);
     private readonly StudioView studio = new((content ?? BookShellContent.Sample).Templates);
     private readonly EchoesView echoes = new((content ?? BookShellContent.Sample).Dossier);
@@ -62,7 +65,7 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
     internal float Lift => UiMotion.Ease(motion.Lift);
     internal bool ReducedMotion { get => motion.ReducedMotion; set => motion.ReducedMotion = value; }
     private bool focusSection;
-    internal int PageCount => documentPages.Count;
+    internal int PageCount { get { RefreshPages(); return documentPages.Count; } }
     internal float PreferredWidth { get; private set; } = 1040;
     internal DiscoveryPreview? SelectedDiscovery => discover.SelectedDiscovery;
     internal StudioView Studio => studio;
@@ -89,6 +92,7 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
 
     internal BookShellIntent Draw(UiRect bounds, UiContext context)
     {
+        RefreshPages();
         solid.Clear();
         try { return DrawBook(bounds, context); }
         finally { holding = pressing || dragging || ImGui.IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows) && ImGui.IsAnyItemActive(); }
@@ -143,10 +147,10 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
         var close = BookControl.Draw("Close", "×", layout.Tool(2, context), page, BookControlStyle.Ink, hint: "Close passport (Escape)");
         ImGui.PopStyleVar();
 
-        var showStamps = discover.TakePassportRequest();
+        var showStamp = discover.TakePassportRequest();
         if (chosen is { } tab) Navigate(tab);
         else if (explore) Navigate(BookSection.Discover);
-        else if (showStamps) ShowCollection(layout.IsSpread);
+        else if (showStamp != null) ShowCollection(showStamp, layout.IsSpread);
         else if (openSettings) ShowSettings();
         else if (back) GoBack();
         if (close) motion.Dismiss();
@@ -159,6 +163,7 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
             if (Keys(ImGuiKey.PageDown)) Turn(1, step);
             if (Keys(ImGuiKey.PageUp)) Turn(-1, step);
             if (Keys(ImGuiKey.Home)) CloseBook();
+            if (Keys(ImGuiKey.End)) ShowPage(PageCount - 1, step == 2);
         }
         return new BookShellIntent(motion.Phase == BookPhase.Hidden, drag);
 
@@ -486,14 +491,32 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
         pressing = dragging = false;
     }
 
-    // Riffles to the passport's first collection page, where a newly collected stamp is printed.
-    private void ShowCollection(bool spread)
+    // Riffles to the passport page that holds a collected stamp.
+    private void ShowCollection(StampInstance stamp, bool spread)
     {
-        var index = Math.Max(0, documentPages.ToList().FindIndex(entry => entry.Kind == PassportPageKind.CollectionLeft));
-        if (spread) index -= index % 2;
+        RefreshPages();
+        var position = collection.Stamps.ToList().IndexOf(stamp);
+        var index = Math.Max(0, documentPages.ToList().FindIndex(entry => PassportDocumentView.Holds(entry, position)));
         Navigate(BookSection.Passport);
-        VisiblePage = index;
-        turn.Reset(index);
+        ShowPage(index, spread);
+    }
+
+    // Shows a passport page at once (its spread, when the book shows two pages).
+    private void ShowPage(int index, bool spread)
+    {
+        if (spread) index -= index % 2;
+        VisiblePage = Math.Clamp(index, 0, Math.Max(0, PageCount - 1));
+        turn.Reset(VisiblePage);
+    }
+
+    // Stamp pages follow the fixed collection spread; a catalog without one gets none.
+    private void RefreshPages()
+    {
+        var count = collection.Stamps.Count;
+        if (count == pagedStamps) return;
+        pagedStamps = count;
+        var at = fixedPages.ToList().FindIndex(entry => entry.Kind == PassportPageKind.CollectionRight);
+        documentPages = at < 0 ? fixedPages : ValidatePages([.. fixedPages.Take(at + 1), .. PassportDocumentView.StampPages(count), .. fixedPages.Skip(at + 1)]);
     }
 
     // Opens the Settings pages, from the printed Settings mark or the host's settings button. A closed

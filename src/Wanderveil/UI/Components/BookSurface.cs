@@ -208,8 +208,9 @@ internal static class BookSurface
         return fitted;
     }
 
-    // Draws one impression from the atlas; false when it has no such impression or the art is missing.
-    internal static bool Stamp(UiRect bounds, int index, IBookAssets assets, float alpha = 1f)
+    // Draws one impression from the atlas, turned by angle (radians) about its centre; false when it has
+    // no such impression or the art is missing.
+    internal static bool Stamp(UiRect bounds, int index, IBookAssets assets, float alpha = 1f, float angle = 0f)
     {
         if ((uint)index > 2 || !assets.TryGet(BookAsset.Stamps, out var image, MathF.Min(bounds.Size.X, bounds.Size.Y) * 3.2f))
             return false;
@@ -217,9 +218,20 @@ internal static class BookSurface
         var region = index == 1 ? new Vector2(0.34f, 0.65f) : new Vector2(index / 3f, (index + 1) / 3f);
         var aspect = (region.Y - region.X) * image.Width / image.Height;
         var size = new Vector2(MathF.Min(bounds.Size.X, bounds.Size.Y * aspect), MathF.Min(bounds.Size.Y, bounds.Size.X / aspect));
+        var color = ImGui.GetColorU32(new Vector4(1, 1, 1, alpha));
+        if (angle != 0f)
+        {
+            // A turned impression shrinks slightly so its corners stay inside the place.
+            var center = bounds.Position + bounds.Size / 2f;
+            var half = size * 0.47f;
+            var (sin, cos) = MathF.SinCos(angle);
+            Vector2 Corner(float x, float y) => center + new Vector2(x * half.X * cos - y * half.Y * sin, x * half.X * sin + y * half.Y * cos);
+            ImGui.GetWindowDrawList().AddImageQuad(image.Texture, Corner(-1, -1), Corner(1, -1), Corner(1, 1), Corner(-1, 1),
+                new Vector2(region.X, 0f), new Vector2(region.Y, 0f), new Vector2(region.Y, 1f), new Vector2(region.X, 1f), color);
+            return true;
+        }
         var min = bounds.Position + ((bounds.Size - size) / 2f);
-        Image(ImGui.GetWindowDrawList(), image.Texture, min, min + size,
-            new Vector2(region.X, 0f), new Vector2(region.Y, 1f), ImGui.GetColorU32(new Vector4(1, 1, 1, alpha)));
+        Image(ImGui.GetWindowDrawList(), image.Texture, min, min + size, new Vector2(region.X, 0f), new Vector2(region.Y, 1f), color);
         return true;
     }
 }

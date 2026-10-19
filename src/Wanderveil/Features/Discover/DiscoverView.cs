@@ -17,13 +17,13 @@ internal sealed class DiscoverView(IReadOnlyList<DiscoveryPreview> previews, Sta
     private float? requestedScroll;
     private bool focusDetails;
     private bool focusPassportLink;
-    private bool passportRequested;
+    private StampInstance? passportRequested;
 
-    // True once after the reader asks to see a collected stamp in their passport.
-    internal bool TakePassportRequest()
+    // The stamp the reader asked to see in their passport, once; otherwise null.
+    internal StampInstance? TakePassportRequest()
     {
         var requested = passportRequested;
-        passportRequested = false;
+        passportRequested = null;
         return requested;
     }
 
@@ -140,7 +140,7 @@ internal sealed class DiscoverView(IReadOnlyList<DiscoveryPreview> previews, Sta
                 ImGui.SetKeyboardFocusHere();
                 focusPassportLink = false;
             }
-            passportRequested |= BookControl.Link("See it in your passport »", context);
+            if (BookControl.Link("See it in your passport »", context)) passportRequested = held;
             return;
         }
         if (!preview.CollectOnReading)

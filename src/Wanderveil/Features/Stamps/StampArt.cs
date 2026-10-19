@@ -7,15 +7,24 @@ using Wanderveil.UI.Primitives;
 
 namespace Wanderveil.Features.Stamps;
 
-// How stamps appear on paper. A design not yet collected is a faint proof; an issued stamp is full ink.
-// Both use the design's impression art, or the procedural motif when that art is missing.
+// How stamps appear on paper. A design not yet collected is a faint, square proof; an issued stamp is full
+// ink, pressed by hand at a slight tilt that is the same every time for that stamp. Both use the design's
+// impression art, or the procedural motif when that art is missing.
 internal static class StampArt
 {
     private const float ProofInk = 0.38f;
 
     internal static void Proof(UiRect bounds, StampDesign design, IBookAssets? assets, UiContext context) => Draw(bounds, design, assets, context, ProofInk);
 
-    internal static void Issued(UiRect bounds, StampInstance stamp, IBookAssets? assets, UiContext context) => Draw(bounds, stamp.Design, assets, context, 1f);
+    internal static void Issued(UiRect bounds, StampInstance stamp, IBookAssets? assets, UiContext context) => Draw(bounds, stamp.Design, assets, context, 1f, Tilt(stamp.Id));
+
+    // Up to five degrees either way, from the stamp's identifier (a stable hash, unlike string.GetHashCode).
+    internal static float Tilt(string id)
+    {
+        var hash = 2166136261u;
+        foreach (var character in id) hash = (hash ^ character) * 16777619u;
+        return ((hash % 1001) / 1000f * 2f - 1f) * (5f * MathF.PI / 180f);
+    }
 
     // A place on the page still waiting for a stamp: a faint dashed ring.
     internal static void Empty(UiRect bounds, UiContext context)
@@ -36,9 +45,9 @@ internal static class StampArt
     // The issue date as printed under a stamp, in the offset it was collected in.
     internal static string Date(DateTimeOffset at) => at.ToString("dd MMM yyyy", CultureInfo.InvariantCulture).ToUpperInvariant();
 
-    private static void Draw(UiRect bounds, StampDesign design, IBookAssets? assets, UiContext context, float ink)
+    private static void Draw(UiRect bounds, StampDesign design, IBookAssets? assets, UiContext context, float ink, float angle = 0f)
     {
-        if (assets != null && BookSurface.Stamp(bounds, design.Artwork, assets, ink)) return;
+        if (assets != null && BookSurface.Stamp(bounds, design.Artwork, assets, ink, angle)) return;
         StampPreview.Draw(bounds, context, UiTheme.Action with { W = ink });
     }
 }

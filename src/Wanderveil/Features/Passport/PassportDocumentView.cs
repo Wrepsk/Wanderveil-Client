@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using Wanderveil.Features.Stamps;
@@ -8,8 +9,9 @@ using Wanderveil.UI.Primitives;
 
 namespace Wanderveil.Features.Passport;
 
-internal enum PassportPageKind { NationBanner, NationMap, Portrait, Information, CollectionLeft, CollectionRight, Blank }
-internal sealed record PassportPage(string Id, PassportPageKind Kind);
+internal enum PassportPageKind { NationBanner, NationMap, Portrait, Information, CollectionLeft, CollectionRight, Blank, Stamps }
+// First: on a Stamps page, the collection position of its first stamp place.
+internal sealed record PassportPage(string Id, PassportPageKind Kind, int First = 0);
 
 // Presentation data and composition; no ownership, persistence, or animation logic. The collection
 // pages print the stamps the collection holds, in the order they were collected.
@@ -17,6 +19,28 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportPreview p
 {
     // Stamp places on the collection spread: two on its left page, one large on its right.
     internal const int CollectionSlots = 3;
+    // Stamp places on each page that follows the collection spread, in two rows of two.
+    internal const int SheetSlots = 4;
+
+    // The stamp pages after the collection spread: added once the spread is full, in pairs so every spread is
+    // whole, enough for every stamp beyond it and always with at least one empty place left. Only visible
+    // pages are ever drawn.
+    internal static IReadOnlyList<PassportPage> StampPages(int count)
+    {
+        if (count < CollectionSlots) return [];
+        var needed = (count - CollectionSlots) / SheetSlots + 1;
+        return Enumerable.Range(0, needed + needed % 2)
+            .Select(sheet => new PassportPage($"stamps-{sheet + 1}", PassportPageKind.Stamps, CollectionSlots + sheet * SheetSlots)).ToArray();
+    }
+
+    // Whether a page prints the stamp at a collection position.
+    internal static bool Holds(PassportPage page, int position) => page.Kind switch
+    {
+        PassportPageKind.CollectionLeft => position is 0 or 1,
+        PassportPageKind.CollectionRight => position == 2,
+        PassportPageKind.Stamps => position >= page.First && position < page.First + SheetSlots,
+        _ => false,
+    };
     internal StampCollection Stamps { get; } = stamps ?? new StampCollection();
 
     internal static readonly IReadOnlyList<PassportPage> SamplePages = Array.AsReadOnly(new[] {
@@ -87,6 +111,7 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportPreview p
             case PassportPageKind.Information: Identity(ref flow, false, width, context); break;
             case PassportPageKind.CollectionLeft: Collection(ref flow, true, width, context); break;
             case PassportPageKind.CollectionRight: Collection(ref flow, false, width, context); break;
+            case PassportPageKind.Stamps: Sheet(ref flow, page.First, width, context); break;
             default: flow.Text("A place for future memories", TextRole.Title); break;
         }
         ImGui.Dummy(new Vector2(width, flow.Height));
@@ -232,12 +257,35 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportPreview p
         if (held.Count > CollectionSlots)
         {
             flow.Gap(8);
-            flow.Text($"{held.Count - CollectionSlots} more are held. Further stamp pages arrive in a later update.", TextRole.Caption, true);
+            flow.Text("Turn the page for the rest of your stamps.", TextRole.Caption, true);
         }
         if (StampStorageText.Notice(storage) is { } notice)
         {
             flow.Gap(12);
             flow.Text(notice, TextRole.Body, true);
+        }
+    }
+
+    // A page after the collection spread: four places in two rows, numbered on from the spread's pages.
+    private void Sheet(ref PageFlow flow, int first, float width, UiContext context)
+    {
+        flow.Text($"{(first - CollectionSlots) / SheetSlots + 5:00} / MORE IMPRESSIONS", TextRole.Caption, true);
+        flow.Gap(24);
+        var gap = 16 * context.Scale;
+        var column = (width - gap) / 2;
+        for (var row = 0; row < SheetSlots / 2; row++)
+        {
+            var index = first + row * 2;
+            var left = new PageFlow(Vector2.Zero, column, context, false);
+            var right = new PageFlow(Vector2.Zero, column, context, false);
+            Slot(ref left, index, 130, context);
+            Slot(ref right, index + 1, 130, context);
+            var place = flow.Reserve(MathF.Max(left.Height, right.Height));
+            left = new PageFlow(place.Position, column, context, true);
+            right = new PageFlow(place.Position + new Vector2(column + gap, 0), column, context, true);
+            Slot(ref left, index, 130, context);
+            Slot(ref right, index + 1, 130, context);
+            flow.Gap(28);
         }
     }
 
