@@ -13,7 +13,7 @@ internal sealed record PassportPage(string Id, PassportPageKind Kind);
 
 // Presentation data and composition; no ownership, persistence, or animation logic. The collection
 // pages print the stamps the collection holds, in the order they were collected.
-internal sealed class PassportDocumentView(IBookAssets assets, PassportPreview profile, StampCollection? stamps = null)
+internal sealed class PassportDocumentView(IBookAssets assets, PassportPreview profile, StampCollection? stamps = null, IStampStorage? storage = null)
 {
     // Stamp places on the collection spread: two on its left page, one large on its right.
     internal const int CollectionSlots = 3;
@@ -228,11 +228,16 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportPreview p
         flow.Text(held.Count == 0 ? "These pages are waiting for their first stamp. Collect one from a discovery and it is pressed here."
             : "A place, a moment, a reason to return. Every impression holds a small story.");
         flow.Gap(24);
-        flow.Text(held.Count == 0 ? "NO STAMPS YET" : held.Count == 1 ? "1 LOCAL DEMO STAMP / NOT SAVED YET" : $"{held.Count} LOCAL DEMO STAMPS / NOT SAVED YET", TextRole.Caption, true);
+        flow.Text(StampStorageText.Count(held.Count, storage), TextRole.Caption, true);
         if (held.Count > CollectionSlots)
         {
             flow.Gap(8);
             flow.Text($"{held.Count - CollectionSlots} more are held. Further stamp pages arrive in a later update.", TextRole.Caption, true);
+        }
+        if (StampStorageText.Notice(storage) is { } notice)
+        {
+            flow.Gap(12);
+            flow.Text(notice, TextRole.Body, true);
         }
     }
 

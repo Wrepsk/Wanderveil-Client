@@ -130,6 +130,7 @@ StudioChecks.Run(Check, artifacts);
 EchoesChecks.Run(Check, artifacts);
 StatesChecks.Run(Check, artifacts);
 CollectChecks.Run(Check, artifacts);
+StorageChecks.Run(Check);
 InputChecks.Run(Check);
 StabilityChecks.Run(Check);
 Console.WriteLine($"PASS {checks} checks using the real ImGui native context.");

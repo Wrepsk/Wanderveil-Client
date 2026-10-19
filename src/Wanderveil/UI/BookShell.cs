@@ -22,7 +22,7 @@ internal readonly record struct BookShellIntent(bool Close, Vector2 Drag);
 // Real items (tabs, printed controls, page content) keep their own clicks and keyboard navigation.
 // BookShellMotion sequences arrival, the cover swing, and dismissal; the book takes no input while it moves.
 // Moving between sections riffles several pages in book direction; Settings are pages of the book too.
-internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IReadOnlyList<PassportPage>? pages = null, IBookShellSettings? settings = null, BookShellContent? content = null, StampCollection? stamps = null)
+internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IReadOnlyList<PassportPage>? pages = null, IBookShellSettings? settings = null, BookShellContent? content = null, StampCollection? stamps = null, IStampStorage? storage = null)
 {
     internal const ImGuiWindowFlags WindowFlags = ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.NoBackground | ImGuiWindowFlags.NoCollapse |
         ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoMove | ImGuiWindowFlags.NoDocking;
@@ -30,9 +30,9 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
     private const int TabCount = 4;
     // The passport's stamps: Discover adds to them and the collection pages print them.
     private readonly StampCollection collection = stamps ??= new StampCollection();
-    private readonly PassportDocumentView passport = new(assets, profile, stamps);
+    private readonly PassportDocumentView passport = new(assets, profile, stamps, storage);
     private readonly IReadOnlyList<PassportPage> documentPages = ValidatePages(pages ?? PassportDocumentView.SamplePages);
-    private readonly DiscoverView discover = new((content ?? BookShellContent.Sample).Discoveries, stamps, assets);
+    private readonly DiscoverView discover = new((content ?? BookShellContent.Sample).Discoveries, stamps, assets, storage);
     private readonly StudioView studio = new((content ?? BookShellContent.Sample).Templates);
     private readonly EchoesView echoes = new((content ?? BookShellContent.Sample).Dossier);
     private readonly BookShellMotion motion = Arrived();

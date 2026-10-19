@@ -32,5 +32,6 @@
     <Compile Include="../../src/Wanderveil/Features/Studio/*.cs" Link="Studio/%(Filename)%(Extension)" />
     <Compile Include="../../src/Wanderveil/Features/Echoes/*.cs" Link="Echoes/%(Filename)%(Extension)" />
     <Compile Include="../../src/Wanderveil/Features/Stamps/*.cs" Link="Stamps/%(Filename)%(Extension)" />
+    <Compile Include="../../src/Wanderveil/Infrastructure/Storage/*.cs" Link="Storage/%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>

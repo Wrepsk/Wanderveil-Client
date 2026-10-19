@@ -1,6 +1,6 @@
 # Client documentation
 
-Status: Phase 02 in progress, 19 October 2026. The passport book holds Passport, Discover, Studio, Echoes, and Settings pages with motion, and the postcard's demo stamp can be collected into the passport in memory; local persistence is next.
+Status: Phase 02 in progress, 19 October 2026. The passport book holds Passport, Discover, Studio, Echoes, and Settings pages with motion, and the postcard's demo stamp can be collected into the passport and is saved locally; issued-stamp and page controls are next.
 
 - [Development and current build](development.md)
 - [Client architecture and future layout](architecture.md)
@@ -20,7 +20,7 @@ Status: Phase 02 in progress, 19 October 2026. The passport book holds Passport,
 
 1. Review the Gridania cover/colorway, banner/map introduction, portrait/signature versus information identity spread, and stamp collection targets; refine the artwork/material model before broader customization.
 2. Review the connected static runtime prototype, then add closed bottom-center arrival and close-to-cover dismissal motion; separately evaluate a bounded 2.5D page turn. Review previews between milestones; do not introduce CrystalRenderer without a separate decision.
-3. Phase 1 is complete and Phase 2's in-memory collect loop works. Next: versioned local persistence (Phase 2).
+3. Phase 1 is complete; Phase 2's collect loop and local stamp saving work. Next: issued-stamp and stamp-page controls (Phase 2).
 
 No account, private repository, production backend, or advanced renderer is needed for those product steps. Unresolved online contracts, identity proof, and renderer delivery require explicit decisions before implementation.
 

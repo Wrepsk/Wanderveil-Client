@@ -51,17 +51,50 @@ Settings are pages of the book. The printed Settings mark riffles forward to the
 
 ## Collecting a stamp
 
-The first product loop runs in the book: open Discover, open **The scenic route** postcard, and choose **Collect demo stamp** beneath it. The stamp is issued at once: the postcard's faint proof of the design becomes the inked stamp (*Your stamp*, *Collected 19 OCT 2026 / Local demo*), its card in the list says *Collected*, and a line beneath says it is kept until the game closes and saving comes later. Keyboard focus moves to **See it in your passport »**, which riffles back to the passport's collection spread, where the stamp is pressed in the first of three places with its name and date. Empty places are faint dashed rings marked *Awaiting a stamp*; with no stamps the right page invites you to collect one and offers **Explore discoveries »**. A count of local demo stamps (*not saved yet*) closes the spread, and stamps past the third are counted rather than shown until stamp paging exists.
+The first product loop runs in the book: open Discover, open **The scenic route** postcard, and choose **Collect demo stamp** beneath it. The stamp is issued at once: the postcard's faint proof of the design becomes the inked stamp (*Your stamp*, *Collected 19 OCT 2026 / Local demo*), its card in the list says *Collected*, and a line beneath says whether it is saved to your passport on this PC. Keyboard focus moves to **See it in your passport »**, which riffles back to the passport's collection spread, where the stamp is pressed in the first of three places with its name and date. Empty places are faint dashed rings marked *Awaiting a stamp*; with no stamps the right page invites you to collect one and offers **Explore discoveries »**. A count of local demo stamps (*saved on this PC*, or *not saved*) closes the spread, and stamps past the third are counted rather than shown until stamp paging exists.
 
 Duplicate policy: a passport holds at most one stamp per discovery. Once collected, the postcard offers no Collect action, and collecting again (even after its design is revised) returns the stamp already held unchanged. **Where the lanterns wait** is a stamp spot: its stamp is collected at the place itself, which needs location awareness Wanderveil does not have, so its Collect action is printed but inert with that reason.
 
-`StampDesign` (identifier, revision, name, artwork, provenance), `StampInstance` (its own identifier, the design revision it was issued with, the discovery, the date, provenance), and `StampCollection` (the in-memory stamps and the collect rule) hold no ImGui state; `DiscoveryPreview` names the design a discovery awards and whether reading it is enough to collect. `StampArt` draws a design as a faint proof or an issued stamp, falling back to the procedural motif without art. Everything is local demo provenance and nothing is saved: closing the game, or reloading the plugin, empties the collection. Versioned local persistence is the next slice.
+`StampDesign` (identifier, revision, name, artwork, provenance), `StampInstance` (its own identifier, the design revision it was issued with, the discovery, the date, provenance), and `StampCollection` (the in-memory stamps and the collect rule) hold no ImGui state; `DiscoveryPreview` names the design a discovery awards and whether reading it is enough to collect. `StampArt` draws a design as a faint proof or an issued stamp, falling back to the procedural motif without art. Everything is local demo provenance.
 
 - [Collected postcard](previews/passport/collect-discover.png)
 - [The stamp on the collection spread](previews/passport/collect-passport.png)
 - [The stamp on a single page](previews/passport/collect-narrow.png)
 - [More stamps than places, with a long name](previews/passport/collect-full.png)
 - [An empty collection spread](previews/passport/runtime-collection.png)
+
+## Saving stamps
+
+Collected stamps are saved on this PC and come back when the plugin reloads or the game restarts. They live in Dalamud's configuration folder for Wanderveil (`pluginConfigs/Wanderveil/` under the XIVLauncher folder) as `stamps-local.json`. There is one local passport for now; files are named by profile so character-scoped passports can follow without a format change. Nothing leaves the PC.
+
+The file is versioned JSON, written readable:
+
+```json
+{
+  "format": "wanderveil.passport-stamps",
+  "version": 1,
+  "stamps": [
+    {
+      "id": "local-demo-0001",
+      "discoveryId": "demo-scenic-route",
+      "collectedAt": "2026-10-19T18:30:00.0000000+02:00",
+      "provenance": "local-demo",
+      "design": { "id": "demo-scenic-route-stamp", "revision": 1, "name": "Scenic route", "artwork": 0, "provenance": "local-demo" }
+    }
+  ]
+}
+```
+
+Each stamp keeps a copy of the design revision it was issued with, so a later design change never alters it. Only `local-demo` provenance is accepted, so a hand-edited file cannot add official or online stamps.
+
+- **Saving.** Each collect saves a snapshot on a background task, never in a draw callback. Saves run one at a time, and if several are waiting only the newest is written. The file is written to `stamps-local.json.tmp`, flushed to disk, then swapped in one step, and the previous save is kept as `stamps-local.json.bak`. Closing the plugin waits up to three seconds for a save in progress.
+- **Interrupted save.** On load, a complete leftover `.tmp` file is the newest save, so the swap is finished. An incomplete one is dropped, since the file it was replacing is intact.
+- **Unreadable file.** A file that is corrupt, truncated, empty, not a Wanderveil stamp file, or breaks the rules (duplicate stamps or discoveries, missing fields, a bad date or revision, other provenance) is never partly loaded. It is renamed aside as `stamps-local.json.unreadable-<time>`, and the backup is restored (one stamp may be missing: the backup is the save before last). If the backup is unreadable too, both are kept aside and the passport starts empty. The collection page says what happened.
+- **Newer or locked file.** A file from a newer Wanderveil version, or one that cannot be opened (locked or access denied), is left untouched, and saving is turned off for the session. The page says so; stamps collected meanwhile last until the game closes.
+- **Failed save.** If writing fails, the stamp stays collected, the line under it says it could not be saved, and **Try saving again** retries. The error goes to the Dalamud log.
+- **Migrations.** A future format bumps `version` and adds a step that upgrades the older file in memory when it is read. The next save writes the new version, and the backup keeps the old one. Version 1 is the first, so there are no steps yet. Local demo stamps are never promoted to server-issued stamps by a migration.
+
+`StampStore` (file format, atomic save, recovery) and `StampPersistence` (load at startup, background saves, state) live in `Infrastructure/Storage/`. The pages see only `IStampStorage`: what loading found and whether saving works.
 
 ## Echoes
 

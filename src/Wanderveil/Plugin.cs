@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using Dalamud.Game.Command;
 using Dalamud.Interface.Windowing;
 using Dalamud.IoC;
@@ -6,6 +7,7 @@ using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 using Wanderveil.Features.Settings;
 using Wanderveil.Infrastructure.Media;
+using Wanderveil.Infrastructure.Storage;
 using Wanderveil.UI;
 
 namespace Wanderveil;
@@ -23,6 +25,9 @@ public sealed class Plugin : IDalamudPlugin
     private readonly Configuration configuration;
     private readonly MainWindow mainWindow;
     private PassportAssets? assets;
+    // One local passport for now; character-scoped passports come with character identity.
+    private const string Profile = "local";
+    private StampPersistence? stamps;
     private bool commandRegistered;
     private bool disposed;
 
@@ -32,7 +37,11 @@ public sealed class Plugin : IDalamudPlugin
         try
         {
             assets = new PassportAssets(TextureProvider, PluginInterface.UiBuilder.FontAtlas);
-            mainWindow = new MainWindow(() => configuration.ReducedMotion, new ConfigurationSettings(configuration, SaveConfiguration), assets);
+            stamps = new StampPersistence(new StampStore(PluginInterface.GetPluginConfigDirectory()), Profile,
+                report: exception => Log.Error(exception, "Could not save Wanderveil stamps."));
+            if (stamps.Loaded is not (Features.Stamps.StampLoadOutcome.New or Features.Stamps.StampLoadOutcome.Loaded))
+                Log.Warning("Wanderveil stamps loaded as {Outcome}; files kept aside: {Kept}", stamps.Loaded, string.Join(", ", stamps.Kept.Select(System.IO.Path.GetFileName)));
+            mainWindow = new MainWindow(() => configuration.ReducedMotion, new ConfigurationSettings(configuration, SaveConfiguration), assets, stamps.Collection, stamps);
             windowSystem.AddWindow(mainWindow);
 
             commandRegistered = CommandManager.AddHandler(CommandName, new CommandInfo(OnCommand)
@@ -72,6 +81,8 @@ public sealed class Plugin : IDalamudPlugin
         }
 
         windowSystem.RemoveAllWindows();
+        // Waits briefly for a stamp save in progress, so collecting just before unloading is not lost.
+        stamps?.Dispose();
         assets?.Dispose();
     }
 

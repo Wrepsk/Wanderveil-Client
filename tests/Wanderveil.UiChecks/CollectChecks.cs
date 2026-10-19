@@ -20,6 +20,7 @@ internal static class CollectChecks
             Loop(check, artifacts, name, room);
         Spot(check);
         Full(check, artifacts);
+        Unsaved(check);
     }
 
     // Duplicate policy and identity, with no ImGui involved.
@@ -98,6 +99,37 @@ internal static class CollectChecks
         Console.WriteLine("PASS collect-stamp-spot");
     }
 
+    // A save that failed says so under the stamp and offers to try again; the stamp stays collected.
+    private static void Unsaved(Action<bool, string> check)
+    {
+        var storage = new FakeStorage { State = StampSaveState.Failed };
+        using var book = new Book(new Vector2(1200, 800), new StampCollection(() => Issued), storage: storage);
+        book.Open();
+        book.Click(book.Tab(1));
+        book.OpenFirstCard();
+        book.Probe(() => book.Shell.Stamps.Stamps.Count > 0);
+        check(book.Shell.Stamps.Stamps.Count == 1, "A stamp cannot be collected while saving fails.");
+        // The passport link sits below the retry link: if the probe reaches it first, come back and go on above it.
+        float? start = null;
+        for (var pass = 0; pass < 12 && storage.Retries == 0; pass++)
+        {
+            if (book.Shell.Section != BookSection.Discover) book.Click(book.Tab(1));
+            start = book.Probe(() => storage.Retries > 0 || book.Shell.Section != BookSection.Discover, start - 6);
+        }
+        check(storage.Retries == 1, "A failed save offers no way to try again.");
+        check(StampStorageText.Count(1, storage).EndsWith("NOT SAVED", StringComparison.Ordinal) && StampStorageText.Count(1, storage with { State = StampSaveState.Saved }).EndsWith("SAVED ON THIS PC", StringComparison.Ordinal), "The collection caption misstates whether stamps are saved.");
+        check(StampStorageText.Notice(new FakeStorage()) == null && StampStorageText.Notice(new FakeStorage { Loaded = StampLoadOutcome.Recovered }) != null, "Storage notices appear when nothing happened, or not after a recovery.");
+        Console.WriteLine("PASS collect-unsaved");
+    }
+
+    private sealed record FakeStorage : IStampStorage
+    {
+        public StampLoadOutcome Loaded { get; init; } = StampLoadOutcome.Loaded;
+        public StampSaveState State { get; init; } = StampSaveState.Saved;
+        internal int Retries { get; private set; }
+        public void Retry() => Retries++;
+    }
+
     // More stamps than the spread has places: the first three are printed and the rest are counted.
     private static void Full(Action<bool, string> check, string? artifacts)
     {
@@ -125,11 +157,11 @@ internal static class CollectChecks
         private UiRect root;
         internal BookShell Shell { get; }
 
-        internal Book(Vector2 room, StampCollection stamps, BookShellContent? content = null)
+        internal Book(Vector2 room, StampCollection stamps, BookShellContent? content = null, IStampStorage? storage = null)
         {
             this.room = room;
             host = new HeadlessUi(room, materials: true);
-            Shell = new BookShell(host.Textures!, PassportPreview.Sample, content: content, stamps: stamps) { ReducedMotion = true };
+            Shell = new BookShell(host.Textures!, PassportPreview.Sample, content: content, stamps: stamps, storage: storage) { ReducedMotion = true };
             context = new UiContext(1, 18) { TitleFont = host.TitleFont, HeadingFont = host.HeadingFont, BodyFont = host.BodyFont, DisplayFont = host.DisplayFont, MonoFont = host.MonoFont, SignatureFont = host.SignatureFont };
             Frames(3);
         }
@@ -169,15 +201,18 @@ internal static class CollectChecks
                 Click(Reading.Position + new Vector2(Reading.Size.X * 0.3f, y));
         }
 
-        // Scrolls the reading page to its end, then clicks up its left edge until done() holds.
-        internal void Probe(Func<bool> done)
+        // Scrolls the reading page to its end, then clicks up its left edge (from start, if given) until
+        // done() holds; returns the height it stopped at.
+        internal float Probe(Func<bool> done, float? start = null)
         {
             var page = Reading;
             var middle = page.Position + page.Size / 2;
             ImGui.GetIO().AddMousePosEvent(middle.X, middle.Y); Frame();
             ImGui.GetIO().AddMouseWheelEvent(0, -40); Frames(2);
-            for (var y = page.Size.Y - 12; !done() && y > 12; y -= 6)
-                Click(page.Position + new Vector2(14, y));
+            var y = start ?? page.Size.Y - 12;
+            for (; !done() && y > 12; y -= 6)
+                Click(page.Position + new Vector2(22, y));
+            return y + 6;
         }
 
         internal void Save(string? artifacts, string name)
