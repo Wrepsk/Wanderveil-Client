@@ -183,6 +183,10 @@ The first page is a full-height nation pennant hung from the top edge of the pap
 
 Artwork is drawn from the generated size copy closest to its on-screen width (full, half, quarter, or eighth), so plates are never shrunk more than about 2x and their edges stay smooth instead of aliasing. While a newly needed copy loads, the nearest loaded copy draws.
 
+A turning leaf draws its page flat in a window of its own and then warps it onto the curling paper, which means lifting the window's clip. Before the warp, `LeafProjection.Crop` cuts what was drawn down to the page's window, so a page that scrolls (Discover's list, or any long page) turns with only what was showing; previously the parts scrolled out of view appeared below the book while it riffled (found in game, 19 October 2026). Rectangles, text, and images are cut exactly, with their texture coordinates moved to match.
+
+- [Discover's scrolling page riffling away, cut at its page](previews/passport/states-scrolled-riffle.png)
+
 ## Text rendering
 
 Each font is built at every pixel size that is actually drawn (rounded to whole pixels, at most 48 sizes), instead of one 24 px font stretched to all sizes, so text stays sharp. A new size draws once at the scaled base font while the atlas rebuilds. Cover lettering takes its sizes, positions, and letter-spacing from the design board, and page contents (text, spacing, artwork) scale with the page width, so a smaller book shows smaller contents instead of scrolling. If a page still would not fit, it shrinks itself to its paper within a couple of frames and grows back when the book is enlarged. Enlarged host text keeps its size and may scroll instead. The headless checks use fixed-size fonts, so their previews are slightly softer than in game.

@@ -491,6 +491,7 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
                     // Without the plate the leaf is plain paper, so its content never turns through the air.
                     else list.AddQuadFilled(leaf.Project(0, 0), leaf.Project(1, 0), leaf.Project(1, 1), leaf.Project(0, 1), LeafProjection.Tint(UiTheme.Paper with { W = alpha }, leaf.Light));
                     var start = list.VtxBuffer.Size;
+                    var startIndex = list.IdxBuffer.Size;
                     if (content != null)
                     {
                         ImGui.SetCursorScreenPos(region.Position);
@@ -499,6 +500,8 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
                         try { content(); }
                         finally { BookSurface.Strips = 1; }
                     }
+                    // Only what shows in the page's window turns with the leaf, never what is scrolled out of it.
+                    LeafProjection.Crop(list, start, startIndex, region);
                     leaf.Warp(list, start, face, back, alpha);
                     var viewport = ImGui.GetMainViewport();
                     LeafProjection.Unclip(list, new Vector4(viewport.Pos, viewport.Pos.X + viewport.Size.X, viewport.Pos.Y + viewport.Size.Y));

@@ -26,6 +26,7 @@ internal static class CollectChecks
         Edges(check);
         foreach (var (name, room) in new[] { ("wide", new Vector2(1200, 800)), ("narrow", new Vector2(452, 760)) }) Jump(check, name, room);
         Holding(check, artifacts);
+        ScrolledTurn(check, artifacts);
         Large(check);
         Unsaved(check);
     }
@@ -324,6 +325,38 @@ internal static class CollectChecks
         Console.WriteLine("PASS collect-jump-" + name);
     }
 
+    // A page that scrolls (Discover's list) turns away and back with only its visible part on the leaf: what
+    // is scrolled out of its window must not appear below the book while the pages riffle (it did, in game).
+    private static void ScrolledTurn(Action<bool, string> check, string? artifacts)
+    {
+        // Enlarged text makes Discover run well past its page, as it does in game.
+        using var book = new Book(new Vector2(1200, 1200), new StampCollection(() => Issued), motion: true, textScale: 1.25f);
+        var shell = book.Shell;
+        book.Open();
+        book.Click(book.Tab(1));
+        for (var frame = 0; frame < 120 && shell.IsRiffling; frame++) book.Frame();
+        book.Frames(3);
+        check(shell.Section == BookSection.Discover && book.Layout.IsSpread && shell.PageOverflow > book.Layout.Book.Size.Y * 0.3f, $"Discover overflows by only {shell.PageOverflow:0} px here, or not as a spread, so this check would prove nothing.");
+        var bottom = book.Layout.Book.Max.Y + 1;
+        check(bottom < 1150, "The book fills the window, leaving no room below it to see content leak.");
+        // Riffling forward to Echoes carries Discover's right (scrolling) page away on the first leaf; riffling
+        // back brings it in on the last.
+        foreach (var tab in new[] { 2, 1 })
+        {
+            book.Click(book.Tab(tab));
+            var frames = 0;
+            for (; frames < 120 && shell.IsRiffling; frames++)
+            {
+                book.Frame();
+                var lowest = Book.LowestInk();
+                check(lowest <= bottom, $"While riffling {(tab == 2 ? "away from" : "back to")} Discover, page content is drawn {lowest - bottom:0} px below the book.");
+                if (tab == 2 && frames == 6) book.Save(artifacts, "states-scrolled-riffle.png", keepMouse: true);
+            }
+            check(frames > 3, "The riffle away from a scrolled page did not run.");
+        }
+        Console.WriteLine("PASS scrolled-page-turn");
+    }
+
     // A held stamp stays on the stamp pages: no turning back past the first, no jumping before it, no
     // closing to the cover. And it keeps its size while a page turns beneath it.
     private static void Holding(Action<bool, string> check, string? artifacts)
@@ -431,12 +464,12 @@ internal static class CollectChecks
         private UiRect root;
         internal BookShell Shell { get; }
 
-        internal Book(Vector2 room, StampCollection stamps, BookShellContent? content = null, IStampStorage? storage = null, bool readsEscape = true, bool motion = false)
+        internal Book(Vector2 room, StampCollection stamps, BookShellContent? content = null, IStampStorage? storage = null, bool readsEscape = true, bool motion = false, float textScale = 1f)
         {
             this.room = room;
             host = new HeadlessUi(room, materials: true);
             Shell = new BookShell(host.Textures!, PassportPreview.Sample, content: content, stamps: stamps, storage: storage) { ReducedMotion = !motion, ReadsEscape = readsEscape };
-            context = new UiContext(1, 18) { TitleFont = host.TitleFont, HeadingFont = host.HeadingFont, BodyFont = host.BodyFont, DisplayFont = host.DisplayFont, MonoFont = host.MonoFont, SignatureFont = host.SignatureFont };
+            context = new UiContext(1, 18 * textScale) { TitleFont = host.TitleFont, HeadingFont = host.HeadingFont, BodyFont = host.BodyFont, DisplayFont = host.DisplayFont, MonoFont = host.MonoFont, SignatureFont = host.SignatureFont };
             Frames(3);
         }
 
@@ -482,6 +515,7 @@ internal static class CollectChecks
             {
                 root = new UiRect(ImGui.GetWindowPos(), ImGui.GetWindowSize());
                 Shell.Draw(root, context);
+                backdrop = BackdropHandle();
             });
         }
 
@@ -502,6 +536,39 @@ internal static class CollectChecks
             var timer = System.Diagnostics.Stopwatch.StartNew();
             Frames(30);
             return timer.Elapsed.TotalMilliseconds / 30;
+        }
+
+        // The lowest point the book drew anything visible at last frame (the preview backdrop excluded).
+        // The preview backdrop's draw list, which LowestInk leaves out; only readable during a frame.
+        private static nint backdrop;
+        private static unsafe nint BackdropHandle() => (nint)ImGui.GetBackgroundDrawList().Handle;
+
+        internal static unsafe float LowestInk()
+        {
+            var data = ImGui.GetDrawData();
+            var lowest = float.MinValue;
+            for (var listIndex = 0; listIndex < data.CmdListsCount; listIndex++)
+            {
+                var list = new ImDrawListPtr(data.CmdLists[listIndex]);
+                if ((nint)list.Handle == backdrop) continue;
+                for (var commandIndex = 0; commandIndex < list.CmdBuffer.Size; commandIndex++)
+                {
+                    var command = list.CmdBuffer[commandIndex];
+                    for (var index = 0u; index + 2 < command.ElemCount; index += 3)
+                    {
+                        var a = list.VtxBuffer[(int)(command.VtxOffset + list.IdxBuffer[(int)(command.IdxOffset + index)])];
+                        var b = list.VtxBuffer[(int)(command.VtxOffset + list.IdxBuffer[(int)(command.IdxOffset + index + 1)])];
+                        var c = list.VtxBuffer[(int)(command.VtxOffset + list.IdxBuffer[(int)(command.IdxOffset + index + 2)])];
+                        var area = MathF.Abs((b.Pos.X - a.Pos.X) * (c.Pos.Y - a.Pos.Y) - (b.Pos.Y - a.Pos.Y) * (c.Pos.X - a.Pos.X));
+                        if (area < 0.01f || (a.Col >> 24) + (b.Col >> 24) + (c.Col >> 24) == 0) continue;
+                        // Only what its clip rectangle lets through is drawn.
+                        var top = MathF.Min(a.Pos.Y, MathF.Min(b.Pos.Y, c.Pos.Y));
+                        if (top >= command.ClipRect.W) continue;
+                        lowest = MathF.Max(lowest, MathF.Min(command.ClipRect.W, MathF.Max(a.Pos.Y, MathF.Max(b.Pos.Y, c.Pos.Y))));
+                    }
+                }
+            }
+            return lowest;
         }
 
         internal void Key(ImGuiKey key) { ImGui.GetIO().AddKeyEvent(key, true); Frame(); ImGui.GetIO().AddKeyEvent(key, false); Frames(2); }

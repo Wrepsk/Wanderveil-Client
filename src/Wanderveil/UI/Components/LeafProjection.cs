@@ -119,6 +119,67 @@ internal readonly record struct LeafProjection(UiRect Source, Vector2 Hinge, flo
         }
     }
 
+    // Cuts what was drawn flat (vertices from vtxStart, triangles from idxStart) down to rect, as the page's
+    // clip rectangle would have before the warp widened it: otherwise a page's scrolled-away content shows
+    // on its turning leaf. A vertex outside moves onto rect's edge and its texture coordinate follows it
+    // across its triangle, so rectangles, text, and images (ImGui's quads) are cut exactly rather than
+    // squashed; other shapes are cut closely enough at a page edge. Fully hidden shapes collapse to nothing.
+    internal static void Crop(ImDrawListPtr list, int vtxStart, int idxStart, UiRect rect)
+    {
+        ref var vertices = ref list.VtxBuffer;
+        var count = vertices.Size - vtxStart;
+        if (count <= 0) return;
+        var positions = new Vector2[count];
+        var uvs = new Vector2[count];
+        var done = new bool[count];
+        for (var index = 0; index < count; index++)
+        {
+            ref var vertex = ref vertices.Ref(vtxStart + index);
+            positions[index] = vertex.Pos;
+            uvs[index] = vertex.Uv;
+            done[index] = vertex.Pos == Clamp(vertex.Pos, rect);
+        }
+        ref var indices = ref list.IdxBuffer;
+        ref var commands = ref list.CmdBuffer;
+        for (var command = 0; command < commands.Size; command++)
+        {
+            ref var cmd = ref commands.Ref(command);
+            // Triangles are whole within a command, and idxStart falls between triangles.
+            var end = Math.Min((int)(cmd.IdxOffset + cmd.ElemCount), indices.Size);
+            for (var at = (int)cmd.IdxOffset; at + 2 < end; at += 3)
+            {
+                if (at < idxStart) continue;
+                var a = indices.Ref(at) + (int)cmd.VtxOffset - vtxStart;
+                var b = indices.Ref(at + 1) + (int)cmd.VtxOffset - vtxStart;
+                var c = indices.Ref(at + 2) + (int)cmd.VtxOffset - vtxStart;
+                if ((uint)a >= count || (uint)b >= count || (uint)c >= count || (done[a] && done[b] && done[c])) continue;
+                var e1 = positions[b] - positions[a];
+                var e2 = positions[c] - positions[a];
+                var det = e1.X * e2.Y - e1.Y * e2.X;
+                foreach (var corner in new[] { a, b, c })
+                {
+                    if (done[corner]) continue;
+                    var moved = Clamp(positions[corner], rect);
+                    ref var vertex = ref vertices.Ref(vtxStart + corner);
+                    vertex.Pos = moved;
+                    if (MathF.Abs(det) > 1e-6f)
+                    {
+                        var d = moved - positions[a];
+                        var s = (d.X * e2.Y - d.Y * e2.X) / det;
+                        var t = (e1.X * d.Y - e1.Y * d.X) / det;
+                        vertex.Uv = uvs[a] + s * (uvs[b] - uvs[a]) + t * (uvs[c] - uvs[a]);
+                    }
+                    done[corner] = true;
+                }
+            }
+        }
+        // Anything left (only in degenerate triangles) just keeps to the rectangle.
+        for (var index = 0; index < count; index++)
+            if (!done[index]) vertices.Ref(vtxStart + index).Pos = Clamp(positions[index], rect);
+    }
+
+    private static Vector2 Clamp(Vector2 point, UiRect rect) => Vector2.Clamp(point, rect.Position, rect.Max);
+
     // Widens every clip rectangle in a draw list, for geometry warped outside the window it was drawn in.
     internal static void Unclip(ImDrawListPtr list, Vector4 rect)
     {
