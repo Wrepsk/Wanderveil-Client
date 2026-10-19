@@ -8,10 +8,10 @@ namespace Wanderveil.Features.Passport;
 
 internal sealed class PassportView
 {
-    private readonly PassportPreview preview;
+    private readonly PassportIdentity preview;
     private readonly IBookAssets? assets;
 
-    internal PassportView(PassportPreview preview, IBookAssets? assets = null)
+    internal PassportView(PassportIdentity preview, IBookAssets? assets = null)
     {
         this.preview = preview;
         this.assets = assets;
@@ -147,7 +147,7 @@ internal sealed class PassportView
         flow.Gap(UiMetrics.Medium);
         flow.Text("FAVORITE JOBS", TextRole.Caption, true);
         flow.Gap();
-        flow.Text(preview.FavoriteJobs);
+        flow.Text(preview.FavoriteJob);
         flow.Rule();
         flow.Text("WV-DEMO-0001 / Sample identity", TextRole.Caption, true);
     }

@@ -19,7 +19,7 @@ internal static class StabilityChecks
         {
             var room = new Vector2(width, width * 0.72f);
             using var host = new HeadlessUi(room, materials: true);
-            var shell = new BookShell(host.Textures!, PassportPreview.Sample) { ReducedMotion = true };
+            var shell = new BookShell(host.Textures!, PassportIdentity.Sample) { ReducedMotion = true };
             var context = new UiContext(1, 18) { TitleFont = host.TitleFont, HeadingFont = host.HeadingFont, BodyFont = host.BodyFont, DisplayFont = host.DisplayFont, MonoFont = host.MonoFont, SignatureFont = host.SignatureFont };
             UiRect root = default;
             var overflow = new List<float>();

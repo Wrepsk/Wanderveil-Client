@@ -57,7 +57,7 @@ internal static class EchoesChecks
     private static void Shell(Action<bool, string> check, string? artifacts, string name, Vector2 room, float text)
     {
         using var host = new HeadlessUi(room, 1f, text, materials: true);
-        var shell = new BookShell(host.Textures!, PassportPreview.Sample) { ReducedMotion = true };
+        var shell = new BookShell(host.Textures!, PassportIdentity.Sample) { ReducedMotion = true };
         var context = new UiContext(1, 18 * text) { TitleFont = host.TitleFont, HeadingFont = host.HeadingFont, BodyFont = host.BodyFont, DisplayFont = host.DisplayFont, MonoFont = host.MonoFont, SignatureFont = host.SignatureFont };
         UiRect root = default;
         void Frame() => host.BookFrame(shell.FitSize(room - new Vector2(32), context), () =>

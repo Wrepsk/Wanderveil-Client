@@ -1,5 +1,6 @@
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
+using Wanderveil.Features;
 using Wanderveil.Features.Discover;
 using Wanderveil.Features.Passport;
 using Wanderveil.Features.Stamps;
@@ -136,7 +137,7 @@ internal static class CollectChecks
     // A save that failed says so under the stamp and offers to try again; the stamp stays collected.
     private static void Unsaved(Action<bool, string> check)
     {
-        var storage = new FakeStorage { State = StampSaveState.Failed };
+        var storage = new FakeStorage { State = SaveState.Failed };
         using var book = new Book(new Vector2(1200, 800), new StampCollection(() => Issued), storage: storage);
         book.Open();
         book.Click(book.Tab(1));
@@ -151,15 +152,15 @@ internal static class CollectChecks
             start = book.Probe(() => storage.Retries > 0 || book.Shell.Section != BookSection.Discover, start - 6);
         }
         check(storage.Retries == 1, "A failed save offers no way to try again.");
-        check(StampStorageText.Count(1, storage).EndsWith("NOT SAVED", StringComparison.Ordinal) && StampStorageText.Count(1, storage with { State = StampSaveState.Saved }).EndsWith("SAVED ON THIS PC", StringComparison.Ordinal), "The collection caption misstates whether stamps are saved.");
-        check(StampStorageText.Notice(new FakeStorage()) == null && StampStorageText.Notice(new FakeStorage { Loaded = StampLoadOutcome.Recovered }) != null, "Storage notices appear when nothing happened, or not after a recovery.");
+        check(StampStorageText.Count(1, storage).EndsWith("NOT SAVED", StringComparison.Ordinal) && StampStorageText.Count(1, storage with { State = SaveState.Saved }).EndsWith("SAVED ON THIS PC", StringComparison.Ordinal), "The collection caption misstates whether stamps are saved.");
+        check(StampStorageText.Notice(new FakeStorage()) == null && StampStorageText.Notice(new FakeStorage { Loaded = LoadOutcome.Recovered }) != null, "Storage notices appear when nothing happened, or not after a recovery.");
         Console.WriteLine("PASS collect-unsaved");
     }
 
-    private sealed record FakeStorage : IStampStorage
+    private sealed record FakeStorage : ISavedState
     {
-        public StampLoadOutcome Loaded { get; init; } = StampLoadOutcome.Loaded;
-        public StampSaveState State { get; init; } = StampSaveState.Saved;
+        public LoadOutcome Loaded { get; init; } = LoadOutcome.Loaded;
+        public SaveState State { get; init; } = SaveState.Saved;
         internal int Retries { get; private set; }
         public void Retry() => Retries++;
     }
@@ -464,11 +465,11 @@ internal static class CollectChecks
         private UiRect root;
         internal BookShell Shell { get; }
 
-        internal Book(Vector2 room, StampCollection stamps, BookShellContent? content = null, IStampStorage? storage = null, bool readsEscape = true, bool motion = false, float textScale = 1f)
+        internal Book(Vector2 room, StampCollection stamps, BookShellContent? content = null, ISavedState? storage = null, bool readsEscape = true, bool motion = false, float textScale = 1f)
         {
             this.room = room;
             host = new HeadlessUi(room, materials: true);
-            Shell = new BookShell(host.Textures!, PassportPreview.Sample, content: content, stamps: stamps, storage: storage) { ReducedMotion = !motion, ReadsEscape = readsEscape };
+            Shell = new BookShell(host.Textures!, PassportIdentity.Sample, content: content, stamps: stamps, storage: storage) { ReducedMotion = !motion, ReadsEscape = readsEscape };
             context = new UiContext(1, 18 * textScale) { TitleFont = host.TitleFont, HeadingFont = host.HeadingFont, BodyFont = host.BodyFont, DisplayFont = host.DisplayFont, MonoFont = host.MonoFont, SignatureFont = host.SignatureFont };
             Frames(3);
         }

@@ -50,7 +50,7 @@ internal static class RuntimePassportChecks
         {
             var viewport = single ? new Vector2(452, 760) : new Vector2(1200, 900);
             using var host = new HeadlessUi(viewport, materials: true);
-            var shell = new BookShell(host.Textures!, PassportPreview.Sample) { ReducedMotion = true };
+            var shell = new BookShell(host.Textures!, PassportIdentity.Sample) { ReducedMotion = true };
             var context = new UiContext(1, 18) { TitleFont = host.TitleFont, HeadingFont = host.HeadingFont, BodyFont = host.BodyFont, DisplayFont = host.DisplayFont, MonoFont = host.MonoFont, SignatureFont = host.SignatureFont };
             UiRect bounds = default;
             void Frame() => host.BookFrame(shell.FitSize(viewport - new Vector2(32), context), () =>
@@ -104,7 +104,7 @@ internal static class RuntimePassportChecks
         foreach (var steps in new[] { 0, 3, 6, 9 })
         {
             using var host = new HeadlessUi(new Vector2(1600, 1100), materials: true);
-            var shell = new BookShell(host.Textures!, PassportPreview.Sample) { ReducedMotion = true };
+            var shell = new BookShell(host.Textures!, PassportIdentity.Sample) { ReducedMotion = true };
             var context = new UiContext(1, 18) { TitleFont = host.TitleFont, HeadingFont = host.HeadingFont, BodyFont = host.BodyFont, DisplayFont = host.DisplayFont, MonoFont = host.MonoFont, SignatureFont = host.SignatureFont };
             UiRect bounds = default;
             void Frame() => host.BookFrame(shell.FitSize(new Vector2(1568, 1068), context), () => { bounds = new UiRect(ImGui.GetWindowPos(), ImGui.GetWindowSize()); shell.Draw(bounds, context); });
@@ -131,12 +131,12 @@ internal static class RuntimePassportChecks
 
         var mutable = PassportDocumentView.SamplePages.ToList();
         for (var index = 4; index < 17; index++) mutable.Add(new PassportPage("extra-" + index, PassportPageKind.Blank));
-        var expanded = new BookShell(new MissingAssets(), PassportPreview.Sample, mutable);
+        var expanded = new BookShell(new MissingAssets(), PassportIdentity.Sample, mutable);
         mutable.Clear();
         check(expanded.FixedPageCount == 17, "Logical page catalog is fixed to the demo or aliases mutable input.");
         foreach (var invalid in new[] { Array.Empty<PassportPage>(), new[] { new PassportPage("duplicate", PassportPageKind.Blank), new PassportPage("duplicate", PassportPageKind.Blank) } })
         {
-            try { _ = new BookShell(new MissingAssets(), PassportPreview.Sample, invalid); check(false, "Invalid logical page identifiers accepted."); }
+            try { _ = new BookShell(new MissingAssets(), PassportIdentity.Sample, invalid); check(false, "Invalid logical page identifiers accepted."); }
             catch (ArgumentException) { check(true, "Invalid logical page catalog rejected."); }
         }
     }

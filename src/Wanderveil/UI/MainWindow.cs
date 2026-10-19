@@ -2,6 +2,7 @@ using System;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Windowing;
+using Wanderveil.Features;
 using Wanderveil.Features.Passport;
 using Wanderveil.Features.Stamps;
 using Wanderveil.Infrastructure.Media;
@@ -21,11 +22,11 @@ internal sealed class MainWindow : Window
     // The host's settings button can arrive while the window is closed; the book opens to Settings once shown.
     private bool settingsRequested;
 
-    internal MainWindow(Func<bool> reducedMotion, IBookShellSettings settings, PassportAssets assets, StampCollection stamps, IStampStorage storage) : base("Wanderveil###Wanderveil.Main", BookShell.WindowFlags)
+    internal MainWindow(Func<bool> reducedMotion, IBookShellSettings settings, PassportAssets assets, StampCollection stamps, ISavedState storage, PassportProfile identity, ISavedState identityStorage) : base("Wanderveil###Wanderveil.Main", BookShell.WindowFlags)
     {
         this.reducedMotion = reducedMotion;
         this.assets = assets;
-        shell = new BookShell(assets, PassportPreview.Sample, settings: settings, stamps: stamps, storage: storage) { ReadsEscape = false };
+        shell = new BookShell(assets, PassportIdentity.Sample, settings: settings, stamps: stamps, storage: storage, identity: identity, identityStorage: identityStorage) { ReadsEscape = false };
         SizeCondition = ImGuiCond.Always;
         // The shell handles Escape so it plays the dismissal sequence instead of hiding at once.
         RespectCloseHotkey = false;

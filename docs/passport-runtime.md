@@ -110,7 +110,7 @@ Placements are sparse: one entry per placed stamp, in layer order (the last is o
 - **Failed save.** If writing fails, the stamp stays collected, the line under it says it could not be saved, and **Try saving again** retries. The error goes to the Dalamud log.
 - **Migrations.** Each format bump adds a step that upgrades the older file in memory when it is read; the next save writes the new version, and the backup keeps the old one. Version 1 (before placements) becomes version 2 with every stamp waiting to be placed and no designer or source recorded (the info page says *Not recorded*).
 
-`StampStore` (file format, atomic save, recovery) and `StampPersistence` (load at startup, background saves, state) live in `Infrastructure/Storage/`. The pages see only `IStampStorage`: what loading found and whether saving works.
+`StampStore` (file format, atomic save, recovery) and `StampPersistence` (load at startup, background saves, state) live in `Infrastructure/Storage/`. The pages see only `ISavedState`: what loading found and whether saving works.
 
 ## Echoes
 

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text;
+using Wanderveil.Features;
 using Wanderveil.Features.Discover;
 using Wanderveil.Features.Stamps;
 using Wanderveil.Infrastructure.Storage;
@@ -36,16 +37,16 @@ internal static class StorageChecks
         var path = store.PathFor(Profile);
         using (var first = new StampPersistence(store, Profile, () => Issued))
         {
-            check(first.Loaded == StampLoadOutcome.New && first.State == StampSaveState.Saved && first.Collection.Stamps.Count == 0, "A new profile does not start empty.");
+            check(first.Loaded == LoadOutcome.New && first.State == SaveState.Saved && first.Collection.Stamps.Count == 0, "A new profile does not start empty.");
             check(!File.Exists(path), "Loading a new profile writes a file.");
             first.Collection.Collect(DiscoveryPreview.Postcard.Id, DiscoveryPreview.Postcard.Stamp);
-            check(first.Flush(Wait) && first.State == StampSaveState.Saved && File.Exists(path), "A collected stamp is not saved.");
+            check(first.Flush(Wait) && first.State == SaveState.Saved && File.Exists(path), "A collected stamp is not saved.");
             check(!File.Exists(path + ".tmp"), "A finished save leaves its temporary file.");
         }
 
         using (var second = new StampPersistence(store, Profile, () => Issued))
         {
-            check(second.Loaded == StampLoadOutcome.Loaded && second.Collection.Stamps.Count == 1, "A saved stamp does not survive a reload.");
+            check(second.Loaded == LoadOutcome.Loaded && second.Collection.Stamps.Count == 1, "A saved stamp does not survive a reload.");
             var stamp = second.Collection.Stamps[0];
             check(stamp.Design == DiscoveryPreview.Postcard.Stamp && stamp.DiscoveryId == DiscoveryPreview.Postcard.Id && stamp.Provenance == StampProvenance.LocalDemo, "A reloaded stamp loses its design, discovery, or provenance.");
             check(stamp.CollectedAt == Issued && stamp.CollectedAt.Offset == Issued.Offset, "A reloaded stamp loses its date or offset.");
@@ -82,9 +83,9 @@ internal static class StorageChecks
                 var damaged = damage(File.ReadAllText(path));
                 File.WriteAllText(path, damaged);
                 var load = store.Load(Profile);
-                check(load.Outcome == StampLoadOutcome.Recovered && load.Book.Stamps.Count == 1, name + ": an unreadable save does not recover from its backup.");
+                check(load.Outcome == LoadOutcome.Recovered && load.Book.Stamps.Count == 1, name + ": an unreadable save does not recover from its backup.");
                 check(load.Kept.Count == 1 && File.ReadAllText(load.Kept[0]) == damaged, name + ": the unreadable file was not kept as it was.");
-                check(store.Load(Profile).Outcome == StampLoadOutcome.Loaded, name + ": the recovered save is not readable afterwards.");
+                check(store.Load(Profile).Outcome == LoadOutcome.Loaded, name + ": the recovered save is not readable afterwards.");
             });
 
         InDirectory(directory =>
@@ -94,11 +95,11 @@ internal static class StorageChecks
             File.WriteAllText(path, "broken");
             File.WriteAllText(path + ".bak", "also broken");
             using var storage = new StampPersistence(store, Profile, () => Issued);
-            check(storage.Loaded == StampLoadOutcome.Unreadable && storage.Collection.Stamps.Count == 0 && storage.Kept.Count == 2, "Two unreadable files do not start an empty passport and keep both.");
+            check(storage.Loaded == LoadOutcome.Unreadable && storage.Collection.Stamps.Count == 0 && storage.Kept.Count == 2, "Two unreadable files do not start an empty passport and keep both.");
             check(storage.Kept.All(File.Exists) && !File.Exists(path), "Unreadable files were not set aside.");
             check(StampStorageText.Notice(storage) != null, "An unreadable save is not mentioned.");
             storage.Collection.Collect(DiscoveryPreview.Postcard.Id, DiscoveryPreview.Postcard.Stamp);
-            check(storage.Flush(Wait) && storage.State == StampSaveState.Saved && StampStore.Parse(File.ReadAllText(path)).Stamps.Count == 1, "A passport started after unreadable files cannot save.");
+            check(storage.Flush(Wait) && storage.State == SaveState.Saved && StampStore.Parse(File.ReadAllText(path)).Stamps.Count == 1, "A passport started after unreadable files cannot save.");
         });
     }
 
@@ -113,7 +114,7 @@ internal static class StorageChecks
             var newer = $$"""{ "format": "{{StampStore.Format}}", "version": {{StampStore.Version + 1}}, "stamps": [], "stickers": [] }""";
             File.WriteAllText(path, newer);
             using var storage = new StampPersistence(store, Profile, () => Issued);
-            check(storage.Loaded == StampLoadOutcome.Newer && storage.State == StampSaveState.ReadOnly, "A newer stamp file is not left read-only.");
+            check(storage.Loaded == LoadOutcome.Newer && storage.State == SaveState.ReadOnly, "A newer stamp file is not left read-only.");
             storage.Collection.Collect(DiscoveryPreview.Postcard.Id, DiscoveryPreview.Postcard.Stamp);
             storage.Flush(Wait);
             check(File.ReadAllText(path) == newer && !File.Exists(path + ".bak") && storage.Collection.Stamps.Count == 1, "A newer stamp file was overwritten, or collecting stopped working.");
@@ -128,7 +129,7 @@ internal static class StorageChecks
             StampLoad load;
             using (new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None))
                 load = store.Load(Profile);
-            check(load.Outcome == StampLoadOutcome.Inaccessible && load.Kept.Count == 0, "A locked stamp file is not reported as inaccessible.");
+            check(load.Outcome == LoadOutcome.Inaccessible && load.Kept.Count == 0, "A locked stamp file is not reported as inaccessible.");
             check(File.ReadAllBytes(path).SequenceEqual(before), "A locked stamp file was changed.");
         });
     }
@@ -142,7 +143,7 @@ internal static class StorageChecks
             var path = Seed(store, 1);
             File.WriteAllText(path + ".tmp", StampStore.Serialize(Book(3)));
             var load = store.Load(Profile);
-            check(load.Outcome == StampLoadOutcome.Loaded && load.Book.Stamps.Count == 3 && !File.Exists(path + ".tmp"), "A complete interrupted save is not finished on load.");
+            check(load.Outcome == LoadOutcome.Loaded && load.Book.Stamps.Count == 3 && !File.Exists(path + ".tmp"), "A complete interrupted save is not finished on load.");
             check(StampStore.Parse(File.ReadAllText(path + ".bak")).Stamps.Count == 1, "Finishing an interrupted save loses the previous save.");
         });
 
@@ -153,7 +154,7 @@ internal static class StorageChecks
             var partial = StampStore.Serialize(Book(3));
             File.WriteAllText(path + ".tmp", partial[..(partial.Length / 3)]);
             var load = store.Load(Profile);
-            check(load.Outcome == StampLoadOutcome.Loaded && load.Book.Stamps.Count == 1 && !File.Exists(path + ".tmp"), "An incomplete interrupted save is not dropped in favour of the intact save.");
+            check(load.Outcome == LoadOutcome.Loaded && load.Book.Stamps.Count == 1 && !File.Exists(path + ".tmp"), "An incomplete interrupted save is not dropped in favour of the intact save.");
         });
     }
 
@@ -199,7 +200,7 @@ internal static class StorageChecks
             store.Save("first", Book(1));
             store.Save("second", Book(2));
             check(store.PathFor("first") != store.PathFor("second"), "Two profiles share a file.");
-            check(store.Load("first").Book.Stamps.Count == 1 && store.Load("second").Book.Stamps.Count == 2 && store.Load("third").Outcome == StampLoadOutcome.New, "Profiles do not keep separate stamps.");
+            check(store.Load("first").Book.Stamps.Count == 1 && store.Load("second").Book.Stamps.Count == 2 && store.Load("third").Outcome == LoadOutcome.New, "Profiles do not keep separate stamps.");
         });
         foreach (var profile in new[] { "", " ", "../local", "Local", "local/other", "-local", new string('a', 65) })
         {
@@ -219,11 +220,11 @@ internal static class StorageChecks
             var reported = 0;
             using var storage = new StampPersistence(new StampStore(directory), Profile, () => Issued, _ => Interlocked.Increment(ref reported));
             storage.Collection.Collect(DiscoveryPreview.Postcard.Id, DiscoveryPreview.Postcard.Stamp);
-            check(storage.Flush(Wait) && storage.State == StampSaveState.Failed && reported == 1, "A failed save is not reported.");
+            check(storage.Flush(Wait) && storage.State == SaveState.Failed && reported == 1, "A failed save is not reported.");
             check(storage.Collection.Stamps.Count == 1 && StampStorageText.Kept(storage).Contains("could not be saved", StringComparison.Ordinal), "A failed save loses the stamp or claims it was saved.");
             File.Delete(directory);
             storage.Retry();
-            check(storage.Flush(Wait) && storage.State == StampSaveState.Saved && new StampStore(directory).Load(Profile).Book.Stamps.Count == 1, "Retrying a failed save does not save.");
+            check(storage.Flush(Wait) && storage.State == SaveState.Saved && new StampStore(directory).Load(Profile).Book.Stamps.Count == 1, "Retrying a failed save does not save.");
         });
     }
 
@@ -240,7 +241,7 @@ internal static class StorageChecks
             watch.Restart();
             var load = store.Load(Profile);
             var loaded = watch.Elapsed.TotalMilliseconds;
-            check(load.Outcome == StampLoadOutcome.Loaded && load.Book.SameAs(stamps), "Five hundred stamps do not round-trip.");
+            check(load.Outcome == LoadOutcome.Loaded && load.Book.SameAs(stamps), "Five hundred stamps do not round-trip.");
             var size = new FileInfo(store.PathFor(Profile)).Length;
             Console.WriteLine($"INFO stamp-storage 500 stamps: {size / 1024} KiB, save {saved:F1} ms, load {loaded:F1} ms");
         });
@@ -299,7 +300,7 @@ internal static class StorageChecks
             var path = store.PathFor(Profile);
             File.WriteAllText(path, Version1);
             using var storage = new StampPersistence(store, Profile, () => Issued);
-            check(storage.Loaded == StampLoadOutcome.Loaded && storage.Collection.Unplaced.Count() == 1, "A version 1 save does not load.");
+            check(storage.Loaded == LoadOutcome.Loaded && storage.Collection.Unplaced.Count() == 1, "A version 1 save does not load.");
             storage.Collection.Place(storage.Collection.Stamps[0], new StampPlacement(0, 0.5f, 0.5f, 0f));
             check(storage.Flush(Wait) && System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(path))!["version"]!.GetValue<int>() == StampStore.Version, "A migrated save is not written as the current version.");
             check(File.ReadAllText(path + ".bak") == Version1, "Migrating does not keep the version 1 file as the backup.");

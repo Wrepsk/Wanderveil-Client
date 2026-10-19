@@ -11,6 +11,8 @@ internal struct PageFlow(Vector2 origin, float width, UiContext context, bool is
 
     internal readonly bool IsDrawing => isDrawing;
     internal readonly float Height => offset;
+    internal readonly float Width => width;
+    internal readonly UiContext Context => context;
 
     internal void Text(string text, TextRole role = TextRole.Body, bool muted = false)
     {

@@ -29,7 +29,7 @@ internal static class BookShellChecks
             (Name: "host-scale", Size: new Vector2(1280, 1000), Scale: 2f, Text: 1f) })
         {
             using var host = new HeadlessUi(scenario.Size, scenario.Scale, scenario.Text, materials: true);
-            var shell = new BookShell(host.Textures!, PassportPreview.Sample) { ReducedMotion = true };
+            var shell = new BookShell(host.Textures!, PassportIdentity.Sample) { ReducedMotion = true };
             var context = new UiContext(scenario.Scale, 18 * scenario.Scale * scenario.Text) { TitleFont = host.TitleFont, HeadingFont = host.HeadingFont, BodyFont = host.BodyFont, DisplayFont = host.DisplayFont, MonoFont = host.MonoFont, SignatureFont = host.SignatureFont };
             var size = BookShellLayout.Fit(shell.PreferredWidth, scenario.Size - new Vector2(32), context);
             UiRect root = default;
@@ -143,7 +143,7 @@ internal static class BookShellChecks
 
         using (var host = new HeadlessUi(new Vector2(1200, 900), materials: true))
         {
-            var profile = PassportPreview.Sample with { Bio = string.Concat(Enumerable.Repeat("A story about the long way around. ", 50)) };
+            var profile = PassportIdentity.Sample with { Bio = string.Concat(Enumerable.Repeat("A story about the long way around. ", 50)) };
             var shell = new BookShell(host.Textures!, profile) { ReducedMotion = true };
             var context = new UiContext(1, 18) { TitleFont = host.TitleFont, HeadingFont = host.HeadingFont, BodyFont = host.BodyFont, DisplayFont = host.DisplayFont, MonoFont = host.MonoFont };
             var size = BookShellLayout.Fit(1040, new Vector2(1168, 868), context);
@@ -167,7 +167,7 @@ internal static class BookShellChecks
 
         using (var host = new HeadlessUi(new Vector2(700, 700), materials: true))
         {
-            var profile = PassportPreview.Sample with { Bio = string.Concat(Enumerable.Repeat("A story about the long way around. ", 50)) };
+            var profile = PassportIdentity.Sample with { Bio = string.Concat(Enumerable.Repeat("A story about the long way around. ", 50)) };
             var page = new PassportView(profile, host.Textures!);
             var context = new UiContext(1, 18) { TitleFont = host.TitleFont, HeadingFont = host.HeadingFont, BodyFont = host.BodyFont, DisplayFont = host.DisplayFont, MonoFont = host.MonoFont };
             var activated = 0;
@@ -190,7 +190,7 @@ internal static class BookShellChecks
         }
         using (var host = new HeadlessUi(new Vector2(1200, 800), materials: true))
         {
-            var shell = new BookShell(new MissingAssets(), PassportPreview.Sample) { ReducedMotion = true };
+            var shell = new BookShell(new MissingAssets(), PassportIdentity.Sample) { ReducedMotion = true };
             var context = new UiContext(1, 18);
             var size = BookShellLayout.Fit(1040, new Vector2(1168, 768), context);
             for (var frame = 0; frame < 4; frame++) host.BookFrame(size, () =>

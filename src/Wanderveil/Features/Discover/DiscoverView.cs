@@ -9,7 +9,7 @@ using Wanderveil.UI.Primitives;
 namespace Wanderveil.Features.Discover;
 
 // Browsing and reading discoveries, and collecting a discovery's stamp into the passport's collection.
-internal sealed class DiscoverView(IReadOnlyList<DiscoveryPreview> previews, StampCollection? stamps = null, IBookAssets? assets = null, IStampStorage? storage = null)
+internal sealed class DiscoverView(IReadOnlyList<DiscoveryPreview> previews, StampCollection? stamps = null, IBookAssets? assets = null, ISavedState? storage = null)
 {
     internal DiscoveryPreview? SelectedDiscovery { get; private set; }
     internal StampCollection Stamps { get; } = stamps ?? new StampCollection();
@@ -134,7 +134,7 @@ internal sealed class DiscoverView(IReadOnlyList<DiscoveryPreview> previews, Sta
         {
             UiTypography.Text($"Collected on {StampArt.Date(held.CollectedAt)}. {StampStorageText.Kept(storage)}", TextRole.Body, context, ink);
             ImGui.Dummy(new Vector2(0f, UiMetrics.Small * context.Scale));
-            if (storage?.State == StampSaveState.Failed && BookControl.Link("Try saving again", context)) storage.Retry();
+            if (storage?.State == SaveState.Failed && BookControl.Link("Try saving again", context)) storage.Retry();
             if (focusPassportLink)
             {
                 ImGui.SetKeyboardFocusHere();

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
+using Wanderveil.Features;
 using Wanderveil.Features.Discover;
 using Wanderveil.Features.Echoes;
 using Wanderveil.Features.Passport;
@@ -22,7 +23,10 @@ internal readonly record struct BookShellIntent(bool Close, Vector2 Drag);
 // Real items (tabs, printed controls, page content) keep their own clicks and keyboard navigation.
 // BookShellMotion sequences arrival, the cover swing, and dismissal; the book takes no input while it moves.
 // Moving between sections riffles several pages in book direction; Settings are pages of the book too.
-internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IReadOnlyList<PassportPage>? pages = null, IBookShellSettings? settings = null, BookShellContent? content = null, StampCollection? stamps = null, IStampStorage? storage = null)
+// identity is the holder's stored identity (profile only seeds one when none is given); portrait, character,
+// and identityStorage are the host's picture, logged-in character, and identity file, each optional.
+internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IReadOnlyList<PassportPage>? pages = null, IBookShellSettings? settings = null, BookShellContent? content = null, StampCollection? stamps = null, ISavedState? storage = null,
+    PassportProfile? identity = null, IPassportPortrait? portrait = null, ICharacterSource? character = null, ISavedState? identityStorage = null)
 {
     internal const ImGuiWindowFlags WindowFlags = ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.NoBackground | ImGuiWindowFlags.NoCollapse |
         ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoMove | ImGuiWindowFlags.NoDocking;
@@ -30,7 +34,9 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
     private const int TabCount = 4;
     // The passport's stamps: Discover adds to them and the collection pages print them.
     private readonly StampCollection collection = stamps ??= new StampCollection();
-    private readonly PassportDocumentView passport = new(assets, profile);
+    private readonly PassportProfile holder = identity ??= new PassportProfile(profile);
+    private readonly PassportDocumentView passport = new(assets, identity!, portrait);
+    private readonly IdentityEditor editor = new(identity!, portrait, character);
     // The fixed pages (nation, identity); unlimited blank stamp pages follow them.
     private readonly IReadOnlyList<PassportPage> fixedPages = ValidatePages(pages ?? PassportDocumentView.SamplePages);
     private readonly BookShellStamps desk = new(stamps!, assets);
@@ -69,10 +75,13 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
     internal int PageCount => Math.Max(fixedPages.Count, TotalPages);
     internal int FixedPageCount => fixedPages.Count;
     internal BookShellStamps Desk => desk;
+    internal PassportProfile Identity => holder;
+    // Whether the identity pages are being written on (the footer's Edit / Done).
+    internal bool EditingIdentity { get; private set; }
     // In game the plugin reads Escape from the game's own key state, so it can keep the game from also opening
     // its system menu, and hands it over with RequestEscape; then the book must not read it from ImGui as well.
     internal bool ReadsEscape { get; init; } = true;
-    // Whether Escape would do something here: put back a carried stamp, close stamp info, or close the book.
+    // Whether Escape would do something here: put back a carried stamp, close stamp info, stop editing, or close the book.
     // Read from the game's update thread, so only a plain flag.
     internal bool WantsEscape => wantsEscape;
     private volatile bool wantsEscape;
@@ -119,7 +128,7 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
             // A field being written in keeps Escape for itself; otherwise the book wants it while it is shown and
             // either holds a stamp or info, or has focus.
             wantsEscape = motion.Phase != BookPhase.Hidden && !ImGui.IsAnyItemActive()
-                && (desk.Busy || desk.Info != null || ImGui.IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows));
+                && (desk.Busy || desk.Info != null || EditingIdentity || ImGui.IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows));
         }
     }
 
@@ -127,7 +136,7 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
     {
         if (motion.Phase == BookPhase.Hidden) return new BookShellIntent(true, Vector2.Zero);
         // Escape plays the dismissal, except while a field is being written in: there it only leaves the field.
-        // A carried stamp or an open stamp info page takes Escape first.
+        // A carried stamp, an open stamp info page, or editing takes Escape first.
         var escape = escapeRequested;
         escapeRequested = false;
         if (ReadsEscape && ImGui.IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows) && !ImGui.IsAnyItemActive() && ImGui.IsKeyPressed(ImGuiKey.Escape, false)) escape = true;
@@ -135,6 +144,7 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
         {
             if (desk.Busy) desk.Cancel();
             else if (desk.Info != null) desk.CloseInfo();
+            else if (EditingIdentity) StopEditing();
             else motion.Dismiss();
         }
         if (motion.Cover <= 0f) return DrawClosed(bounds, context);
@@ -146,6 +156,9 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
         PageOverflow = PageOverflowX = 0;
         if (layout.IsSpread) VisiblePage -= VisiblePage % 2;
         var step = layout.IsSpread ? 2 : 1;
+        // Editing lasts while the identity pages rest open; turning or leaving them ends it.
+        var identityShown = Section == BookSection.Passport && !turning && !riffle.Active && (IsIdentity(VisiblePage) || layout.IsSpread && IsIdentity(VisiblePage + 1));
+        if (EditingIdentity && !identityShown) StopEditing();
 
         // Pages, tabs, and controls fade in once the cover has landed.
         ImGui.PushStyleVar(ImGuiStyleVar.Alpha, MathF.Max(0.01f, motion.Reveal));
@@ -181,7 +194,7 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
         if (BookControl.Draw("Larger", "+", layout.Tool(1, context), page, BookControlStyle.Ink, hint: "Larger passport")) PreferredWidth = MathF.Min(1400, PreferredWidth * 1.15f);
         var close = BookControl.Draw("Close", "×", layout.Tool(2, context), page, BookControlStyle.Ink, hint: "Close passport (Escape)");
         var resting = Section == BookSection.Passport && !riffle.Active && !turning;
-        if (resting) StampControls();
+        if (resting) StampControls(identityShown);
         ImGui.PopStyleVar();
         var edgeTurn = desk.Update(bounds, layout.Book, layout.LeftPage.Size.X, page, ImGui.GetIO().DeltaTime);
 
@@ -201,7 +214,8 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
         if (turns)
         {
             if (edgeTurn != 0 && !turn.Active) Turn(edgeTurn, step);
-            if (click is { } side) Turn(side, step);
+            // While writing, a click on the paper only leaves the field; it never turns the page.
+            if (click is { } side && !EditingIdentity) Turn(side, step);
             if (Keys(ImGuiKey.PageDown)) Turn(1, step);
             if (Keys(ImGuiKey.PageUp)) Turn(-1, step);
             if (Keys(ImGuiKey.Home) && desk.Carrying == null) CloseBook();
@@ -211,22 +225,37 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
 
         // The stamp control in the footer (Place a waiting stamp, Put back, or Arrange/Done), and an open stamp's info
         // page over the page opposite its stamp (over its own page when only one page shows).
-        void StampControls()
+        // On the identity pages the footer offers Edit (or Done) instead.
+        void StampControls(bool identityPages)
         {
             if (desk.InfoSide() is { } right && desk.Info is { } shown && collection.PlacementOf(shown) is { } at)
                 desk.DrawInfo(layout.IsSpread ? right ? layout.LeftPage : layout.RightPage : layout.LeftPage, fixedPages.Count + at.Sheet + 1, page);
+            if (identityPages && desk.Carrying == null)
+            {
+                var edit = EditingIdentity ? "Done" : "Edit";
+                if (BookControl.Draw("Identity", edit, Footer(edit), page, BookControlStyle.Ink, hint: EditingIdentity ? "Stop editing (Escape)" : "Write your details, signature, and picture"))
+                {
+                    if (EditingIdentity) StopEditing();
+                    else { EditingIdentity = true; editor.Reset(); }
+                }
+                return;
+            }
             var waiting = collection.Unplaced.FirstOrDefault();
             var count = collection.Unplaced.Count();
             var label = desk.Carrying != null ? "Put back" : waiting != null ? count == 1 ? "Place stamp" : $"Place stamp ({count})" : desk.Arrange ? "Done" : "Arrange";
             var hint = desk.Carrying != null ? "Put the stamp you are holding back (Escape)" : waiting != null ? "Pick up a stamp waiting to be placed" : desk.Arrange ? "Stop arranging stamps" : "Move and turn your stamps";
-            // Right-aligned before the size and close marks, clear of the page number on a single page.
-            var tools = layout.Tool(0, context);
-            var width = MathF.Max(BookShellLayout.SettingsWidth(context), UiTypography.Measure(label, TextRole.Caption, page, float.MaxValue, false).X + 20 * page.Scale);
-            var control = new UiRect(new Vector2(tools.Position.X - BookShellLayout.Gap(context) - width, tools.Position.Y), new Vector2(width, tools.Size.Y));
-            if (!BookControl.Draw("Stamps", label, control, page, BookControlStyle.Ink, hint: hint)) return;
+            if (!BookControl.Draw("Stamps", label, Footer(label), page, BookControlStyle.Ink, hint: hint)) return;
             if (desk.Carrying != null) desk.Cancel();
             else if (waiting != null) PlaceStamp(waiting, layout.IsSpread);
             else desk.Arrange = !desk.Arrange;
+        }
+
+        // A footer control's place: right-aligned before the size and close marks, clear of the page number on a single page.
+        UiRect Footer(string label)
+        {
+            var tools = layout.Tool(0, context);
+            var width = MathF.Max(BookShellLayout.SettingsWidth(context), UiTypography.Measure(label, TextRole.Caption, page, float.MaxValue, false).X + 20 * page.Scale);
+            return new UiRect(new Vector2(tools.Position.X - BookShellLayout.Gap(context) - width, tools.Position.Y), new Vector2(width, tools.Size.Y));
         }
 
         // The resting spread of a section: passport pages, or a section's two pages (one when narrow).
@@ -337,8 +366,8 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
                 desk.DrawSheet(entry.Sheet, live, rightSide && layout.IsSpread, type);
                 return;
             }
-            passport.Compose(entry, type);
-            if (entry.Kind == PassportPageKind.Information)
+            passport.Compose(entry, type, live && EditingIdentity ? editor : null);
+            if (entry.Kind == PassportPageKind.Information && !(live && EditingIdentity))
             {
                 ImGui.Dummy(new Vector2(0, 10 * type.Scale));
                 explore |= BookControl.Link("Explore discoveries »", type);
@@ -611,6 +640,7 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
     {
         if (to == Section || riffle.Active) return;
         if (turn.Active) { turn.Finish(); VisiblePage = turn.Target; }
+        StopEditing();
         desk.Cancel();
         desk.CloseInfo();
         pageEntry = null;
@@ -659,6 +689,14 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
     }
 
     private PassportPage PageAt(int index) => index < fixedPages.Count ? fixedPages[index] : PassportPage.StampPage(index - fixedPages.Count);
+
+    private bool IsIdentity(int index) => index < fixedPages.Count && fixedPages[index].Kind is PassportPageKind.Portrait or PassportPageKind.Information;
+
+    private void StopEditing()
+    {
+        EditingIdentity = false;
+        editor.Reset();
+    }
 
     // Opens the Settings pages, from the printed Settings mark or the host's settings button. A closed
     // book opens straight onto them; an open book riffles forward to them.
@@ -717,6 +755,20 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
             if (BookControl.Link("Try saving again", context)) saveFailed = !settings.Save();
         }
         StampOptions(context);
+        IdentityOptions(context);
+    }
+
+    // Anything loading the passport's identity found, and a retry when saving it failed.
+    private void IdentityOptions(UiContext context)
+    {
+        if (IdentityStorageText.Notice(identityStorage) is not { } notice) return;
+        ImGui.Dummy(new Vector2(0, 24 * context.Scale));
+        UiTypography.Text("PASSPORT", TextRole.Caption, context, UiTheme.MutedInk);
+        ImGui.Dummy(new Vector2(0, 10 * context.Scale));
+        UiTypography.Text(notice, TextRole.Body, context, UiTheme.Ink);
+        if (identityStorage?.State != SaveState.Failed) return;
+        ImGui.Dummy(new Vector2(0, 6 * context.Scale));
+        if (BookControl.Link("Try saving your passport again", context)) identityStorage.Retry();
     }
 
     // How many stamps the passport holds, whether they are saved, and anything loading them found.
@@ -732,7 +784,7 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
             ImGui.Dummy(new Vector2(0, 6 * context.Scale));
             UiTypography.Text(notice, TextRole.Body, context, UiTheme.Ink);
         }
-        if (storage?.State != StampSaveState.Failed) return;
+        if (storage?.State != SaveState.Failed) return;
         ImGui.Dummy(new Vector2(0, 6 * context.Scale));
         if (BookControl.Link("Try saving stamps again", context)) storage.Retry();
     }
@@ -745,6 +797,7 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
         riffle.Reset();
         desk.Cancel();
         desk.CloseInfo();
+        StopEditing();
         pageEntry = null;
         ribbonExtension = 0f;
         pressing = dragging = false;

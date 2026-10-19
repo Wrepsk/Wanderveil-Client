@@ -150,7 +150,7 @@ internal static class MotionChecks
     private static void Shell(Action<bool, string> check, string? artifacts)
     {
         using var host = new HeadlessUi(new Vector2(1200, 900), materials: true);
-        var shell = new BookShell(host.Textures!, PassportPreview.Sample);
+        var shell = new BookShell(host.Textures!, PassportIdentity.Sample);
         var context = new UiContext(1, 18) { TitleFont = host.TitleFont, HeadingFont = host.HeadingFont, BodyFont = host.BodyFont, DisplayFont = host.DisplayFont, MonoFont = host.MonoFont, SignatureFont = host.SignatureFont };
         var room = new Vector2(1168, 868);
         UiRect bounds = default;
@@ -322,7 +322,7 @@ internal static class MotionChecks
     private static void SingleTurn(Action<bool, string> check, string? artifacts)
     {
         using var host = new HeadlessUi(new Vector2(452, 760), materials: true);
-        var shell = new BookShell(host.Textures!, PassportPreview.Sample);
+        var shell = new BookShell(host.Textures!, PassportIdentity.Sample);
         var context = new UiContext(1, 18) { TitleFont = host.TitleFont, HeadingFont = host.HeadingFont, BodyFont = host.BodyFont, DisplayFont = host.DisplayFont, MonoFont = host.MonoFont, SignatureFont = host.SignatureFont };
         UiRect bounds = default;
         void Step()
@@ -368,7 +368,7 @@ internal static class MotionChecks
     {
         using var host = new HeadlessUi(new Vector2(1200, 900), materials: true);
         var settings = new FakeSettings();
-        var shell = new BookShell(host.Textures!, PassportPreview.Sample, settings: settings);
+        var shell = new BookShell(host.Textures!, PassportIdentity.Sample, settings: settings);
         var context = new UiContext(1, 18) { TitleFont = host.TitleFont, HeadingFont = host.HeadingFont, BodyFont = host.BodyFont, DisplayFont = host.DisplayFont, MonoFont = host.MonoFont, SignatureFont = host.SignatureFont };
         UiRect bounds = default;
         void Step()
@@ -436,7 +436,7 @@ internal static class MotionChecks
         check(shell.VisiblePage == 2, "Back does not return to the same passport spread.");
 
         // The host's settings button on a closed passport opens straight onto the Settings pages.
-        var closed = new BookShell(host.Textures!, PassportPreview.Sample, settings: settings) { ReducedMotion = true };
+        var closed = new BookShell(host.Textures!, PassportIdentity.Sample, settings: settings) { ReducedMotion = true };
         closed.BeginSession();
         closed.ShowSettings();
         check(closed.IsBookOpen && closed.Section == BookSection.Settings && closed.ReturnSection == BookSection.Passport && !closed.IsRiffling, "Opening settings from a closed passport does not open onto them.");

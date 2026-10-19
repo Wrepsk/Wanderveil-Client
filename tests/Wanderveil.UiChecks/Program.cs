@@ -43,7 +43,7 @@ Check(Contrast(UiTheme.MutedInk, UiTheme.Paper) >= 4.5, "Paper caption contrast 
 foreach (var action in new[] { UiTheme.Action, UiTheme.ActionHovered, UiTheme.ActionPressed })
     Check(Contrast(UiTheme.Paper, action) >= 4.5, "Button label contrast is insufficient.");
 
-var longProfile = new PassportPreview(
+var longProfile = new PassportIdentity(
     "Ari of the Many Winding Roads and Forgotten Horizons",
     "An unusually long sample home-world label",
     "Bard / Botanist / Weaver / A very long favorite-job label",
@@ -55,9 +55,9 @@ if (artifacts != null)
     Directory.CreateDirectory(artifacts);
 foreach (var scenario in new[]
 {
-    (Name: "passport-wide", Width: 820f, Height: 640f, Scale: 1f, Zoom: 1f, Data: PassportPreview.Sample),
-    (Name: "passport-narrow", Width: 400f, Height: 760f, Scale: 1f, Zoom: 1f, Data: PassportPreview.Sample),
-    (Name: "passport-large-text", Width: 820f, Height: 760f, Scale: 1f, Zoom: 1.75f, Data: PassportPreview.Sample),
+    (Name: "passport-wide", Width: 820f, Height: 640f, Scale: 1f, Zoom: 1f, Data: PassportIdentity.Sample),
+    (Name: "passport-narrow", Width: 400f, Height: 760f, Scale: 1f, Zoom: 1f, Data: PassportIdentity.Sample),
+    (Name: "passport-large-text", Width: 820f, Height: 760f, Scale: 1f, Zoom: 1.75f, Data: PassportIdentity.Sample),
     (Name: "passport-long-text", Width: 680f, Height: 760f, Scale: 1.25f, Zoom: 1.25f, Data: longProfile),
 })
 {

@@ -51,7 +51,7 @@ internal static class BookChecks
             foreach (var missing in new[] { false, true })
             {
                 using var host = new HeadlessUi(new Vector2(scenario.Width, 960), scale: scenario.Scale, textScale: scenario.Zoom, materials: true);
-                var view = new PassportView(PassportPreview.Sample, missing ? new MissingAssets() : host.Textures);
+                var view = new PassportView(PassportIdentity.Sample, missing ? new MissingAssets() : host.Textures);
                 void Draw()
                 {
                     view.Draw(new UiContext(scenario.Scale, ImGui.GetFontSize()) { TitleFont = host.TitleFont, HeadingFont = host.HeadingFont, BodyFont = host.BodyFont, DisplayFont = host.DisplayFont, MonoFont = host.MonoFont });
@@ -63,7 +63,7 @@ internal static class BookChecks
 
         using (var host = new HeadlessUi(new Vector2(420, 400), materials: true))
         {
-            var profile = PassportPreview.Sample with { Name = "Ari of the Many Winding Roads and Forgotten Horizons", Bio = string.Concat(Enumerable.Repeat("A long story beyond the next horizon. ", 20)) };
+            var profile = PassportIdentity.Sample with { Name = "Ari of the Many Winding Roads and Forgotten Horizons", Bio = string.Concat(Enumerable.Repeat("A long story beyond the next horizon. ", 20)) };
             var view = new PassportView(profile, host.Textures);
             var activated = 0;
             void Draw()

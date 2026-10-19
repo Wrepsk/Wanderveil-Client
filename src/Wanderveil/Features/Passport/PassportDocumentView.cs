@@ -15,9 +15,15 @@ internal sealed record PassportPage(string Id, PassportPageKind Kind, int Sheet 
 }
 
 // Presentation data and composition; no ownership, persistence, or animation logic. Stamp pages are blank
-// paper here: the stamps on them, placed by the owner, are drawn by the shell's stamp layer.
-internal sealed class PassportDocumentView(IBookAssets assets, PassportPreview profile)
+// paper here: the stamps on them, placed by the owner, are drawn by the shell's stamp layer. The identity
+// pages print the holder's identity; given an editor, they are written on in place instead.
+internal sealed class PassportDocumentView(IBookAssets assets, PassportProfile holder, IPassportPortrait? picture = null)
 {
+    // The portrait frame's width over its height, as on the printed design.
+    internal const float PortraitAspect = 0.75f;
+
+    internal PassportDocumentView(IBookAssets assets, PassportIdentity identity) : this(assets, new PassportProfile(identity)) { }
+
     internal static readonly IReadOnlyList<PassportPage> SamplePages = Array.AsReadOnly(new[] {
         new PassportPage("nation-banner", PassportPageKind.NationBanner), new PassportPage("nation-map", PassportPageKind.NationMap),
         new PassportPage("portrait", PassportPageKind.Portrait), new PassportPage("information", PassportPageKind.Information) });
@@ -49,6 +55,8 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportPreview p
         }
         CoverText("GRIDANIA", 321, 44, 8);
         CoverText("THE BLACK SHROUD", 396, 14, 6);
+        // The holder's own line, if any, embossed in the same foil between the nation and the maker's mark.
+        if (holder.Identity.CoverLine is { Length: > 0 } line) CoverText(line, 440, 15, 4);
         CoverText("WANDERVEIL", 492, 10, 5, 0.7f);
 
         void CoverText(string text, float top, float size, float tracking, float alpha = 1)
@@ -57,6 +65,14 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportPreview p
             var type = context with { FontSize = MathF.Max(9, size * unit) / 1.65f, TitleFont = context.DisplayFont };
             var spacing = MathF.Round(tracking * unit);
             var width = UiTypography.MeasureTracked(text, TextRole.Title, type, spacing);
+            // A long line is set smaller to stay within the board's margins.
+            if (width > 360 * unit)
+            {
+                var shrink = MathF.Max(0.5f, 360 * unit / width);
+                type = type with { FontSize = MathF.Max(9 / 1.65f, type.FontSize * shrink) };
+                spacing = MathF.Round(spacing * shrink);
+                width = UiTypography.MeasureTracked(text, TextRole.Title, type, spacing);
+            }
             var position = new Vector2(centerX - width / 2, board.Y + top * unit);
             var foil = UiTheme.Foil;
             var shadow = new Vector4(0.02f, 0.05f, 0.03f, 0.55f * alpha);
@@ -78,19 +94,21 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportPreview p
     // Drawn inside the page's window, before its stamps, so a stamp pressed over it covers it.
     internal void Engrave(UiContext context)
     {
+        var number = holder.Identity.Number;
         var type = context with { BodyFont = context.MonoFont };
         var spacing = MathF.Round(3 * context.Scale);
-        var width = UiTypography.MeasureTracked(profile.Number, TextRole.Caption, type, spacing);
+        var width = UiTypography.MeasureTracked(number, TextRole.Caption, type, spacing);
         var height = UiTypography.Size(TextRole.Caption, type);
         var page = new UiRect(ImGui.GetWindowPos(), ImGui.GetWindowSize());
         var at = page.Max - new Vector2(width + 8 * context.Scale, height + 6 * context.Scale);
         var list = ImGui.GetWindowDrawList();
         var light = MathF.Max(1, MathF.Round(context.Scale));
-        UiTypography.DrawTracked(list, at - new Vector2(light), profile.Number, TextRole.Caption, type, spacing, UiTheme.MutedInk with { W = 0.5f });
-        UiTypography.DrawTracked(list, at, profile.Number, TextRole.Caption, type, spacing, new Vector4(0.93f, 0.9f, 0.84f, 0.9f));
+        UiTypography.DrawTracked(list, at - new Vector2(light), number, TextRole.Caption, type, spacing, UiTheme.MutedInk with { W = 0.5f });
+        UiTypography.DrawTracked(list, at, number, TextRole.Caption, type, spacing, new Vector4(0.93f, 0.9f, 0.84f, 0.9f));
     }
 
-    internal float Compose(PassportPage page, UiContext context)
+    // editor: write on the identity pages in place (only on resting pages, never on a turning leaf).
+    internal float Compose(PassportPage page, UiContext context, IdentityEditor? editor = null)
     {
         var width = UiLayout.ContentWidth;
         var flow = new PageFlow(ImGui.GetCursorScreenPos(), width, context, true);
@@ -98,8 +116,8 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportPreview p
         {
             case PassportPageKind.NationBanner: break; // Drawn on the paper by DrawNationBanner.
             case PassportPageKind.NationMap: Nation(ref flow, false, width, context); break;
-            case PassportPageKind.Portrait: Identity(ref flow, true, width, context); break;
-            case PassportPageKind.Information: Identity(ref flow, false, width, context); break;
+            case PassportPageKind.Portrait: Portrait(ref flow, width, context, editor); break;
+            case PassportPageKind.Information: Information(ref flow, width, context, editor); break;
             case PassportPageKind.Stamps: break; // Blank paper; the owner's stamps are drawn over it.
             default: flow.Text("A place for future memories", TextRole.Title); break;
         }
@@ -153,73 +171,123 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportPreview p
         flow.Text(isLeft ? "Wreath & sprout / Banner study" : "Illustrative map study / Geography not validated", TextRole.Caption, true);
     }
 
-    private void Identity(ref PageFlow flow, bool isLeft, float width, UiContext context)
+    private void Portrait(ref PageFlow flow, float width, UiContext context, IdentityEditor? editor)
     {
-        if (isLeft)
+        var identity = holder.Identity;
+        flow.Text("02 / PORTRAIT & SIGNATURE", TextRole.Caption, true);
+        flow.Gap(16);
+        var area = flow.Reserve(330 * context.Scale);
+        var own = flow.IsDrawing ? PortraitFrame(area, context, editor) : identity.Portrait != null && picture?.TryGet(out _) == true;
+        var hasPlaceholder = assets.TryGet(BookAsset.Portrait, out _);
+        flow.Gap(12);
+        flow.Text(own ? editor != null ? "DRAG TO MOVE / SCROLL TO ZOOM" : "HOLDER'S PORTRAIT" : hasPlaceholder ? "Demo portrait placeholder" : "Offline portrait preview", TextRole.Caption, true);
+        editor?.PictureLinks(ref flow);
+        flow.Gap(24);
+        // A long name signs smaller, as a hand would to fit the line; past half size it wraps instead of clipping.
+        var type = context with { HeadingFont = context.SignatureFont, FontSize = context.FontSize * 1.5f };
+        if (editor != null) editor.Field(ref flow, IdentityField.Signature, TextRole.Heading, identity.Name.Length > 0 ? identity.Name : "Your signature", type);
+        else
         {
-            flow.Text("02 / PORTRAIT & SIGNATURE", TextRole.Caption, true);
-            flow.Gap(16);
-            var portrait = flow.Reserve(330 * context.Scale);
-            var hasPortrait = assets.TryGet(BookAsset.Portrait, out _);
-            if (hasPortrait) BookSurface.Portrait(portrait, assets, context);
-            else UiTypography.Draw(ImGui.GetWindowDrawList(), portrait.Position, "Portrait unavailable", TextRole.Body, context, width, UiTheme.MutedInk);
-            flow.Gap(12);
-            flow.Text(hasPortrait ? "Demo portrait placeholder" : "Offline portrait preview", TextRole.Caption, true);
-            flow.Gap(24);
-            // A long name signs smaller, as a hand would to fit the line; past half size it wraps instead of clipping.
-            var type = context with { HeadingFont = context.SignatureFont, FontSize = context.FontSize * 1.5f };
-            var natural = UiTypography.Measure(profile.Name, TextRole.Heading, type, float.MaxValue, false).X;
+            var signed = identity.SignedName;
+            var natural = UiTypography.Measure(signed, TextRole.Heading, type, float.MaxValue, false).X;
             if (natural > width) type = type with { FontSize = type.FontSize * MathF.Max(0.5f, width / natural) };
-            var wraps = UiTypography.Measure(profile.Name, TextRole.Heading, type, float.MaxValue, false).X > width;
-            var measured = UiTypography.Measure(profile.Name, TextRole.Heading, type, width, wraps);
+            var wraps = UiTypography.Measure(signed, TextRole.Heading, type, float.MaxValue, false).X > width;
+            var measured = UiTypography.Measure(signed, TextRole.Heading, type, width, wraps);
             var signature = flow.Reserve(MathF.Max(44 * context.Scale, measured.Y));
-            if (flow.IsDrawing)
-                UiTypography.Draw(ImGui.GetWindowDrawList(), signature.Position + new Vector2(wraps ? 0 : (width - measured.X) / 2, MathF.Max(0, 44 * context.Scale - measured.Y) / 2), profile.Name, TextRole.Heading, type, width, UiTheme.Ink, wraps);
-            flow.Rule();
-            flow.Text("HOLDER'S SIGNATURE / DEMO", TextRole.Caption, true);
-            return;
+            if (flow.IsDrawing && signed.Length > 0)
+                UiTypography.Draw(ImGui.GetWindowDrawList(), signature.Position + new Vector2(wraps ? 0 : (width - measured.X) / 2, MathF.Max(0, 44 * context.Scale - measured.Y) / 2), signed, TextRole.Heading, type, width, UiTheme.Ink, wraps);
         }
-        flow.Text("GRIDANIA / ADVENTURER IDENTITY", TextRole.Caption, true);
-        flow.Gap(16);
-        flow.Text(profile.Name, TextRole.Title);
+        flow.Rule();
+        flow.Text(editor != null ? "HOLDER'S SIGNATURE / LEFT EMPTY, YOUR NAME SIGNS" : "HOLDER'S SIGNATURE", TextRole.Caption, true);
+        if (editor == null) return;
         flow.Gap(20);
-        Pair(ref flow, "HOME WORLD", profile.HomeWorld, "DATA CENTER", "Demo DC", width, context);
+        flow.Text("ON THE COVER", TextRole.Caption, true);
+        flow.Gap(5);
+        editor.Field(ref flow, IdentityField.CoverLine, TextRole.Body, "Nothing added (as printed)");
+        editor.CoverLinks(ref flow);
+    }
+
+    // The holder's own picture in its frame, placed as they placed it; otherwise the edition's placeholder.
+    // Returns whether the holder's picture was drawn.
+    private bool PortraitFrame(UiRect area, UiContext context, IdentityEditor? editor)
+    {
+        if (holder.Identity.Portrait is { } crop && picture != null && picture.TryGet(out var image))
+        {
+            var width = MathF.Min(area.Size.X, area.Size.Y * PortraitAspect);
+            var size = new Vector2(width, width / PortraitAspect);
+            var frame = new UiRect(area.Position + (area.Size - size) / 2, size);
+            var (uv0, uv1) = crop.Window(image.Width / (float)Math.Max(1, image.Height), PortraitAspect);
+            var list = ImGui.GetWindowDrawList();
+            var mount = new Vector2(4f * context.Scale);
+            BookSurface.Rect(list, frame.Position - mount, frame.Max + mount, ImGui.GetColorU32(UiTheme.Paper));
+            BookSurface.Image(list, image.Texture, frame.Position, frame.Max, uv0, uv1);
+            editor?.Crop(frame, image);
+            return true;
+        }
+        if (assets.TryGet(BookAsset.Portrait, out _)) BookSurface.Portrait(area, assets, context);
+        else UiTypography.Draw(ImGui.GetWindowDrawList(), area.Position, "Portrait unavailable", TextRole.Body, context, area.Size.X, UiTheme.MutedInk);
+        return false;
+    }
+
+    private void Information(ref PageFlow flow, float width, UiContext context, IdentityEditor? editor)
+    {
+        var identity = holder.Identity;
+        flow.Text("GRIDANIA / ADVENTURER IDENTITY", TextRole.Caption, true);
+        editor?.CharacterLink(ref flow);
         flow.Gap(16);
-        Pair(ref flow, "FAVORITE JOB", profile.FavoriteJobs, "FREE COMPANY", "Unassigned", width, context);
+        if (editor != null) editor.Field(ref flow, IdentityField.Name, TextRole.Title, "Your name");
+        else flow.Text(Shown(identity.Name), TextRole.Title, identity.Name.Length == 0);
+        flow.Gap(20);
+        Pair(ref flow, new("HOME WORLD", IdentityField.HomeWorld, "Home world"), new("DATA CENTER", IdentityField.DataCenter, "Data center"), width, context, editor);
         flow.Gap(16);
-        Pair(ref flow, "DATE OF ISSUE", "18 OCT 2026 / DEMO", "PASSPORT NO.", profile.Number, width, context, true);
+        Pair(ref flow, new("FAVORITE JOB", IdentityField.FavoriteJob, "Favorite job"), new("FREE COMPANY", IdentityField.FreeCompany, "Free company"), width, context, editor);
+        flow.Gap(16);
+        var issued = identity.Issued?.ToString("dd MMM yyyy", System.Globalization.CultureInfo.InvariantCulture).ToUpperInvariant() ?? "";
+        Pair(ref flow, new("DATE OF ISSUE", null, issued), new("PASSPORT NO.", null, identity.Number), width, context, null, true);
         flow.Rule();
         flow.Text("A WISH FOR THE ROAD", TextRole.Caption, true);
         flow.Gap(8);
-        flow.Text(profile.Motto, TextRole.Heading);
+        if (editor != null) editor.Field(ref flow, IdentityField.Motto, TextRole.Heading, "A wish for the road");
+        else flow.Text(Shown(identity.Motto), TextRole.Heading, identity.Motto.Length == 0);
         flow.Gap(20);
         flow.Text("ABOUT THE ADVENTURER", TextRole.Caption, true);
         flow.Gap(8);
-        flow.Text(profile.Bio);
+        if (editor != null) editor.Field(ref flow, IdentityField.Bio, TextRole.Body, "A few words about you");
+        else flow.Text(Shown(identity.Bio), TextRole.Body, identity.Bio.Length == 0);
         flow.Rule();
         var mono = new PageFlow(flow.Reserve(0).Position, width, context with { BodyFont = context.MonoFont }, flow.IsDrawing);
-        mono.Text("P<WV<GRIDANIA<SAMPLE<IDENTITY<<0001", TextRole.Caption, true);
+        mono.Text(identity.MachineLine(), TextRole.Caption, true);
         flow.Reserve(mono.Height);
     }
 
-    private void Pair(ref PageFlow flow, string label1, string value1, string label2, string value2, float width, UiContext context, bool monoSecond = false)
+    // An empty field prints as a dash, so the page still reads as a form waiting to be filled in.
+    private static string Shown(string value) => value.Length > 0 ? value : "—";
+
+    // One labelled box of the identity form: a field the holder writes (Field set; Text is its placeholder),
+    // or fixed text (Field null).
+    private readonly record struct Entry(string Label, IdentityField? Field, string Text);
+
+    private void Pair(ref PageFlow flow, Entry first, Entry second, float width, UiContext context, IdentityEditor? editor, bool monoSecond = false)
     {
-        var second = monoSecond ? context with { BodyFont = context.MonoFont } : context;
+        var mono = monoSecond ? context with { BodyFont = context.MonoFont } : context;
         var gap = 16 * context.Scale;
         var column = (width - gap) / 2;
         var a = new PageFlow(Vector2.Zero, column, context, false);
-        var b = new PageFlow(Vector2.Zero, column, second, false);
-        Field(ref a, label1, value1, context); Field(ref b, label2, value2, second);
+        var b = new PageFlow(Vector2.Zero, column, mono, false);
+        Field(ref a, first, editor); Field(ref b, second, editor);
         var row = flow.Reserve(MathF.Max(a.Height, b.Height));
+        if (!flow.IsDrawing) return;
         a = new PageFlow(row.Position, column, context, true);
-        b = new PageFlow(row.Position + new Vector2(column + gap, 0), column, second, true);
-        Field(ref a, label1, value1, context); Field(ref b, label2, value2, second);
+        b = new PageFlow(row.Position + new Vector2(column + gap, 0), column, mono, true);
+        Field(ref a, first, editor); Field(ref b, second, editor);
     }
 
-    private void Field(ref PageFlow flow, string label, string value, UiContext context)
+    private void Field(ref PageFlow flow, Entry entry, IdentityEditor? editor)
     {
-        flow.Text(label, TextRole.Caption, true);
+        flow.Text(entry.Label, TextRole.Caption, true);
         flow.Gap(5);
-        flow.Text(value);
+        if (entry.Field is { } field && editor != null) { editor.Field(ref flow, field, TextRole.Body, entry.Text); return; }
+        var value = entry.Field is { } shown ? holder.Identity[shown] : entry.Text;
+        flow.Text(Shown(value), TextRole.Body, value.Length == 0);
     }
 }

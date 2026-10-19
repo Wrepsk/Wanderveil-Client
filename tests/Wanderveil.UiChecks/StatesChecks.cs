@@ -19,15 +19,15 @@ internal static class StatesChecks
     internal static void Run(Action<bool, string> check, string? artifacts)
     {
         var empty = new BookShellContent([], null, StudioTemplate.Catalog.Where(template => !template.Available).ToArray());
-        Visit(check, artifacts, "empty", new Vector2(1200, 800), PassportPreview.Sample, empty, missingArt: false, japanese: false, shell =>
+        Visit(check, artifacts, "empty", new Vector2(1200, 800), PassportIdentity.Sample, empty, missingArt: false, japanese: false, shell =>
         {
             check(!shell.Studio.Choose(StudioTemplateKind.Postcard) && shell.Studio.Draft == null, "An empty Studio catalog still starts a draft.");
         });
 
-        Visit(check, artifacts, "missing-art", new Vector2(1200, 800), PassportPreview.Sample, BookShellContent.Sample, missingArt: true, japanese: false);
+        Visit(check, artifacts, "missing-art", new Vector2(1200, 800), PassportIdentity.Sample, BookShellContent.Sample, missingArt: true, japanese: false);
         MissingArtMotion(check, artifacts);
 
-        var longProfile = new PassportPreview(
+        var longProfile = new PassportIdentity(
             "Ari of the " + LongWord + " and the Many Winding Roads",
             "An unusually long sample home-world label for " + LongWord,
             "Bard / Botanist / " + LongWord,
@@ -59,7 +59,7 @@ internal static class StatesChecks
                 check(shell.Studio.Draft!.Template.Fields.All(field => StudioDraft.Length(shell.Studio.Draft[field.Id]) == field.MaxLength), "Long Studio text is not held at each field's limit.");
             });
 
-        var japaneseProfile = new PassportPreview("アリ・ヴェイル", "デモワールド", "吟遊詩人 / 園芸師",
+        var japaneseProfile = new PassportIdentity("アリ・ヴェイル", "デモワールド", "吟遊詩人 / 園芸師",
             "小さな物語と静かな小道、そして遠回りする価値のある景色を集める冒険者。", "寄り道をしよう。物語はいつもその先で待っている。");
         var japaneseDiscovery = DiscoveryPreview.Postcard with
         {
@@ -86,7 +86,7 @@ internal static class StatesChecks
         });
     }
 
-    private static void Visit(Action<bool, string> check, string? artifacts, string name, Vector2 room, PassportPreview profile, BookShellContent content, bool missingArt, bool japanese, Action<BookShell>? studio = null)
+    private static void Visit(Action<bool, string> check, string? artifacts, string name, Vector2 room, PassportIdentity profile, BookShellContent content, bool missingArt, bool japanese, Action<BookShell>? studio = null)
     {
         using var host = new HeadlessUi(room, 1f, 1f, materials: true, japanese: japanese);
         IBookAssets assets = missingArt ? new MissingAssets() : host.Textures!;
@@ -163,7 +163,7 @@ internal static class StatesChecks
     {
         var room = new Vector2(1200, 800);
         using var host = new HeadlessUi(room, materials: true);
-        var shell = new BookShell(new MissingAssets(), PassportPreview.Sample);
+        var shell = new BookShell(new MissingAssets(), PassportIdentity.Sample);
         var context = new UiContext(1, 18) { TitleFont = host.TitleFont, HeadingFont = host.HeadingFont, BodyFont = host.BodyFont, DisplayFont = host.DisplayFont, MonoFont = host.MonoFont, SignatureFont = host.SignatureFont };
         UiRect root = default;
         void Frame()

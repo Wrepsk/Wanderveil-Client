@@ -14,7 +14,7 @@ internal static class GridaniaTargets
     internal static Reading Draw(string target, UiRect window, PreviewTextures assets, UiContext context, ImFontPtr signatureFont,
         bool single = false, bool information = false, bool longText = false)
     {
-        var profile = longText ? PassportPreview.Sample with { Name = "Ari of the Many Winding Roads and Forgotten Horizons", Bio = string.Concat(Enumerable.Repeat("A keeper of quiet paths and small stories. ", 12)) } : PassportPreview.Sample;
+        var profile = longText ? PassportIdentity.Sample with { Name = "Ari of the Many Winding Roads and Forgotten Horizons", Bio = string.Concat(Enumerable.Repeat("A keeper of quiet paths and small stories. ", 12)) } : PassportIdentity.Sample;
         var document = new PassportDocumentView(target == "cover-plum" ? new VariantAssets(assets) : assets, profile);
         context = context with { SignatureFont = signatureFont };
         if (target.StartsWith("cover", StringComparison.Ordinal)) { document.DrawCover(window, context); return default; }

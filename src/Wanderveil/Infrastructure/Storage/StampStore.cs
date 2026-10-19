@@ -7,7 +7,7 @@ using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using System.Text.RegularExpressions;
+using Wanderveil.Features;
 using Wanderveil.Features.Stamps;
 
 namespace Wanderveil.Infrastructure.Storage;
@@ -23,81 +23,30 @@ internal sealed record StampBook(IReadOnlyList<StampInstance> Stamps, IReadOnlyL
     internal bool SameAs(StampBook other) => Stamps.SequenceEqual(other.Stamps) && Placements.SequenceEqual(other.Placements);
 }
 
-internal sealed record StampLoad(StampLoadOutcome Outcome, StampBook Book, IReadOnlyList<string> Kept);
+internal sealed record StampLoad(LoadOutcome Outcome, StampBook Book, IReadOnlyList<string> Kept);
 
-// A passport's stamps in one versioned JSON file per profile: stamps-<profile>.json in the given directory.
-// Saving writes a temporary file, flushes it to disk, then replaces the old file in one step, keeping the
-// previous save as stamps-<profile>.json.bak. A crash mid-save leaves the old file whole.
-// Loading never deletes anything it cannot read: unreadable files are renamed aside and kept.
+// A passport's stamps in one versioned JSON file per profile: stamps-<profile>.json in the given directory,
+// saved and recovered as a SafeFile (the previous save kept as stamps-<profile>.json.bak).
 // Blocking file I/O: call it from startup or a background task, never from a draw callback.
-internal sealed partial class StampStore(string directory)
+internal sealed class StampStore(string directory)
 {
     internal const string Format = "wanderveil.passport-stamps";
     internal const int Version = 2;
     private const long MaximumBytes = 4 * 1024 * 1024;
     private const string LocalDemo = "local-demo";
 
-    // Profiles name files, so they are restricted to a safe, stable spelling.
-    internal static bool IsProfile(string profile) => ProfilePattern().IsMatch(profile);
+    internal static bool IsProfile(string profile) => StorageProfile.IsValid(profile);
 
-    internal string PathFor(string profile) => Path.Combine(directory, $"stamps-{Checked(profile)}.json");
+    internal string PathFor(string profile) => Path.Combine(directory, $"stamps-{StorageProfile.Checked(profile)}.json");
 
     internal StampLoad Load(string profile)
     {
-        var path = PathFor(profile);
-        var backup = path + ".bak";
         var kept = new List<string>();
-        try { return Recover(path, backup, kept); }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-        {
-            // Setting a file aside or restoring the backup failed: touch nothing more and save nothing.
-            return new StampLoad(StampLoadOutcome.Inaccessible, StampBook.Empty, kept);
-        }
+        var outcome = SafeFile.Load(PathFor(profile), MaximumBytes, Parse, kept, out var book);
+        return new StampLoad(outcome, book ?? StampBook.Empty, kept);
     }
 
-    private static StampLoad Recover(string path, string backup, List<string> kept)
-    {
-        // A leftover temporary file is a save interrupted before its final step. If it is complete it is the
-        // newest save, so finish that step; otherwise drop it, since the file it was replacing is intact.
-        var temporary = path + ".tmp";
-        var interrupted = Read(temporary).Kind;
-        if (interrupted == ReadKind.Ok)
-        {
-            if (File.Exists(path)) File.Replace(temporary, path, backup, ignoreMetadataErrors: true);
-            else File.Move(temporary, path);
-        }
-        else if (interrupted == ReadKind.Unreadable) TryDelete(temporary);
-        var main = Read(path);
-        if (main.Kind == ReadKind.Ok) return new StampLoad(StampLoadOutcome.Loaded, main.Book, kept);
-        if (main.Kind is ReadKind.Newer or ReadKind.Inaccessible) return new StampLoad(Outcome(main.Kind), StampBook.Empty, kept);
-        var previous = Read(backup);
-        if (previous.Kind is ReadKind.Newer or ReadKind.Inaccessible) return new StampLoad(Outcome(previous.Kind), StampBook.Empty, kept);
-        if (main.Kind == ReadKind.Missing && previous.Kind == ReadKind.Missing) return new StampLoad(StampLoadOutcome.New, StampBook.Empty, kept);
-        if (main.Kind == ReadKind.Unreadable) kept.Add(SetAside(path));
-        if (previous.Kind == ReadKind.Ok)
-        {
-            // Put the backup back as the saved file, so the next save backs it up in turn.
-            File.Copy(backup, path, overwrite: false);
-            return new StampLoad(StampLoadOutcome.Recovered, previous.Book, kept);
-        }
-        if (previous.Kind == ReadKind.Unreadable) kept.Add(SetAside(backup));
-        return new StampLoad(StampLoadOutcome.Unreadable, StampBook.Empty, kept);
-    }
-
-    internal void Save(string profile, StampBook book)
-    {
-        var path = PathFor(profile);
-        Directory.CreateDirectory(directory);
-        var temporary = path + ".tmp";
-        var bytes = Encoding.UTF8.GetBytes(Serialize(book));
-        using (var stream = new FileStream(temporary, FileMode.Create, FileAccess.Write, FileShare.None))
-        {
-            stream.Write(bytes);
-            stream.Flush(flushToDisk: true);
-        }
-        if (File.Exists(path)) File.Replace(temporary, path, path + ".bak", ignoreMetadataErrors: true);
-        else File.Move(temporary, path);
-    }
+    internal void Save(string profile, StampBook book) => SafeFile.Write(PathFor(profile), Encoding.UTF8.GetBytes(Serialize(book)));
 
     internal static string Serialize(StampBook book)
     {
@@ -197,49 +146,4 @@ internal sealed partial class StampStore(string directory)
     private static string Required(JsonObject node, string name) => Text(node, name) is { } text && !string.IsNullOrWhiteSpace(text) ? text : throw new FormatException($"A stamp file is missing {name}.");
     private static int Number(JsonObject node, string name) => node[name] is JsonValue value && value.TryGetValue<int>(out var number) ? number : throw new FormatException($"A stamp file is missing {name}.");
     private static float Real(JsonObject node, string name) => node[name] is JsonValue value && value.TryGetValue<double>(out var number) ? (float)number : throw new FormatException($"A stamp file is missing {name}.");
-
-    private enum ReadKind { Missing, Ok, Unreadable, Newer, Inaccessible }
-
-    private readonly record struct ReadResult(ReadKind Kind, StampBook Book);
-
-    private static ReadResult Read(string path)
-    {
-        string text;
-        try
-        {
-            if (!File.Exists(path)) return new ReadResult(ReadKind.Missing, StampBook.Empty);
-            if (new FileInfo(path).Length > MaximumBytes) return new ReadResult(ReadKind.Unreadable, StampBook.Empty);
-            text = File.ReadAllText(path, Encoding.UTF8);
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-        {
-            return new ReadResult(ReadKind.Inaccessible, StampBook.Empty);
-        }
-        try { return new ReadResult(ReadKind.Ok, Parse(text)); }
-        catch (NotSupportedException) { return new ReadResult(ReadKind.Newer, StampBook.Empty); }
-        catch (FormatException) { return new ReadResult(ReadKind.Unreadable, StampBook.Empty); }
-    }
-
-    private static StampLoadOutcome Outcome(ReadKind kind) => kind == ReadKind.Newer ? StampLoadOutcome.Newer : StampLoadOutcome.Inaccessible;
-
-    // Renames an unreadable file aside, never over another, and returns where it went.
-    private static string SetAside(string path)
-    {
-        var stamp = DateTime.UtcNow.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
-        var target = $"{path}.unreadable-{stamp}";
-        for (var index = 2; File.Exists(target); index++) target = $"{path}.unreadable-{stamp}-{index}";
-        File.Move(path, target);
-        return target;
-    }
-
-    private static void TryDelete(string path)
-    {
-        try { File.Delete(path); }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) { }
-    }
-
-    private static string Checked(string profile) => IsProfile(profile) ? profile : throw new ArgumentException("A profile is 1-64 lowercase letters, digits, or hyphens.", nameof(profile));
-
-    [GeneratedRegex("^[a-z0-9][a-z0-9-]{0,63}$")]
-    private static partial Regex ProfilePattern();
 }
