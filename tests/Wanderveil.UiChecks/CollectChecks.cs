@@ -25,6 +25,7 @@ internal static class CollectChecks
         Escape(check);
         Edges(check);
         foreach (var (name, room) in new[] { ("wide", new Vector2(1200, 800)), ("narrow", new Vector2(452, 760)) }) Jump(check, name, room);
+        Holding(check, artifacts);
         Large(check);
         Unsaved(check);
     }
@@ -306,7 +307,65 @@ internal static class CollectChecks
         check(shell.VisiblePage == 0, name + $": page 0 opens page {shell.VisiblePage + 1}, not the first.");
         Go("12", enter: false);
         check(shell.VisiblePage == 0, name + ": Escape in the page number still jumps.");
+
+        // With motion, a jump riffles through the pages in book order, as between sections.
+        using var moving = new Book(room, new StampCollection(() => Issued), motion: true);
+        moving.Open();
+        check(moving.Shell.Phase == BookPhase.Open, name + ": the book with motion does not open.");
+        moving.Click(moving.Layout.Folio(false));
+        moving.Frames(2);
+        ImGui.GetIO().AddInputCharacters("57");
+        moving.Frames(2);
+        ImGui.GetIO().AddKeyEvent(ImGuiKey.Enter, true); moving.Frame();
+        ImGui.GetIO().AddKeyEvent(ImGuiKey.Enter, false); moving.Frame();
+        check(moving.Shell.IsRiffling && moving.Shell.VisiblePage == 56 - 56 % step, name + ": a jump does not riffle to its page.");
+        for (var frame = 0; frame < 120 && moving.Shell.IsRiffling; frame++) moving.Frame();
+        check(!moving.Shell.IsRiffling && moving.Shell.VisiblePage == 56 - 56 % step, name + ": a jump's riffle does not land on its page.");
         Console.WriteLine("PASS collect-jump-" + name);
+    }
+
+    // A held stamp stays on the stamp pages: no turning back past the first, no jumping before it, no
+    // closing to the cover. And it keeps its size while a page turns beneath it.
+    private static void Holding(Action<bool, string> check, string? artifacts)
+    {
+        var stamps = Seeded(1);
+        using var book = new Book(new Vector2(1200, 800), stamps, motion: true);
+        var shell = book.Shell;
+        book.Open();
+        check(shell.Phase == BookPhase.Open, "The book with motion does not open.");
+        book.Click(book.StampControl());
+        for (var frame = 0; frame < 120 && shell.IsRiffling; frame++) book.Frame();
+        check(shell.Desk.Carrying != null && shell.VisiblePage == shell.FixedPageCount, "Place stamp does not open the first stamp page with the stamp in hand.");
+        book.Key(ImGuiKey.PageUp);
+        for (var frame = 0; frame < 60 && shell.IsTurning; frame++) book.Frame();
+        check(shell.VisiblePage == shell.FixedPageCount, "A held stamp lets the book turn back to the identity pages.");
+        book.Key(ImGuiKey.Home);
+        check(shell.Phase == BookPhase.Open && shell.IsBookOpen, "Home closes the book while a stamp is held.");
+        var edge = book.Layout.Book;
+        book.Move(new Vector2(edge.Position.X + edge.Size.X * 0.02f, edge.Position.Y + edge.Size.Y / 2));
+        book.Frames(45);
+        check(shell.VisiblePage == shell.FixedPageCount && !shell.IsTurning, "Resting at the left edge turns back past the first stamp page.");
+        check(shell.FirstPageNumber == shell.FixedPageCount + 1, "Jumps are not limited to the stamp pages while a stamp is held.");
+        shell.GoToPage(2, true);
+        for (var frame = 0; frame < 120 && shell.IsRiffling; frame++) book.Frame();
+        check(shell.VisiblePage == shell.FixedPageCount && shell.Desk.Carrying != null, "A jump before the stamp pages leaves them while a stamp is held.");
+
+        // The stamp in hand is the same size before, during, and after a page turn.
+        book.Move(book.Spot(false, 0.5f, 0.5f));
+        var size = shell.Desk.CarriedDiameter;
+        ImGui.GetIO().AddKeyEvent(ImGuiKey.PageDown, true); book.Frame();
+        ImGui.GetIO().AddKeyEvent(ImGuiKey.PageDown, false); book.Frame();
+        var turned = false;
+        for (var frame = 0; frame < 60 && shell.IsTurning; frame++)
+        {
+            book.Frame();
+            turned = true;
+            check(MathF.Abs(shell.Desk.CarriedDiameter - size) < 0.5f, $"The stamp in hand grows from {size:0} to {shell.Desk.CarriedDiameter:0} while the page turns.");
+            if (frame == 8) book.Save(artifacts, "collect-carry-turning.png", keepMouse: true);
+        }
+        check(turned && shell.VisiblePage == shell.FixedPageCount + 2 && MathF.Abs(shell.Desk.CarriedDiameter - size) < 0.5f, "A held stamp does not keep its size through a turn.");
+        shell.GoToPage(1, true);
+        Console.WriteLine("PASS collect-holding");
     }
 
     // In game the plugin takes Escape from the game and hands it over; the book then ignores ImGui's Escape,
@@ -372,11 +431,11 @@ internal static class CollectChecks
         private UiRect root;
         internal BookShell Shell { get; }
 
-        internal Book(Vector2 room, StampCollection stamps, BookShellContent? content = null, IStampStorage? storage = null, bool readsEscape = true)
+        internal Book(Vector2 room, StampCollection stamps, BookShellContent? content = null, IStampStorage? storage = null, bool readsEscape = true, bool motion = false)
         {
             this.room = room;
             host = new HeadlessUi(room, materials: true);
-            Shell = new BookShell(host.Textures!, PassportPreview.Sample, content: content, stamps: stamps, storage: storage) { ReducedMotion = true, ReadsEscape = readsEscape };
+            Shell = new BookShell(host.Textures!, PassportPreview.Sample, content: content, stamps: stamps, storage: storage) { ReducedMotion = !motion, ReadsEscape = readsEscape };
             context = new UiContext(1, 18) { TitleFont = host.TitleFont, HeadingFont = host.HeadingFont, BodyFont = host.BodyFont, DisplayFont = host.DisplayFont, MonoFont = host.MonoFont, SignatureFont = host.SignatureFont };
             Frames(3);
         }
@@ -415,11 +474,16 @@ internal static class CollectChecks
         // Where discoveries are read: the right page of a spread, or the single page.
         private UiRect Reading => Layout.IsSpread ? Layout.RightPage : Layout.LeftPage;
 
-        internal void Frame() => host.BookFrame(Shell.FitSize(room - new Vector2(32), context), () =>
+        // As the plugin window does each frame: advance motion, then size and draw the book.
+        internal void Frame()
         {
-            root = new UiRect(ImGui.GetWindowPos(), ImGui.GetWindowSize());
-            Shell.Draw(root, context);
-        });
+            Shell.Advance(1f / 60f);
+            host.BookFrame(Shell.FitSize(room - new Vector2(32), context), () =>
+            {
+                root = new UiRect(ImGui.GetWindowPos(), ImGui.GetWindowSize());
+                Shell.Draw(root, context);
+            });
+        }
 
         internal void Frames(int count) { for (var index = 0; index < count; index++) Frame(); }
 
@@ -444,9 +508,12 @@ internal static class CollectChecks
 
         internal Vector2 Tab(int index) => Layout.Bookmark(index).Position + Layout.Bookmark(index).Size / 2;
 
+        // Opens the cover; with motion, waits for the book to arrive first and for the cover to land after.
         internal void Open()
         {
+            for (var frame = 0; frame < 240 && Shell.Phase == BookPhase.Entering; frame++) Frame();
             Click(BookShellLayout.OpenPoint(root));
+            for (var frame = 0; frame < 240 && Shell.Phase == BookPhase.Opening; frame++) Frame();
             Frames(2);
         }
 

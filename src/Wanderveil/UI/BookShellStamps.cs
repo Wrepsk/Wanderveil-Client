@@ -36,6 +36,8 @@ internal sealed class BookShellStamps(StampCollection collection, IBookAssets as
 
     internal bool Arrange { get; set; }
     internal Carry? Carrying { get; private set; }
+    // The drawn size of the stamp in hand, last frame.
+    internal float CarriedDiameter { get; private set; }
     // The stamp whose info page is open.
     internal StampInstance? Info { get; private set; }
     // True while a stamp is carried or turned: the book neither moves nor turns from mouse input then.
@@ -174,7 +176,9 @@ internal sealed class BookShellStamps(StampCollection collection, IBookAssets as
 
     // After the pages are drawn: moves, turns, and puts down a carried stamp. Returns -1 or 1 when resting at
     // the book's outer edge should turn the page that way, otherwise 0.
-    internal int Update(UiRect window, UiRect book, UiContext context, float seconds)
+    // pageWidth is one page's width, which sizes the stamp in hand whether or not a page is under it (while a
+    // page turns, none is).
+    internal int Update(UiRect window, UiRect book, float pageWidth, UiContext context, float seconds)
     {
         TookClick = false;
         if (Carrying is not { } carry) { edgeTime = 0f; return 0; }
@@ -193,8 +197,8 @@ internal sealed class BookShellStamps(StampCollection collection, IBookAssets as
         }
 
         // The stamp in hand, in a window of its own above the pages, with a soft shadow beneath it.
-        var page = over ? areas.First(area => area.Bounds.Contains(mouse)).Bounds : areas.Count > 0 ? areas[0].Bounds : book;
-        var diameter = page.Size.X * Size;
+        var diameter = pageWidth * Size;
+        CarriedDiameter = diameter;
         ImGui.SetCursorScreenPos(window.Position);
         ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, Vector2.Zero);
         try

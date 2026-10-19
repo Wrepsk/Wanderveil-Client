@@ -183,7 +183,7 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
         var resting = Section == BookSection.Passport && !riffle.Active && !turning;
         if (resting) StampControls();
         ImGui.PopStyleVar();
-        var edgeTurn = desk.Update(bounds, layout.Book, page, ImGui.GetIO().DeltaTime);
+        var edgeTurn = desk.Update(bounds, layout.Book, layout.LeftPage.Size.X, page, ImGui.GetIO().DeltaTime);
 
         var placeStamp = discover.TakePassportRequest();
         if (chosen is { } tab) Navigate(tab);
@@ -204,8 +204,8 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
             if (click is { } side) Turn(side, step);
             if (Keys(ImGuiKey.PageDown)) Turn(1, step);
             if (Keys(ImGuiKey.PageUp)) Turn(-1, step);
-            if (Keys(ImGuiKey.Home)) CloseBook();
-            if (Keys(ImGuiKey.End)) ShowPage(fixedPages.Count + Math.Max(0, collection.LastSheet), step == 2);
+            if (Keys(ImGuiKey.Home) && desk.Carrying == null) CloseBook();
+            if (Keys(ImGuiKey.End)) GoToPage(fixedPages.Count + Math.Max(0, collection.LastSheet) + 1, step == 2);
         }
         return new BookShellIntent(motion.Phase == BookPhase.Hidden, drag);
 
@@ -529,7 +529,7 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
             }
             if (!ImGui.IsItemHovered()) return;
             ImGui.SetMouseCursor(ImGuiMouseCursor.TextInput);
-            ImGui.SetTooltip($"Go to page (1 to {PageCount})");
+            ImGui.SetTooltip($"Go to page ({FirstPageNumber} to {PageCount})");
             BookSurface.Line(ImGui.GetWindowDrawList(), center + new Vector2(-measured.X / 2, measured.Y / 2), center + measured / 2, ImGui.GetColorU32(UiTheme.MutedInk with { W = 0.6f }), MathF.Max(1, page.Scale));
         }
 
@@ -625,13 +625,26 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
         desk.PickUp(stamp);
     }
 
-    // Opens a printed page number (1 to the last page; anything outside is clamped).
+    // Opens a printed page number (1 to the last page; anything outside is clamped, and while a stamp is held,
+    // to the stamp pages). A spread or more away, the pages riffle there, as between sections.
     internal void GoToPage(int number, bool spread)
     {
-        if (Section != BookSection.Passport) return;
+        if (Section != BookSection.Passport || riffle.Active) return;
         if (turn.Active) { turn.Finish(); VisiblePage = turn.Target; }
-        ShowPage(Math.Clamp(number, 1, PageCount) - 1, spread);
+        var step = spread ? 2 : 1;
+        var target = Math.Clamp(number, FirstPageNumber, PageCount) - 1;
+        if (spread) target -= target % 2;
+        if (target == VisiblePage) return;
+        var spreads = Math.Abs(target - VisiblePage) / step;
+        if (spreads > 1) riffle.Start(Math.Sign(target - VisiblePage), BookShellRiffle.LeavesFor(Math.Min(3, spreads - 1)), Section, VisiblePage, ReducedMotion);
+        else { VisiblePage = turn.Request(Math.Sign(target - VisiblePage), step, VisiblePage, PageCount, ReducedMotion); desk.CloseInfo(); return; }
+        ShowPage(target, spread);
     }
+
+    // The lowest page a jump may open: the first stamp page while a stamp is held, otherwise page 1.
+    internal int FirstPageNumber => desk.Carrying != null ? fixedPages.Count + 1 : 1;
+
+    private int FirstStampPage(bool spread) => spread ? fixedPages.Count - fixedPages.Count % 2 : fixedPages.Count;
 
     // Shows a passport page at once (its spread, when the book shows two pages).
     private void ShowPage(int index, bool spread)
@@ -751,6 +764,8 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
 
     private void Turn(int direction, int step)
     {
+        // A held stamp stays on the stamp pages: no turning back past the first of them.
+        if (direction < 0 && desk.Carrying != null && !turn.Active && VisiblePage - step < FirstStampPage(step == 2)) return;
         // From the first page, the left side closes the book; a turn in progress reverses first.
         if (direction < 0 && VisiblePage == 0 && !turn.Active) { CloseBook(); return; }
         VisiblePage = turn.Request(direction, step, VisiblePage, PageCount, ReducedMotion);
