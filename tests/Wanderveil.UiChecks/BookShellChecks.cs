@@ -112,12 +112,13 @@ internal static class BookShellChecks
             check(intent.Drag == Vector2.Zero && shell.VisiblePage == pageBefore && shell.IsBookOpen, "Releasing a drag turned the page or kept moving the book.");
             layout = BookShellLayout.Create(root, context, shell.VisiblePage);
 
+            // The printed Settings mark turns to the Settings pages; Back returns to the page the reader left.
+            var readingPage = shell.VisiblePage;
             Click(Center(layout.Settings(context)));
-            check(intent.Settings == false, "Settings intent repeats without activation.");
-            // Check on the actual release frame, before the following frame clears the intent.
-            ImGui.GetIO().AddMouseButtonEvent(0, true); Frame();
-            ImGui.GetIO().AddMouseButtonEvent(0, false); Frame();
-            check(intent.Settings, "Attached settings action was lost.");
+            check(shell.Section == BookSection.Settings && shell.ReturnSection == BookSection.Passport, "The Settings mark does not open the Settings pages.");
+            if (artifacts != null && scenario.Name == "wide") SoftwarePreview.Save(Path.Combine(artifacts, "passport-shell-settings.png"), host);
+            shell.GoBack(); Frame(); Frame();
+            check(shell.Section == BookSection.Passport && shell.VisiblePage == readingPage, "Back does not return from Settings to the same passport page.");
             var close = Center(layout.Tool(2, context));
             ImGui.GetIO().AddMousePosEvent(close.X, close.Y); Frame();
             ImGui.GetIO().AddMouseButtonEvent(0, true); Frame();

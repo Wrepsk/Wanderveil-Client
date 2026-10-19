@@ -10,7 +10,6 @@ namespace Wanderveil.UI;
 
 internal sealed class MainWindow : Window
 {
-    private readonly Action openSettings;
     private readonly Func<bool> reducedMotion;
     private readonly PassportAssets assets;
     private readonly BookShell shell;
@@ -18,13 +17,14 @@ internal sealed class MainWindow : Window
     // dismissed, remembered for the rest of this plugin session. The slide offsets from it.
     private Vector2? rest;
     private Vector2 lastSize;
+    // The host's settings button can arrive while the window is closed; the book opens to Settings once shown.
+    private bool settingsRequested;
 
-    internal MainWindow(Action openSettings, Func<bool> reducedMotion, PassportAssets assets) : base("Wanderveil###Wanderveil.Main", BookShell.WindowFlags)
+    internal MainWindow(Func<bool> reducedMotion, IBookShellSettings settings, PassportAssets assets) : base("Wanderveil###Wanderveil.Main", BookShell.WindowFlags)
     {
-        this.openSettings = openSettings;
         this.reducedMotion = reducedMotion;
         this.assets = assets;
-        shell = new BookShell(assets, PassportPreview.Sample);
+        shell = new BookShell(assets, PassportPreview.Sample, settings: settings);
         SizeCondition = ImGuiCond.Always;
         // Escape is handled in Draw so it plays the dismissal sequence instead of hiding at once.
         RespectCloseHotkey = false;
@@ -43,6 +43,14 @@ internal sealed class MainWindow : Window
     {
         if (!IsOpen) IsOpen = true;
         else shell.Summon();
+    }
+
+    // The host's settings button and /wanderveil settings: the passport opens onto its Settings pages.
+    internal void OpenSettings()
+    {
+        if (!IsOpen) { settingsRequested = true; IsOpen = true; return; }
+        shell.Summon();
+        shell.ShowSettings();
     }
 
     public override void PreDraw()
@@ -65,7 +73,12 @@ internal sealed class MainWindow : Window
     public override void PostDraw() => BookShell.PopWindowStyle();
 
     // A recalled passport returns to where it was dismissed; only the session's first summon centres it.
-    public override void OnOpen() => shell.BeginSession();
+    public override void OnOpen()
+    {
+        shell.BeginSession();
+        if (settingsRequested) shell.ShowSettings();
+        settingsRequested = false;
+    }
 
     public override void Draw()
     {
@@ -74,7 +87,6 @@ internal sealed class MainWindow : Window
         if (ImGui.IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows) && ImGui.IsKeyPressed(ImGuiKey.Escape, false)) shell.RequestDismiss();
         var intent = shell.Draw(new UiRect(ImGui.GetWindowPos(), ImGui.GetWindowSize()), context);
         if (intent.Drag != Vector2.Zero && rest is { } position) rest = position + intent.Drag;
-        if (intent.Settings) openSettings();
         if (intent.Close) IsOpen = false;
     }
 }

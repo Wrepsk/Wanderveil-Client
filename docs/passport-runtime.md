@@ -24,7 +24,7 @@ Type also follows the design. Cinzel Bold is used for cover lettering. Cormorant
 
 ## Controls on the book
 
-There are no buttons around the book anymore. The sections (Passport, Discover, Echoes, Studio) are paper index tabs tucked behind the pages. The selected tab carries a small edition-colored ribbon at its right end that peeks just below the tab onto the book; it unrolls after the pages appear and rerolls before moving to a newly selected tab. Settings, smaller, larger, and close (`- + x`) are printed in the paper's lower margin, with page numbers (folios) between them. On the closed cover they are foil-stamped beneath the lower arc. **x**, Escape, and `/wanderveil` play the dismissal sequence below. Pages turn with motion; see [page turns](#page-turns-milestone-4-experiment).
+There are no buttons around the book anymore. The sections (Passport, Discover, Echoes, Studio) are paper index tabs tucked behind the pages. The selected tab carries a small edition-colored ribbon at its right end that peeks just below the tab onto the book; it unrolls after the pages appear and rerolls before moving to a newly selected tab. Settings, smaller, larger, and close (`- + x`) are printed in the paper's lower margin, with page numbers (folios) between them. On the closed cover only `- + x` are foil-stamped beneath the lower arc; there is no separate settings window anymore. **x**, Escape, and `/wanderveil` play the dismissal sequence below. Pages turn with motion; see [page turns](#page-turns-milestone-4-experiment).
 
 ## Motion (branch `feat/passport-motion`)
 
@@ -39,6 +39,15 @@ Any request can interrupt a motion and reverse it from where it is, for example 
 - [Closing back to the cover](previews/passport/motion-closing.png)
 
 The headless preview window is pinned at the top left rather than anchored at the bottom center, so the book's glide toward center is offset in these frames. Frame pacing, smoothness, and GPU appearance in game are not yet observed.
+
+## Changing sections and Settings
+
+Choosing another tab riffles a quick burst of pages, like an old flipbook settling on a page: five leaves for a neighbouring section, up to nine for a longer jump, each turning in 0.34 s and starting 0.07 s after the previous one. A later section flips right-to-left, an earlier one left-to-right, the same way as turning pages by their sides. The first leaf carries the old spread away and the last brings the new one in; the leaves between are blank, and pages not yet covered or already revealed stay live underneath. Tabs and page clicks are ignored while a riffle runs, and reduced motion switches instantly. The Passport section keeps its reading position while you visit other sections.
+
+Settings are pages of the book. The printed Settings mark riffles forward to them; the left page has a **Back to …** link that riffles back to the section and passport spread you came from, and the right page holds the options. **Reduce motion** is a printed checkbox that saves immediately; if saving fails, a **Try saving again** link appears. Dalamud's settings button and `/wanderveil settings` open the passport straight onto these pages, opening the cover if it was closed. The tab ribbon rolls up while Settings are shown, since they have no tab.
+
+- [A riffle in flight](previews/passport/riffle.png)
+- [Settings pages](previews/passport/settings.png)
 
 ## Page turns (Milestone 4 experiment)
 

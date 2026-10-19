@@ -84,6 +84,41 @@ internal static class BookControl
         finally { ImGui.PopStyleColor(4); ImGui.PopID(); }
     }
 
+    // A printed checkbox: an inked square, ticked when on, followed by its label. Native button semantics.
+    internal static bool Toggle(string label, bool value, UiContext context)
+    {
+        var measured = UiTypography.Measure(label, TextRole.Body, context, UiLayout.ContentWidth, false);
+        var box = MathF.Round(measured.Y * 0.62f);
+        var gap = 10 * context.Scale;
+        var bounds = new UiRect(ImGui.GetCursorScreenPos(), new Vector2(box + gap + measured.X + 4 * context.Scale, measured.Y + 6 * context.Scale));
+        var list = ImGui.GetWindowDrawList();
+        ImGui.PushID(label);
+        ImGui.PushStyleColor(ImGuiCol.Button, Vector4.Zero);
+        ImGui.PushStyleColor(ImGuiCol.ButtonHovered, Vector4.Zero);
+        ImGui.PushStyleColor(ImGuiCol.ButtonActive, Vector4.Zero);
+        ImGui.PushStyleColor(ImGuiCol.NavHighlight, UiTheme.Ink);
+        try
+        {
+            var pressed = ImGui.Button("##Toggle", bounds.Size);
+            var hovered = ImGui.IsItemHovered();
+            var ink = ImGui.GetColorU32(hovered ? UiTheme.Ink : UiTheme.Edition);
+            var min = new Vector2(bounds.Position.X + 2 * context.Scale, bounds.Position.Y + (bounds.Size.Y - box) / 2);
+            var max = min + new Vector2(box);
+            list.AddRect(min, max, ink, 2 * context.Scale, ImDrawFlags.None, MathF.Max(1, 1.5f * context.Scale));
+            if (value)
+            {
+                // A hand-ticked check rather than a font glyph.
+                var weight = MathF.Max(1.5f, 2.2f * context.Scale);
+                list.AddLine(min + new Vector2(box * 0.2f, box * 0.52f), min + new Vector2(box * 0.42f, box * 0.76f), ink, weight);
+                list.AddLine(min + new Vector2(box * 0.42f, box * 0.76f), min + new Vector2(box * 0.82f, box * 0.22f), ink, weight);
+            }
+            UiTypography.Draw(list, new Vector2(max.X + gap, bounds.Position.Y + 3 * context.Scale), label, TextRole.Body, context, measured.X + 1, hovered ? UiTheme.Ink : UiTheme.Edition, false);
+            if (hovered) ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
+            return pressed;
+        }
+        finally { ImGui.PopStyleColor(4); ImGui.PopID(); }
+    }
+
     private static void Tab(ImDrawListPtr list, UiRect bounds, UiContext context, bool selected, bool hovered)
     {
         // The tab runs down behind the board; the book surface drawn afterwards hides its foot.

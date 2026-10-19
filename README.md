@@ -19,7 +19,7 @@ dotnet build Wanderveil.slnx -c Release --no-restore
 dotnet run --project tests/Wanderveil.UiChecks -c Release -p:Platform=x64 --no-build --no-restore -- artifacts/ui
 ```
 
-Debug output: `src/Wanderveil/bin/x64/Debug/Wanderveil.dll`. Release package: `src/Wanderveil/bin/x64/Release/Wanderveil/latest.zip`. `/wanderveil` toggles the shell; `/wanderveil settings` opens appearance settings. Reduced motion saves through Dalamud configuration; this shell has no animation yet.
+Debug output: `src/Wanderveil/bin/x64/Debug/Wanderveil.dll`. Release package: `src/Wanderveil/bin/x64/Release/Wanderveil/latest.zip`. `/wanderveil` toggles the passport; `/wanderveil settings` (and Dalamud's settings button) open it at its own Settings pages. Reduce motion is set there and saves through Dalamud configuration; it makes every animation instant.
 
 Passport is a borderless physical book: a Gridania cover and nation/identity/demo-stamp pages whose art is generated from SVG by [tools/passport-art](tools/passport-art/README.md), with Cinzel, Cormorant Garamond, and Courier Prime type. Click its sides to open and turn pages, and drag it from anywhere; see [runtime controls](docs/passport-runtime.md). Motion follows after visual review, and this visual-fidelity work precedes Studio/Echoes.
 

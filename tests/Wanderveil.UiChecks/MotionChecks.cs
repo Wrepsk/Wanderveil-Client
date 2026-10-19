@@ -16,9 +16,11 @@ internal static class MotionChecks
         Interruption(check);
         Reduced(check);
         Turns(check);
+        Riffles(check);
         Placement(check);
         Shell(check, artifacts);
         SingleTurn(check, artifacts);
+        RiffleShell(check, artifacts);
         Console.WriteLine("PASS passport-motion");
     }
 
@@ -341,6 +343,108 @@ internal static class MotionChecks
             if (artifacts != null && frames == 9) SoftwarePreview.Save(Path.Combine(artifacts, "passport-motion-turn-single.png"), host);
         }
         check(!shell.IsTurning && shell.VisiblePage == 1, "A single-page turn does not land on the next page.");
+    }
+
+    // A riffle staggers several leaves; reduced motion skips it.
+    private static void Riffles(Action<bool, string> check)
+    {
+        check(BookShellRiffle.LeavesFor(1) == 5 && BookShellRiffle.LeavesFor(-2) == 7 && BookShellRiffle.LeavesFor(4) == 9, "Longer jumps do not riffle more pages.");
+        var riffle = new BookShellRiffle();
+        riffle.Start(-1, 5, BookSection.Studio, 2, false);
+        check(riffle.Active && riffle.Direction == -1 && riffle.FromSection == BookSection.Studio && riffle.FromPage == 2, "A riffle does not remember where it started.");
+        riffle.Update(BookShellRiffle.Stagger * 1.5f, false);
+        check(riffle.Progress(0) > 0f && riffle.Progress(1) > 0f && riffle.Progress(2) == 0f, "Riffle leaves do not start one after another.");
+        var frames = 0;
+        while (riffle.Active && frames < 200) { riffle.Update(Frame, false); frames++; }
+        check(Math.Abs(frames - (riffle.Seconds - 0.1f) * 60) <= 2 && riffle.Progress(4) == 1f, "A riffle does not finish in its duration with every leaf landed.");
+        riffle.Start(1, 7, BookSection.Passport, 0, true);
+        check(!riffle.Active, "Reduced motion riffles.");
+    }
+
+    // The real shell: tabs riffle in book order, Settings are pages with Back, and the toggle saves.
+    private static void RiffleShell(Action<bool, string> check, string? artifacts)
+    {
+        using var host = new HeadlessUi(new Vector2(1200, 900), materials: true);
+        var settings = new FakeSettings();
+        var shell = new BookShell(host.Textures!, PassportPreview.Sample, settings: settings);
+        var context = new UiContext(1, 18) { TitleFont = host.TitleFont, HeadingFont = host.HeadingFont, BodyFont = host.BodyFont, DisplayFont = host.DisplayFont, MonoFont = host.MonoFont, SignatureFont = host.SignatureFont };
+        UiRect bounds = default;
+        void Step()
+        {
+            shell.Advance(Frame);
+            host.BookFrame(shell.FitSize(new Vector2(1168, 868), context), () =>
+            {
+                bounds = new UiRect(ImGui.GetWindowPos(), ImGui.GetWindowSize());
+                shell.Draw(bounds, context);
+                check(ImGui.GetScrollMaxX() == 0 && ImGui.GetScrollMaxY() == 0, "A riffling passport scrolls its host.");
+            });
+        }
+        void Click(Vector2 point)
+        {
+            ImGui.GetIO().AddMousePosEvent(point.X, point.Y); Step();
+            ImGui.GetIO().AddMouseButtonEvent(0, true); Step();
+            ImGui.GetIO().AddMouseButtonEvent(0, false); Step();
+        }
+        BookShellLayout Layout() => BookShellLayout.Create(bounds, context, 0);
+        shell.BeginSession();
+        for (var frame = 0; frame < 40; frame++) Step();
+        Click(BookShellLayout.OpenPoint(bounds));
+        for (var frame = 0; frame < 70; frame++) Step();
+        check(shell.Phase == BookPhase.Open, "The passport does not open for riffling.");
+
+        // Passport -> Echoes: a later section, so pages flip right-to-left.
+        var tab = Layout().Bookmark(2);
+        Click(tab.Position + tab.Size / 2);
+        check(shell.Section == BookSection.Echoes && shell.IsRiffling, "Choosing a later tab does not riffle to it.");
+        var discover = Layout().Bookmark(1);
+        Click(discover.Position + discover.Size / 2);
+        check(shell.Section == BookSection.Echoes, "A tab chosen mid-riffle interrupts it.");
+        var frames = 0;
+        while (shell.IsRiffling && frames++ < 200)
+        {
+            Step();
+            if (artifacts != null && frames is 4 or 12 or 20) SoftwarePreview.Save(Path.Combine(artifacts, $"passport-motion-riffle-{frames}.png"), host);
+        }
+        check(!shell.IsRiffling && shell.Section == BookSection.Echoes, "A riffle does not land on the chosen section.");
+
+        // Back to an earlier section flips the other way; Settings and Back keep the reader's place.
+        tab = Layout().Bookmark(0);
+        Click(tab.Position + tab.Size / 2);
+        check(shell.IsRiffling && shell.Section == BookSection.Passport, "Choosing an earlier tab does not riffle back.");
+        for (var frame = 0; frame < 8; frame++) Step();
+        if (artifacts != null) SoftwarePreview.Save(Path.Combine(artifacts, "passport-motion-riffle-back.png"), host);
+        while (shell.IsRiffling) Step();
+        Click(Layout().TurnPoint(true, 0));
+        while (shell.IsTurning) Step();
+        var settingsMark = Layout().Settings(context);
+        Click(settingsMark.Position + settingsMark.Size / 2);
+        check(shell.Section == BookSection.Settings && shell.IsRiffling && shell.ReturnSection == BookSection.Passport, "The Settings mark does not riffle to the Settings pages.");
+        while (shell.IsRiffling) Step();
+        if (artifacts != null) SoftwarePreview.Save(Path.Combine(artifacts, "passport-motion-settings.png"), host);
+
+        // The printed checkbox saves the setting; probe down the options page for it.
+        var options = Layout().RightPage;
+        for (var y = 20f; !settings.ReducedMotion && y < options.Size.Y; y += 12)
+            Click(options.Position + new Vector2(30, y));
+        check(settings.ReducedMotion && settings.Saves == 1, "The Reduce motion checkbox does not change and save the setting.");
+
+        shell.GoBack();
+        check(shell.Section == BookSection.Passport && shell.IsRiffling, "Back does not riffle to the page the reader left.");
+        while (shell.IsRiffling) Step();
+        check(shell.VisiblePage == 2, "Back does not return to the same passport spread.");
+
+        // The host's settings button on a closed passport opens straight onto the Settings pages.
+        var closed = new BookShell(host.Textures!, PassportPreview.Sample, settings: settings) { ReducedMotion = true };
+        closed.BeginSession();
+        closed.ShowSettings();
+        check(closed.IsBookOpen && closed.Section == BookSection.Settings && closed.ReturnSection == BookSection.Passport && !closed.IsRiffling, "Opening settings from a closed passport does not open onto them.");
+    }
+
+    private sealed class FakeSettings : IBookShellSettings
+    {
+        public bool ReducedMotion { get; set; }
+        public int Saves { get; private set; }
+        public bool Save() { Saves++; return true; }
     }
 
     private static int Until(BookShellMotion motion, Func<bool> done, Action<bool, string> check)

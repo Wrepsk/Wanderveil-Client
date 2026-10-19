@@ -22,7 +22,6 @@ public sealed class Plugin : IDalamudPlugin
     private readonly WindowSystem windowSystem = new("Wanderveil");
     private readonly Configuration configuration;
     private readonly MainWindow mainWindow;
-    private readonly SettingsWindow settingsWindow;
     private PassportAssets? assets;
     private bool commandRegistered;
     private bool disposed;
@@ -30,17 +29,15 @@ public sealed class Plugin : IDalamudPlugin
     public Plugin()
     {
         configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
-        settingsWindow = new SettingsWindow(configuration, SaveConfiguration);
         try
         {
             assets = new PassportAssets(TextureProvider, PluginInterface.UiBuilder.FontAtlas);
-            mainWindow = new MainWindow(OpenSettings, () => configuration.ReducedMotion, assets);
+            mainWindow = new MainWindow(() => configuration.ReducedMotion, new ConfigurationSettings(configuration, SaveConfiguration), assets);
             windowSystem.AddWindow(mainWindow);
-            windowSystem.AddWindow(settingsWindow);
 
             commandRegistered = CommandManager.AddHandler(CommandName, new CommandInfo(OnCommand)
             {
-                HelpMessage = "Open or close Wanderveil. Use /wanderveil settings for appearance settings.",
+                HelpMessage = "Open or close Wanderveil. Use /wanderveil settings to open the passport at its Settings pages.",
             });
 
             if (!commandRegistered)
@@ -88,7 +85,7 @@ public sealed class Plugin : IDalamudPlugin
 
     private void OpenMain() => mainWindow.Summon();
 
-    private void OpenSettings() => settingsWindow.IsOpen = true;
+    private void OpenSettings() => mainWindow.OpenSettings();
 
     private bool SaveConfiguration()
     {

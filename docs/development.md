@@ -36,7 +36,7 @@ The solution maps both projects to x64; direct check-project runs need `-p:Platf
 | Entry | Behavior |
 | --- | --- |
 | `/wanderveil` | Toggle the shell |
-| `/wanderveil settings` | Open appearance settings |
+| `/wanderveil settings` | Open the passport at its Settings pages |
 | Shell Settings button / Dalamud configuration action | Open appearance settings |
 | Dalamud main-UI action | Open the shell |
 

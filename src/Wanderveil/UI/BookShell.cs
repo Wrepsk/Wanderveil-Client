@@ -10,31 +10,39 @@ using Wanderveil.UI.Primitives;
 
 namespace Wanderveil.UI;
 
-internal enum BookSection { Passport, Discover, Echoes, Studio }
-internal readonly record struct BookShellIntent(bool Close, bool Settings, Vector2 Drag);
+// Tabbed sections, in book order, then the Settings pages reached from the printed Settings mark.
+internal enum BookSection { Passport, Discover, Echoes, Studio, Settings }
+internal readonly record struct BookShellIntent(bool Close, Vector2 Drag);
 
 // The book itself is the control surface: press-and-drag anywhere moves it, a click on its right side
 // opens it or turns forward, and a click on its left side turns back (from the first page, to the cover).
 // Real items (tabs, printed controls, page content) keep their own clicks and keyboard navigation.
 // BookShellMotion sequences arrival, the cover swing, and dismissal; the book takes no input while it moves.
-internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IReadOnlyList<PassportPage>? pages = null)
+// Moving between sections riffles several pages in book direction; Settings are pages of the book too.
+internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IReadOnlyList<PassportPage>? pages = null, IBookShellSettings? settings = null)
 {
     internal const ImGuiWindowFlags WindowFlags = ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.NoBackground | ImGuiWindowFlags.NoCollapse |
         ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoMove | ImGuiWindowFlags.NoDocking;
-    private static readonly string[] Labels = ["Passport", "Discover", "Echoes", "Studio"];
+    private static readonly string[] Labels = ["Passport", "Discover", "Echoes", "Studio", "Settings"];
+    private const int TabCount = 4;
     private readonly PassportDocumentView passport = new(assets, profile);
     private readonly IReadOnlyList<PassportPage> documentPages = ValidatePages(pages ?? PassportDocumentView.SamplePages);
     private readonly DiscoverView discover = new(DiscoveryPreview.Samples);
     private readonly BookShellMotion motion = Arrived();
     private readonly BookShellTurn turn = new();
+    private readonly BookShellRiffle riffle = new();
     private bool pressing;
     private bool dragging;
     private BookSection ribbonSection;
     private float ribbonExtension;
+    private bool saveFailed;
     // Per-page shrink-to-fit factor, converged from each page's measured content height.
     private readonly Dictionary<string, float> fits = new(StringComparer.Ordinal);
     internal BookSection Section { get; private set; }
+    // The reading position in the Passport section; kept while visiting other sections.
     internal int VisiblePage { get; private set; }
+    // Where Settings' Back link returns to.
+    internal BookSection ReturnSection { get; private set; }
     // The logical state: true from the moment opening is requested, even while the cover still swings.
     internal bool IsBookOpen => motion.WantsOpen;
     internal BookPhase Phase => motion.Phase;
@@ -47,24 +55,26 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
     internal DiscoveryPreview? SelectedDiscovery => discover.SelectedDiscovery;
     // Largest scroll range among the pages drawn last frame; zero when every page fits its paper.
     internal float PageOverflow { get; private set; }
+    internal bool IsTurning => turn.Active;
+    internal bool IsRiffling => riffle.Active;
 
     // Advances motion; the host calls it before sizing the window so size and drawing agree each frame.
     internal void Advance(float seconds)
     {
         motion.Update(seconds);
         turn.Update(seconds, ReducedMotion);
+        riffle.Update(seconds, ReducedMotion);
     }
-
-    internal bool IsTurning => turn.Active;
 
     internal BookShellIntent Draw(UiRect bounds, UiContext context)
     {
-        if (motion.Phase == BookPhase.Hidden) return new BookShellIntent(true, false, Vector2.Zero);
+        if (motion.Phase == BookPhase.Hidden) return new BookShellIntent(true, Vector2.Zero);
         if (motion.Cover <= 0f) return DrawClosed(bounds, context);
         if (motion.Cover < 1f || !motion.WantsOpen) return DrawTurning(bounds, context);
+        var turning = Section == BookSection.Passport && turn.Active && !riffle.Active;
         // On a single page the page beneath a turning leaf decides which half of the plate shows.
-        var layout = BookShellLayout.Create(bounds, context, Section == BookSection.Passport ? turn.Active && turn.Step == 1 ? turn.Base + 1 : VisiblePage : 0);
-        if (turn.Active && turn.Step != (layout.IsSpread ? 2 : 1)) { turn.Finish(); VisiblePage = turn.Target; }
+        var layout = BookShellLayout.Create(bounds, context, Section == BookSection.Passport ? turning && turn.Step == 1 ? turn.Base + 1 : VisiblePage : 0);
+        if (turn.Active && turn.Step != (layout.IsSpread ? 2 : 1)) { turn.Finish(); VisiblePage = turn.Target; turning = false; }
         PageOverflow = 0;
         if (layout.IsSpread) VisiblePage -= VisiblePage % 2;
         var step = layout.IsSpread ? 2 : 1;
@@ -72,24 +82,16 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
         // Pages, tabs, and controls fade in once the cover has landed.
         ImGui.PushStyleVar(ImGuiStyleVar.Alpha, MathF.Max(0.01f, motion.Reveal));
         // Tabs first: the book surface drawn next covers their feet, so they read as tucked behind the pages.
-        var next = Section;
-        for (var index = 0; index < Labels.Length; index++)
+        BookSection? chosen = null;
+        for (var index = 0; index < TabCount; index++)
         {
             if ((ImGui.IsWindowAppearing() || focusSection) && (int)Section == index) ImGui.SetKeyboardFocusHere();
-            if (BookControl.Draw(Labels[index], Labels[index], layout.Bookmark(index), context, BookControlStyle.Tab, (int)Section == index)) next = (BookSection)index;
+            if (BookControl.Draw(Labels[index], Labels[index], layout.Bookmark(index), context, BookControlStyle.Tab, (int)Section == index)) chosen = (BookSection)index;
         }
         focusSection = false;
-        var surfacePage = turn.Active && !layout.IsSpread ? turn.Base + 1 : VisiblePage;
+        var surfacePage = turning && !layout.IsSpread ? turn.Base + 1 : VisiblePage;
         BookSurface.Draw(layout.Book, layout.IsSpread ? BookFace.Spread : Section == BookSection.Passport && surfacePage % 2 == 1 ? BookFace.Right : BookFace.Left, assets, context);
-        // The selected tab's ribbon unrolls after the pages appear and rerolls before moving to another tab.
-        var dt = Math.Clamp(ImGui.GetIO().DeltaTime, 0f, 0.1f);
-        if (ribbonSection != next)
-        {
-            ribbonExtension = ReducedMotion ? 0f : ribbonExtension - dt / 0.12f;
-            if (ribbonExtension <= 0f) { ribbonSection = next; ribbonExtension = 0f; }
-        }
-        if (ribbonSection == next) ribbonExtension = ReducedMotion ? 1f : motion.Reveal < 0.5f ? 0f : MathF.Min(1f, ribbonExtension + dt / 0.22f);
-        BookControl.Ribbon(layout.Bookmark((int)ribbonSection), context, BookShellMotion.Ease(ribbonExtension));
+        Ribbon(layout, context);
 
         // Page contents scale with the paper like printed matter: a smaller book shows smaller text,
         // spacing, and artwork rather than scrolling. Enlarged host text still enlarges it (and may scroll).
@@ -98,39 +100,24 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
         var enlarged = MathF.Max(1f, context.FontSize / (18f * context.Scale));
         var page = context with { Scale = unit, FontSize = MathF.Max(10f, MathF.Round(pageWidth * 16f / 420f * enlarged)) };
         var explore = false;
-        if (Section == BookSection.Passport && turn.Active) DrawTurn();
-        else if (Section == BookSection.Passport)
-        {
-            DocumentPage(VisiblePage, layout.LeftPage, false);
-            if (layout.IsSpread && VisiblePage + 1 < documentPages.Count) DocumentPage(VisiblePage + 1, layout.RightPage, true);
-            Folio(VisiblePage, false);
-            if (layout.IsSpread && VisiblePage + 1 < documentPages.Count) Folio(VisiblePage + 1, true);
-        }
-        else
-        {
-            ImGui.PushID((int)Section);
-            try
-            {
-                if (layout.IsSpread) Page("Section heading", layout.LeftPage, () => Introduction(page));
-                Page("Section content", layout.IsSpread ? layout.RightPage : layout.LeftPage, () =>
-                {
-                    if (Section == BookSection.Discover) discover.Draw(page, onPaper: true);
-                    else Introduction(page);
-                });
-            }
-            finally { ImGui.PopID(); }
-        }
-        if (explore) next = BookSection.Discover;
+        var back = false;
+        if (riffle.Active) DrawRiffle();
+        else if (turning) DrawTurn();
+        else DrawSpread(Section, VisiblePage);
 
-        var settings = BookControl.Draw("Settings", "Settings", layout.Settings(context), page, BookControlStyle.Ink, hint: "Wanderveil settings");
+        var openSettings = Section != BookSection.Settings && BookControl.Draw("Settings", "Settings", layout.Settings(context), page, BookControlStyle.Ink, hint: "Wanderveil settings");
         if (BookControl.Draw("Smaller", "-", layout.Tool(0, context), page, BookControlStyle.Ink, hint: "Smaller passport")) PreferredWidth = MathF.Max(420, PreferredWidth / 1.15f);
         if (BookControl.Draw("Larger", "+", layout.Tool(1, context), page, BookControlStyle.Ink, hint: "Larger passport")) PreferredWidth = MathF.Min(1400, PreferredWidth * 1.15f);
         var close = BookControl.Draw("Close", "×", layout.Tool(2, context), page, BookControlStyle.Ink, hint: "Close passport (Escape)");
         ImGui.PopStyleVar();
-        Section = next;
+
+        if (chosen is { } tab) Navigate(tab);
+        else if (explore) Navigate(BookSection.Discover);
+        else if (openSettings) ShowSettings();
+        else if (back) GoBack();
         if (close) motion.Dismiss();
 
-        var turns = Section == BookSection.Passport;
+        var turns = Section == BookSection.Passport && !riffle.Active;
         var drag = Gesture(layout.Book, turns, out var click);
         if (turns)
         {
@@ -139,7 +126,68 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
             if (Keys(ImGuiKey.PageUp)) Turn(-1, step);
             if (Keys(ImGuiKey.Home)) CloseBook();
         }
-        return new BookShellIntent(motion.Phase == BookPhase.Hidden, settings, drag);
+        return new BookShellIntent(motion.Phase == BookPhase.Hidden, drag);
+
+        // The resting spread of a section: passport pages, or a section's two pages (one when narrow).
+        void DrawSpread(BookSection section, int at)
+        {
+            if (section == BookSection.Passport)
+            {
+                DocumentPage(at, layout.LeftPage, false);
+                if (layout.IsSpread && at + 1 < documentPages.Count) DocumentPage(at + 1, layout.RightPage, true);
+                Folio(at, false);
+                if (layout.IsSpread && at + 1 < documentPages.Count) Folio(at + 1, true);
+                return;
+            }
+            StaticSide(section, at, layout.IsSpread ? Side.Left : Side.Single, layout.LeftPage);
+            if (layout.IsSpread) StaticSide(section, at, Side.Right, layout.RightPage);
+        }
+
+        void StaticSide(BookSection section, int at, Side side, UiRect region)
+        {
+            if (section == BookSection.Passport)
+            {
+                var index = at + (side == Side.Right ? 1 : 0);
+                if (index < documentPages.Count) DocumentPage(index, region, side == Side.Right);
+                return;
+            }
+            ImGui.PushID((int)section);
+            try { Page(side == Side.Left ? "Section heading" : "Section content", region, () => SectionSide(section, side, page)); }
+            finally { ImGui.PopID(); }
+        }
+
+        // What one side of a section shows, drawn at the cursor of the current (page or leaf) window.
+        void SectionSide(BookSection section, Side side, UiContext type)
+        {
+            switch (section)
+            {
+                case BookSection.Settings:
+                    if (side != Side.Right) back |= SettingsIntroduction(type);
+                    if (side == Side.Single) ImGui.Dummy(new Vector2(0, 24 * type.Scale));
+                    if (side != Side.Left) SettingsOptions(type);
+                    break;
+                case BookSection.Discover when side != Side.Left:
+                    discover.Draw(type, onPaper: true);
+                    break;
+                default:
+                    Introduction(section, type);
+                    break;
+            }
+        }
+
+        // The content a turning leaf carries for one side of a section, or null for a blank leaf.
+        Action? LeafSide(BookSection section, int at, Side side)
+        {
+            if (section != BookSection.Passport) return () => SectionSide(section, side, page);
+            var index = at + (side == Side.Right ? 1 : 0);
+            if (index >= documentPages.Count) return null;
+            var entry = documentPages[index];
+            return () =>
+            {
+                if (entry.Kind == PassportPageKind.NationBanner) Banner(index, side == Side.Right);
+                Contents(entry, Printed(Fit(entry)));
+            };
+        }
 
         void DocumentPage(int index, UiRect region, bool rightSide)
         {
@@ -175,8 +223,45 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
             if (entry.Kind == PassportPageKind.Information)
             {
                 ImGui.Dummy(new Vector2(0, 10 * type.Scale));
-                explore |= BookControl.Link("Explore discoveries \u00bb", type);
+                explore |= BookControl.Link("Explore discoveries »", type);
             }
+        }
+
+        // The geometry of a turning paper leaf: in a spread it hinges on the spine; on a single page it
+        // hinges on the page's outer left edge and swings away to the left.
+        (UiRect Face, Vector2 Hinge, float Width, float UvLeft, float UvRight) Leaf(bool back, int parityPage)
+        {
+            var book = layout.Book;
+            // A leaf is the paper alone (plate y 66-958); the board stays where it is.
+            var faceHeight = book.Size.Y * 892f / 1024f;
+            var center = book.Position.Y + book.Size.Y / 2;
+            if (layout.IsSpread)
+            {
+                var width = book.Size.X * 702f / 1536f;
+                var hinge = new Vector2(book.Position.X + book.Size.X / 2, center);
+                return (new UiRect(new Vector2(back ? hinge.X - width : hinge.X, center - faceHeight / 2), new Vector2(width, faceHeight)), hinge, width, back ? 66f / 1536f : 1470f / 1536f, 0.5f);
+            }
+            var even = parityPage % 2 == 0;
+            var singleWidth = book.Size.X * 702f / 768f;
+            var singleHinge = new Vector2(book.Position.X + (even ? book.Size.X * 66f / 768f : 0f), center);
+            return (new UiRect(new Vector2(singleHinge.X, center - faceHeight / 2), new Vector2(singleWidth, faceHeight)), singleHinge, singleWidth, even ? 66f / 1536f : 0.5f, even ? 0.5f : 1470f / 1536f);
+        }
+
+        // Draws one turning leaf at angle (0 flat on the right or on the single page, pi flat on the left).
+        // front/back are what its two faces carry; on a single page its back is never shown.
+        void Sheet(string id, float angle, float bend, int parityPage, Action? front, Action? back)
+        {
+            var showsBack = angle > MathF.PI / 2;
+            var (face, hinge, width, uvA, uvB) = Leaf(showsBack, parityPage);
+            var leaf = new LeafProjection(face, hinge, width, face.Size.Y, angle, 1, bend, 6.5f);
+            if (layout.IsSpread)
+            {
+                // uvA is the face's outer edge, uvB the spine.
+                TurningLeaf(id, showsBack ? layout.LeftPage : layout.RightPage, face, leaf, showsBack, uvB, uvA, 1f, showsBack ? back : front);
+                return;
+            }
+            var fade = !showsBack ? 1f : MathF.Max(0f, 1f - (angle - MathF.PI / 2) / (MathF.PI / 3));
+            TurningLeaf(id, layout.LeftPage, face, leaf, false, uvA, uvB, fade, showsBack ? null : front);
         }
 
         // A page turn: the two pages that stay put draw normally, then the turning leaf draws its real
@@ -188,39 +273,83 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
             var angle = MathF.PI * BookShellMotion.Ease(turn.Progress);
             // Paper curls as it turns: its outer edge trails the motion, most while it stands upright.
             var bend = -0.9f * MathF.Sin(angle) * (turn.Forward ? 1f : -1f);
-            var book = layout.Book;
-            // A leaf is the paper alone (plate y 66-958); the board stays where it is.
-            var faceHeight = book.Size.Y * 892f / 1024f;
-            var center = book.Position.Y + book.Size.Y / 2;
             if (layout.IsSpread)
             {
                 DocumentPage(first, layout.LeftPage, false);
                 Folio(first, false);
                 if (first + 3 < documentPages.Count) { DocumentPage(first + 3, layout.RightPage, true); Folio(first + 3, true); }
-                var leafWidth = book.Size.X * 702f / 1536f;
-                var hinge = new Vector2(book.Position.X + book.Size.X / 2, center);
-                var back = angle > MathF.PI / 2;
-                var face = new UiRect(new Vector2(back ? hinge.X - leafWidth : hinge.X, center - faceHeight / 2), new Vector2(leafWidth, faceHeight));
-                var leaf = new LeafProjection(face, hinge, leafWidth, faceHeight, angle, 1, bend, 6.5f);
-                TurningLeaf(back ? first + 2 : first + 1, back ? layout.LeftPage : layout.RightPage, face, leaf, back, 0.5f, back ? 66f / 1536f : 1470f / 1536f, 1f, true, !back);
+                Sheet("Turning leaf", angle, bend, first, LeafSide(BookSection.Passport, first, Side.Right), LeafSide(BookSection.Passport, first + 2, Side.Left));
             }
             else
             {
                 DocumentPage(first + 1, layout.LeftPage, false);
                 Folio(first + 1, false);
                 // A single page swings away to the left about its outer edge and fades, revealing the next.
-                var even = first % 2 == 0;
-                var leafWidth = book.Size.X * 702f / 768f;
-                var hinge = new Vector2(book.Position.X + (even ? book.Size.X * 66f / 768f : 0f), center);
-                var face = new UiRect(new Vector2(hinge.X, center - faceHeight / 2), new Vector2(leafWidth, faceHeight));
-                var leaf = new LeafProjection(face, hinge, leafWidth, faceHeight, angle, 1, bend, 6.5f);
-                var fade = angle <= MathF.PI / 2 ? 1f : MathF.Max(0f, 1f - (angle - MathF.PI / 2) / (MathF.PI / 3));
                 var region = BookShellLayout.Create(bounds, context, first).LeftPage;
-                TurningLeaf(first, region, face, leaf, false, even ? 66f / 1536f : 0.5f, even ? 0.5f : 1470f / 1536f, fade, angle <= MathF.PI / 2, false);
+                var (face, hinge, width, uvA, uvB) = Leaf(false, first);
+                var leaf = new LeafProjection(face, hinge, width, face.Size.Y, angle, 1, bend, 6.5f);
+                var fade = angle <= MathF.PI / 2 ? 1f : MathF.Max(0f, 1f - (angle - MathF.PI / 2) / (MathF.PI / 3));
+                TurningLeaf("Turning leaf", region, face, leaf, false, uvA, uvB, fade, angle <= MathF.PI / 2 ? LeafSide(BookSection.Passport, first, Side.Left) : null);
             }
         }
 
-        void TurningLeaf(int index, UiRect region, UiRect face, LeafProjection leaf, bool back, float uvHinge, float uvOuter, float alpha, bool content, bool rightSide)
+        // A riffle between sections: a burst of leaves. The first leaf carries the old pages away, the
+        // last brings the new ones, and the leaves between are blank. Pages not yet covered or already
+        // revealed stay live underneath.
+        void DrawRiffle()
+        {
+            var from = (Section: riffle.FromSection, Page: riffle.FromPage);
+            var to = (Section, Page: VisiblePage);
+            var forward = riffle.Direction > 0;
+            var count = riffle.Leaves;
+            var noneStarted = riffle.Progress(0) <= 0f;
+            var lastStarted = riffle.Progress(count - 1) > 0f;
+            var firstLanded = riffle.Progress(0) >= 1f;
+            var allLanded = riffle.Progress(count - 1) >= 1f;
+            if (layout.IsSpread)
+            {
+                // Leaves lift from the start side and land on the end side.
+                var startSide = forward ? Side.Right : Side.Left;
+                var endSide = forward ? Side.Left : Side.Right;
+                Static(startSide, noneStarted ? from : lastStarted ? to : null);
+                Static(endSide, !firstLanded ? from : allLanded ? to : null);
+            }
+            else if (forward) Static(Side.Single, noneStarted ? from : lastStarted ? to : null);
+            else Static(Side.Single, !firstLanded ? from : allLanded ? to : null);
+
+            // Leaves still on the right lie with the earliest on top; leaves already on the left pile up
+            // with the latest on top. Draw from the bottom of each pile.
+            var moving = Enumerable.Range(0, count).Where(index => riffle.Progress(index) is > 0f and < 1f).ToArray();
+            var angles = moving.ToDictionary(index => index, index => MathF.PI * (forward ? BookShellMotion.Ease(riffle.Progress(index)) : 1f - BookShellMotion.Ease(riffle.Progress(index))));
+            var left = moving.Where(index => angles[index] > MathF.PI / 2);
+            var right = moving.Where(index => angles[index] <= MathF.PI / 2);
+            var order = forward ? left.OrderBy(index => index).Concat(right.OrderByDescending(index => index)) : left.OrderByDescending(index => index).Concat(right.OrderBy(index => index));
+            var single = layout.IsSpread ? (Side?)null : Side.Single;
+            foreach (var index in order)
+            {
+                var angle = angles[index];
+                var bend = -1.0f * MathF.Sin(angle) * (forward ? 1f : -1f);
+                Action? front = null, behind = null;
+                if (forward && index == 0) front = LeafSide(from.Section, from.Page, single ?? Side.Right);
+                if (!forward && index == count - 1) front = LeafSide(to.Section, to.Page, single ?? Side.Right);
+                if (forward && index == count - 1) behind = LeafSide(to.Section, to.Page, Side.Left);
+                if (!forward && index == 0) behind = LeafSide(from.Section, from.Page, Side.Left);
+                Sheet("Riffle leaf " + index, angle, bend, layout.IsSpread ? 0 : SinglePage(forward && index == 0 ? from : to), front, behind);
+            }
+
+            void Static(Side side, (BookSection Section, int Page)? state)
+            {
+                if (state is not { } shown) return;
+                var region = side == Side.Right ? layout.RightPage : layout.LeftPage;
+                ImGui.PushID("Riffle " + (int)shown.Section);
+                try { StaticSide(shown.Section, shown.Page, side, region); }
+                finally { ImGui.PopID(); }
+            }
+
+            int SinglePage((BookSection Section, int Page) state) => state.Section == BookSection.Passport ? state.Page : 0;
+        }
+
+        void TurningLeaf(string id, UiRect region, UiRect face, LeafProjection leaf, bool back, float uvHinge, float uvOuter, float alpha, Action? content)
         {
             ImGui.SetCursorScreenPos(region.Position);
             // The same padding and scrollbar reservation as a resting page, so content lays out identically.
@@ -228,7 +357,7 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
             ImGui.PushStyleVar(ImGuiStyleVar.ScrollbarSize, 5 * context.Scale);
             try
             {
-                var visible = ImGui.BeginChild("Turning leaf", region.Size, false, ImGuiWindowFlags.NoInputs | ImGuiWindowFlags.NoBackground | ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.NoSavedSettings);
+                var visible = ImGui.BeginChild(id, region.Size, false, ImGuiWindowFlags.NoInputs | ImGuiWindowFlags.NoBackground | ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.NoSavedSettings);
                 try
                 {
                     if (!visible) return;
@@ -242,16 +371,12 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
                     if (assets.TryGet(BookAsset.Open, out var open, layout.Book.Size.X))
                         leaf.Leaf(list, open.Texture, new Vector2(uvHinge, 66f / 1024f), new Vector2(uvOuter, 958f / 1024f), Vector4.One with { W = alpha });
                     var start = list.VtxBuffer.Size;
-                    if (content && index < documentPages.Count)
+                    if (content != null)
                     {
-                        var entry = documentPages[index];
-                        BookSurface.Strips = 16;
-                        try { if (entry.Kind == PassportPageKind.NationBanner) Banner(index, rightSide); }
-                        finally { BookSurface.Strips = 1; }
                         ImGui.SetCursorScreenPos(region.Position);
                         // Large art is drawn in strips so it bends with the curled paper.
                         BookSurface.Strips = 16;
-                        try { Contents(entry, Printed(Fit(entry))); }
+                        try { content(); }
                         finally { BookSurface.Strips = 1; }
                     }
                     leaf.Warp(list, start, face, back, alpha);
@@ -287,11 +412,96 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
         }
     }
 
+    private enum Side { Left, Right, Single }
+
+    // The selected tab's ribbon unrolls after the pages appear and rerolls before moving to another tab;
+    // on the Settings pages, which have no tab, it stays rolled up.
+    private void Ribbon(BookShellLayout layout, UiContext context)
+    {
+        var dt = Math.Clamp(ImGui.GetIO().DeltaTime, 0f, 0.1f);
+        var wanted = Section == BookSection.Settings ? (BookSection?)null : Section;
+        if (wanted != ribbonSection || wanted == null)
+        {
+            ribbonExtension = ReducedMotion ? 0f : ribbonExtension - dt / 0.12f;
+            if (ribbonExtension <= 0f) { ribbonExtension = 0f; if (wanted is { } next) ribbonSection = next; }
+        }
+        else ribbonExtension = ReducedMotion ? 1f : motion.Reveal < 0.5f || riffle.Active ? ribbonExtension : MathF.Min(1f, ribbonExtension + dt / 0.22f);
+        if (ribbonExtension > 0f) BookControl.Ribbon(layout.Bookmark((int)ribbonSection), context, BookShellMotion.Ease(ribbonExtension));
+    }
+
+    // Moves to another section by riffling pages in book order: a later section flips right-to-left.
+    private void Navigate(BookSection to)
+    {
+        if (to == Section || riffle.Active) return;
+        if (turn.Active) { turn.Finish(); VisiblePage = turn.Target; }
+        var distance = (int)to - (int)Section;
+        riffle.Start(Math.Sign(distance), BookShellRiffle.LeavesFor(distance), Section, VisiblePage, ReducedMotion);
+        Section = to;
+        pressing = dragging = false;
+    }
+
+    // Opens the Settings pages, from the printed Settings mark or the host's settings button. A closed
+    // book opens straight onto them; an open book riffles forward to them.
+    internal void ShowSettings()
+    {
+        if (Section == BookSection.Settings) return;
+        if (!motion.WantsOpen)
+        {
+            ReturnSection = BookSection.Passport;
+            Section = BookSection.Settings;
+            OpenBook();
+            return;
+        }
+        ReturnSection = Section;
+        Navigate(BookSection.Settings);
+    }
+
+    // Settings' Back link: riffles back to the section (and passport page) the reader came from.
+    internal void GoBack()
+    {
+        if (Section == BookSection.Settings) Navigate(ReturnSection);
+    }
+
+    private bool SettingsIntroduction(UiContext context)
+    {
+        UiTypography.Text("WANDERVEIL / SETTINGS", TextRole.Caption, context, UiTheme.MutedInk);
+        ImGui.Dummy(new Vector2(0, 16 * context.Scale));
+        UiTypography.Text("Settings", TextRole.Title, context, UiTheme.Ink);
+        ImGui.Dummy(new Vector2(0, 12 * context.Scale));
+        UiTypography.Text("How your passport moves. Changes are saved as you make them.", TextRole.Body, context, UiTheme.Ink);
+        ImGui.Dummy(new Vector2(0, 20 * context.Scale));
+        return BookControl.Link("« Back to " + Labels[(int)ReturnSection], context);
+    }
+
+    private void SettingsOptions(UiContext context)
+    {
+        UiTypography.Text("MOTION", TextRole.Caption, context, UiTheme.MutedInk);
+        ImGui.Dummy(new Vector2(0, 10 * context.Scale));
+        if (settings == null)
+        {
+            UiTypography.Text("Settings are not available here.", TextRole.Body, context, UiTheme.MutedInk);
+            return;
+        }
+        if (BookControl.Toggle("Reduce motion", settings.ReducedMotion, context))
+        {
+            settings.ReducedMotion = !settings.ReducedMotion;
+            saveFailed = !settings.Save();
+        }
+        ImGui.Dummy(new Vector2(0, 6 * context.Scale));
+        UiTypography.Text("Skip the sliding, cover, and page-turn movement. Everything still opens, turns, and closes, just instantly.", TextRole.Body, context, UiTheme.MutedInk);
+        if (!saveFailed) return;
+        ImGui.Dummy(new Vector2(0, 14 * context.Scale));
+        UiTypography.Text("Your settings could not be saved.", TextRole.Body, context, UiTheme.Ink);
+        ImGui.Dummy(new Vector2(0, 6 * context.Scale));
+        if (BookControl.Link("Try saving again", context)) saveFailed = !settings.Save();
+    }
+
     internal void BeginSession()
     {
         Section = ribbonSection = BookSection.Passport;
         VisiblePage = 0;
         turn.Reset(0);
+        riffle.Reset();
         ribbonExtension = 0f;
         pressing = dragging = false;
         motion.Summon();
@@ -329,6 +539,7 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
         motion.Open();
         VisiblePage = 0;
         turn.Reset(0);
+        riffle.Reset();
         focusSection = true;
         pressing = dragging = false;
     }
@@ -338,13 +549,11 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
         passport.DrawCover(bounds, context);
         var moving = motion.IsMoving;
         ImGui.BeginDisabled(moving);
-        // Settings and window controls are stamped into the cover's lower band, beneath its arc.
+        // Window controls are stamped into the cover's lower band, beneath its arc; Settings live inside the book.
         var (board, unit) = BookSurface.CoverBoard(bounds);
         var stamp = context with { FontSize = MathF.Max(context.FontSize, MathF.Round(15 * unit)) };
         var height = MathF.Max(BookShellLayout.Small(context), 22 * unit);
         var top = board.Y + 531 * unit + (22 * unit - height) / 2;
-        var settingsWidth = BookShellLayout.SettingsWidth(context);
-        var settings = BookControl.Draw("Settings", "Settings", new UiRect(new Vector2(board.X + 64 * unit, top), new Vector2(settingsWidth, height)), stamp, BookControlStyle.Foil, hint: "Wanderveil settings");
         var small = BookShellLayout.Small(context);
         var spacing = MathF.Max(BookShellLayout.Gap(context), 10 * unit);
         var x = board.X + 356 * unit - 3 * small - 2 * spacing;
@@ -355,13 +564,13 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
         var close = BookControl.Draw("Close", "×", new UiRect(new Vector2(x, top), new Vector2(small, height)), stamp, BookControlStyle.Foil, hint: "Close passport (Escape)");
         ImGui.EndDisabled();
         if (close) motion.Dismiss();
-        if (moving) { pressing = dragging = false; return new BookShellIntent(motion.Phase == BookPhase.Hidden, false, Vector2.Zero); }
+        if (moving) { pressing = dragging = false; return new BookShellIntent(motion.Phase == BookPhase.Hidden, Vector2.Zero); }
 
         var cover = new UiRect(board, new Vector2(420, 560) * unit);
         var drag = Gesture(cover, true, out var click, opensOnly: true);
         if (click > 0) OpenBook();
         else if (!ImGui.IsAnyItemFocused() && (Keys(ImGuiKey.Space) || Keys(ImGuiKey.Enter) || Keys(ImGuiKey.KeypadEnter) || Keys(ImGuiKey.PageDown))) OpenBook();
-        return new BookShellIntent(motion.Phase == BookPhase.Hidden, settings, drag);
+        return new BookShellIntent(motion.Phase == BookPhase.Hidden, drag);
     }
 
     // The cover swinging open on its spine (or closed again), with no page content or input until it lands.
@@ -421,7 +630,7 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
             }
         }
         finally { list.PopClipRect(); }
-        return new BookShellIntent(motion.Phase == BookPhase.Hidden, false, Vector2.Zero);
+        return new BookShellIntent(motion.Phase == BookPhase.Hidden, Vector2.Zero);
     }
 
     // Press anywhere on the book that is not an item. Moving past the drag threshold moves the book;
@@ -475,13 +684,13 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
         return Array.AsReadOnly(copy);
     }
 
-    private void Introduction(UiContext context)
+    private static void Introduction(BookSection section, UiContext context)
     {
-        UiTypography.Text("WANDERVEIL / " + Labels[(int)Section].ToUpperInvariant(), TextRole.Caption, context, UiTheme.MutedInk);
+        UiTypography.Text("WANDERVEIL / " + Labels[(int)section].ToUpperInvariant(), TextRole.Caption, context, UiTheme.MutedInk);
         ImGui.Dummy(new Vector2(0, 16 * context.Scale));
-        UiTypography.Text(Section switch { BookSection.Discover => "Every place has a story.", BookSection.Echoes => "Beyond the next horizon", _ => "Leave a discovery" }, TextRole.Title, context, UiTheme.Ink);
+        UiTypography.Text(section switch { BookSection.Discover => "Every place has a story.", BookSection.Echoes => "Beyond the next horizon", _ => "Leave a discovery" }, TextRole.Title, context, UiTheme.Ink);
         ImGui.Dummy(new Vector2(0, 12 * context.Scale));
-        UiTypography.Text(Section == BookSection.Discover ? "A journal of imagined places. Curated demo discoveries; no location is read." : "Coming later. Creation, publishing, and creator-made adventures are unavailable in this preview.", TextRole.Body, context, UiTheme.Ink);
+        UiTypography.Text(section == BookSection.Discover ? "A journal of imagined places. Curated demo discoveries; no location is read." : "Coming later. Creation, publishing, and creator-made adventures are unavailable in this preview.", TextRole.Body, context, UiTheme.Ink);
     }
 
     internal static void PrepareWindow(Vector2 size)
