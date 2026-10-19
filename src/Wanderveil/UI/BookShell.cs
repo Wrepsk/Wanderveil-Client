@@ -79,6 +79,12 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
     private volatile bool escapeRequested;
 
     internal void RequestEscape() => escapeRequested = true;
+    // The page number being typed over: null when none, otherwise whether it is the right page's.
+    private bool? pageEntry;
+    private string pageText = "";
+    private bool focusPageEntry;
+    // Whether a page number is being typed (the book's own keys then wait).
+    internal bool EnteringPage => pageEntry != null;
     internal float PreferredWidth { get; private set; } = 1040;
     internal DiscoveryPreview? SelectedDiscovery => discover.SelectedDiscovery;
     internal StudioView Studio => studio;
@@ -230,8 +236,8 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
             {
                 DocumentPage(at, layout.LeftPage, false, true);
                 if (layout.IsSpread && at + 1 < PageCount) DocumentPage(at + 1, layout.RightPage, true, true);
-                Folio(at, false);
-                if (layout.IsSpread && at + 1 < PageCount) Folio(at + 1, true);
+                Folio(at, false, true);
+                if (layout.IsSpread && at + 1 < PageCount) Folio(at + 1, true, true);
                 return;
             }
             StaticSide(section, at, layout.IsSpread ? Side.Left : Side.Single, layout.LeftPage);
@@ -502,11 +508,65 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
             finally { ImGui.PopStyleVar(2); }
         }
 
-        void Folio(int index, bool right)
+        // A page number. On the passport's resting pages it is also a way to any page: click it, type a page
+        // (1 to 100), and press Enter. Escape or clicking away leaves it as it was.
+        void Folio(int index, bool right, bool live = false)
         {
             var label = (index + 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
             var measured = UiTypography.Measure(label, TextRole.Caption, page, 80, false);
-            UiTypography.Draw(ImGui.GetWindowDrawList(), layout.Folio(right) - measured / 2, label, TextRole.Caption, page, 80, UiTheme.MutedInk, false);
+            var center = layout.Folio(right);
+            var jumps = live && Section == BookSection.Passport;
+            if (jumps && pageEntry == right) { PageEntry(center, measured); return; }
+            UiTypography.Draw(ImGui.GetWindowDrawList(), center - measured / 2, label, TextRole.Caption, page, 80, UiTheme.MutedInk, false);
+            if (!jumps) return;
+            var pad = new Vector2(8, 3) * page.Scale;
+            ImGui.SetCursorScreenPos(center - measured / 2 - pad);
+            if (ImGui.InvisibleButton("Page number " + (right ? "right" : "left"), measured + pad * 2))
+            {
+                pageEntry = right;
+                pageText = label;
+                focusPageEntry = true;
+            }
+            if (!ImGui.IsItemHovered()) return;
+            ImGui.SetMouseCursor(ImGuiMouseCursor.TextInput);
+            ImGui.SetTooltip($"Go to page (1 to {PageCount})");
+            BookSurface.Line(ImGui.GetWindowDrawList(), center + new Vector2(-measured.X / 2, measured.Y / 2), center + measured / 2, ImGui.GetColorU32(UiTheme.MutedInk with { W = 0.6f }), MathF.Max(1, page.Scale));
+        }
+
+        void PageEntry(Vector2 center, Vector2 measured)
+        {
+            var width = MathF.Max(measured.X, UiTypography.Measure("000", TextRole.Caption, page, 80, false).X) + 12 * page.Scale;
+            var list = ImGui.GetWindowDrawList();
+            ImGui.PushFont(UiTypography.ResolveFont("0123456789", TextRole.Caption, page));
+            ImGui.SetWindowFontScale(UiTypography.Size(TextRole.Caption, page) / ImGui.GetFontSize());
+            ImGui.PushStyleVar(ImGuiStyleVar.FramePadding, new Vector2(4, 1) * page.Scale);
+            ImGui.PushStyleVar(ImGuiStyleVar.FrameBorderSize, 0f);
+            ImGui.PushStyleColor(ImGuiCol.FrameBg, UiTheme.PaperInset with { W = 0.55f });
+            ImGui.PushStyleColor(ImGuiCol.Text, UiTheme.Ink);
+            ImGui.PushStyleColor(ImGuiCol.TextSelectedBg, UiTheme.Gold with { W = 0.45f });
+            try
+            {
+                ImGui.SetCursorScreenPos(center - new Vector2(width / 2, ImGui.GetFrameHeight() / 2));
+                ImGui.SetNextItemWidth(width);
+                if (focusPageEntry) { ImGui.SetKeyboardFocusHere(); focusPageEntry = false; }
+                var entered = ImGui.InputText("##Go to page", ref pageText, 4, ImGuiInputTextFlags.CharsDecimal | ImGuiInputTextFlags.EnterReturnsTrue | ImGuiInputTextFlags.AutoSelectAll);
+                BookSurface.Line(list, new Vector2(ImGui.GetItemRectMin().X, ImGui.GetItemRectMax().Y), ImGui.GetItemRectMax(), ImGui.GetColorU32(UiTheme.Ink), MathF.Max(1, page.Scale));
+                if (entered)
+                {
+                    pageEntry = null;
+                    if (int.TryParse(pageText, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var number))
+                        GoToPage(number, layout.IsSpread);
+                }
+                // Leaving it (Escape, Tab, or a click elsewhere) closes it; so does a click while it never took focus.
+                else if (ImGui.IsItemDeactivated() || (!ImGui.IsItemActive() && ImGui.IsMouseClicked(ImGuiMouseButton.Left))) pageEntry = null;
+            }
+            finally
+            {
+                ImGui.PopStyleColor(3);
+                ImGui.PopStyleVar(2);
+                ImGui.SetWindowFontScale(1f);
+                ImGui.PopFont();
+            }
         }
 
         void Page(string id, UiRect region, Action content)
@@ -550,6 +610,7 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
         if (turn.Active) { turn.Finish(); VisiblePage = turn.Target; }
         desk.Cancel();
         desk.CloseInfo();
+        pageEntry = null;
         var distance = (int)to - (int)Section;
         riffle.Start(Math.Sign(distance), BookShellRiffle.LeavesFor(distance), Section, VisiblePage, ReducedMotion);
         Section = to;
@@ -562,6 +623,14 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
         Navigate(BookSection.Passport);
         ShowPage(fixedPages.Count + collection.LastSheet + 1, spread);
         desk.PickUp(stamp);
+    }
+
+    // Opens a printed page number (1 to the last page; anything outside is clamped).
+    internal void GoToPage(int number, bool spread)
+    {
+        if (Section != BookSection.Passport) return;
+        if (turn.Active) { turn.Finish(); VisiblePage = turn.Target; }
+        ShowPage(Math.Clamp(number, 1, PageCount) - 1, spread);
     }
 
     // Shows a passport page at once (its spread, when the book shows two pages).
@@ -660,6 +729,7 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
         riffle.Reset();
         desk.Cancel();
         desk.CloseInfo();
+        pageEntry = null;
         ribbonExtension = 0f;
         pressing = dragging = false;
         motion.Summon();

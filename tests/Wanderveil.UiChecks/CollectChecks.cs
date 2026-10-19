@@ -23,6 +23,8 @@ internal static class CollectChecks
         Arranging(check, artifacts);
         Limit(check);
         Escape(check);
+        Edges(check);
+        foreach (var (name, room) in new[] { ("wide", new Vector2(1200, 800)), ("narrow", new Vector2(452, 760)) }) Jump(check, name, room);
         Large(check);
         Unsaved(check);
     }
@@ -257,6 +259,54 @@ internal static class CollectChecks
         check(book.Shell.VisiblePage == BookShell.TotalPages - 2, $"Turning stops at page {book.Shell.VisiblePage + 1}, not at the last spread.");
         check(book.Shell.PageOverflow == 0 && book.Shell.Stamps.Placed.Count == 0, "Blank stamp pages overflow or create placements.");
         Console.WriteLine("PASS collect-limit");
+    }
+
+    // A stamp turned round and pushed to any page edge keeps its knob and × on the page in Arrange mode, so
+    // the page never grows a scrollbar.
+    private static void Edges(Action<bool, string> check)
+    {
+        var stamps = Seeded(4);
+        var corners = new[] { (0f, 0f, 0f), (1f, 1f, MathF.PI), (1f, 0f, MathF.PI / 2), (0f, 1f, -MathF.PI / 2) };
+        for (var index = 0; index < corners.Length; index++) stamps.Place(stamps.Stamps[index], new StampPlacement(index % 2, corners[index].Item1, corners[index].Item2, corners[index].Item3));
+        foreach (var room in new[] { new Vector2(1200, 800), new Vector2(452, 760) })
+        {
+            using var book = new Book(room, stamps);
+            book.Open();
+            book.Key(ImGuiKey.End);
+            book.Click(book.StampControl());
+            book.Frames(3);
+            check(book.Shell.Desk.Arrange && book.Shell.PageOverflow == 0 && book.Shell.PageOverflowX == 0, $"A stamp at the page edge makes its page scroll in Arrange mode at {room.X:0} px.");
+        }
+        Console.WriteLine("PASS collect-edges");
+    }
+
+    // Clicking a page number lets you type any page (clamped to 1-100) and Enter goes there; Escape leaves it.
+    private static void Jump(Action<bool, string> check, string name, Vector2 room)
+    {
+        using var book = new Book(room, new StampCollection(() => Issued));
+        var shell = book.Shell;
+        book.Open();
+        void Go(string typed, bool enter = true)
+        {
+            book.Click(book.Layout.Folio(false));
+            // Keyboard focus reaches the field a couple of frames after it appears.
+            book.Frames(2);
+            check(shell.EnteringPage && ImGui.GetIO().WantTextInput, name + ": clicking a page number does not open it for typing.");
+            ImGui.GetIO().AddInputCharacters(typed);
+            book.Frames(2);
+            book.Key(enter ? ImGuiKey.Enter : ImGuiKey.Escape);
+            check(!shell.EnteringPage && shell.Phase == BookPhase.Open, name + ": leaving the page number does not close it, or closes the book.");
+        }
+        var step = book.Layout.IsSpread ? 2 : 1;
+        Go("57");
+        check(shell.VisiblePage == 56 - 56 % step, name + $": typing 57 opens page {shell.VisiblePage + 1}.");
+        Go("250");
+        check(shell.VisiblePage == 99 - 99 % step, name + $": a page past the last opens page {shell.VisiblePage + 1}, not the last.");
+        Go("0");
+        check(shell.VisiblePage == 0, name + $": page 0 opens page {shell.VisiblePage + 1}, not the first.");
+        Go("12", enter: false);
+        check(shell.VisiblePage == 0, name + ": Escape in the page number still jumps.");
+        Console.WriteLine("PASS collect-jump-" + name);
     }
 
     // In game the plugin takes Escape from the game and hands it over; the book then ignores ImGui's Escape,

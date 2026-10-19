@@ -90,7 +90,7 @@ internal sealed class BookShellStamps(StampCollection collection, IBookAssets as
             ImGui.PushID(entry.Stamp.Id);
             try
             {
-                if (Arrange) { Knob(entry, center, diameter, context); Remove(entry, center, diameter, context); }
+                if (Arrange) { Knob(entry, center, diameter, area, context); Remove(entry, center, diameter, area, context); }
                 ImGui.SetCursorScreenPos(bounds.Position);
                 ImGui.InvisibleButton("Stamp", bounds.Size);
                 if (ImGui.IsItemHovered()) ImGui.SetMouseCursor(Arrange ? ImGuiMouseCursor.ResizeAll : ImGuiMouseCursor.Hand);
@@ -112,13 +112,13 @@ internal sealed class BookShellStamps(StampCollection collection, IBookAssets as
     }
 
     // The round knob above a stamp in Arrange mode: drag it around the stamp to turn the stamp.
-    private void Knob(PlacedStamp entry, Vector2 center, float diameter, UiContext context)
+    private void Knob(PlacedStamp entry, Vector2 center, float diameter, UiRect area, UiContext context)
     {
         var rotation = turning is { } held && held.Stamp == entry.Stamp ? held.Rotation : entry.Placement.Rotation;
         var (sin, cos) = MathF.SinCos(rotation);
         var reach = diameter * 0.62f;
-        var knob = center + new Vector2(sin * reach, -cos * reach);
         var radius = MathF.Max(5f, diameter * 0.06f);
+        var knob = Inside(center + new Vector2(sin * reach, -cos * reach), radius, area);
         var list = ImGui.GetWindowDrawList();
         list.AddLine(center + new Vector2(sin, -cos) * diameter * 0.5f, knob, ImGui.GetColorU32(UiTheme.MutedInk with { W = 0.5f }), MathF.Max(1f, context.Scale));
         list.AddCircleFilled(knob, radius, ImGui.GetColorU32(UiTheme.Paper));
@@ -139,12 +139,12 @@ internal sealed class BookShellStamps(StampCollection collection, IBookAssets as
     }
 
     // The × beside a stamp in Arrange mode, a quarter turn round from its knob so the two never meet.
-    private void Remove(PlacedStamp entry, Vector2 center, float diameter, UiContext context)
+    private void Remove(PlacedStamp entry, Vector2 center, float diameter, UiRect area, UiContext context)
     {
         var rotation = turning is { } held && held.Stamp == entry.Stamp ? held.Rotation : entry.Placement.Rotation;
         var (sin, cos) = MathF.SinCos(rotation + MathF.PI / 2);
-        var mark = center + new Vector2(sin, -cos) * diameter * 0.62f;
         var radius = MathF.Max(5f, diameter * 0.06f);
+        var mark = Inside(center + new Vector2(sin, -cos) * diameter * 0.62f, radius, area);
         var list = ImGui.GetWindowDrawList();
         ImGui.SetCursorScreenPos(mark - new Vector2(radius * 1.6f));
         ImGui.InvisibleButton("Remove", new Vector2(radius * 3.2f));
@@ -162,6 +162,14 @@ internal sealed class BookShellStamps(StampCollection collection, IBookAssets as
             ImGui.SetTooltip("Take this stamp off the page. It waits to be placed again.");
         }
         if (ImGui.IsItemClicked()) collection.Unplace(entry.Stamp);
+    }
+
+    // A knob or × whose stamp sits by the page edge is kept on the page; past it, its button would make the
+    // page scroll.
+    private static Vector2 Inside(Vector2 point, float radius, UiRect area)
+    {
+        var margin = new Vector2(radius * 1.6f + 1f);
+        return Vector2.Clamp(point, area.Position + margin, Vector2.Max(area.Position + margin, area.Max - margin));
     }
 
     // After the pages are drawn: moves, turns, and puts down a carried stamp. Returns -1 or 1 when resting at
@@ -193,7 +201,8 @@ internal sealed class BookShellStamps(StampCollection collection, IBookAssets as
         {
             if (ImGui.BeginChild("Carried stamp", window.Size, false, ImGuiWindowFlags.NoInputs | ImGuiWindowFlags.NoBackground | ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoSavedSettings))
             {
-                ImGui.GetWindowDrawList().AddCircleFilled(mouse + new Vector2(3, 5) * context.Scale, diameter * 0.46f, ImGui.GetColorU32(new Vector4(0, 0, 0, 0.18f)), 48);
+                // The shadow is the stamp's own shape, so it lines up with art that is not centred in its image.
+                StampArt.Issued(new UiRect(mouse + new Vector2(3, 5) * context.Scale - new Vector2(diameter / 2), new Vector2(diameter)), carry.Stamp, assets, context, carry.Rotation, tint: new Vector4(0.1f, 0.07f, 0.03f, 0.22f));
                 StampArt.Issued(new UiRect(mouse - new Vector2(diameter / 2), new Vector2(diameter)), carry.Stamp, assets, context, carry.Rotation, 0.92f);
             }
         }
