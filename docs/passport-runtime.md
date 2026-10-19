@@ -71,6 +71,23 @@ Starting a template turns the spread into a draft: printed fields on the left (e
 - [Stamp spot draft with a missing field](previews/passport/studio-stamp-spot.png)
 - [Postcard draft on a single page](previews/passport/studio-narrow.png)
 
+## Empty, missing, long, and Japanese content
+
+Each section explains its own empty state on its pages: Discover says the sample journal is empty, Echoes says there is no sample dossier and that chapters appear once there is one, and Studio says no template can be started when none is available (later templates are still listed). Nothing in these states is fetched. `BookShellContent` carries the discoveries, dossier, and templates into the shell, so these states are exercised in the real book.
+
+While artwork loads, or if a plate cannot load, the book draws itself instead: an edition-cloth cover board with a foil frame and the usual foil lettering, and an open book with cloth board, paper, and a soft gutter. Turning pages and the cover swing keep plain paper, and pages that need art say *Artwork is loading or unavailable*. Previously a missing cover was a flat beige rectangle.
+
+Long text wraps inside its paper, and words too long for a line are broken anywhere (ImGui's rule). A long holder name signs smaller, down to half size, and then wraps rather than being cut off. Very long pages scroll inside their paper. Studio fields hold each field's limit; their single line scrolls sideways while typing, and the preview wraps.
+
+Text the decorative faces cannot draw, such as Japanese, falls back to the host font; in game that is Dalamud's default font, whose coverage depends on the client's language (Japanese is expected, Korean and Chinese are not verified). The headless checks stand in local Yu Gothic for it. Japanese lines break anywhere rather than by Japanese line-breaking rules, and interface labels themselves are English only; there is no localization yet.
+
+- [Cover without artwork](previews/passport/states-missing-art-cover.png)
+- [A page turning without artwork](previews/passport/states-missing-art-turn.png)
+- [Long identity text and signature](previews/passport/states-long-identity.png)
+- [Japanese identity](previews/passport/states-japanese-identity.png)
+- [Japanese Studio draft](previews/passport/states-japanese-studio-draft.png)
+- [Echoes with no dossier](previews/passport/states-empty-echoes.png)
+
 ## Page turns (Milestone 4 experiment)
 
 Clicking a page side (or Page Up/Down) turns the page as a paper leaf rotating about the spine in 0.5 s. It curls as it goes: its outer edge trails the motion, most while it stands upright, so the page bows into an arc and lies flat again as it lands. Perspective, light that varies across the curve, and a shadow on the paper it hangs over complete it. The leaf carries its real page content: the front shows the page being turned, the back the page it lands as, including text, portrait, stamps, and the nation banner. The two pages that stay put remain live and readable throughout. On a single page, the page swings away to the left about its outer edge and fades, revealing the next page beneath it. Clicking the same way again lands the current turn and starts the next; clicking the other way reverses the turn from where the leaf is. Reduced motion turns instantly.

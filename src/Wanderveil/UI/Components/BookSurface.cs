@@ -93,7 +93,7 @@ internal static class BookSurface
         var span = face is BookFace.Left or BookFace.Right ? bounds.Size.X * 2 : bounds.Size.X;
         if (assets == null || !assets.TryGet(asset, out var image, span))
         {
-            PageSurface.Draw(ImGui.GetWindowDrawList(), bounds, context);
+            Fallback(ImGui.GetWindowDrawList(), bounds, face, context);
             return false;
         }
 
@@ -123,6 +123,50 @@ internal static class BookSurface
         void Image(float y, float height, float v0, float v1) => drawList.AddImage(image.Texture,
             bounds.Position + new Vector2(0f, y), bounds.Position + new Vector2(bounds.Size.X, y + height),
             new Vector2(u0, v0), new Vector2(u1, v1));
+    }
+
+    // While plates load (or if one cannot), a drawn book in the same places: edition cloth, paper, and spine,
+    // so the cover still reads as a cover and pages keep their paper. Geometry follows the plates above.
+    internal static void Fallback(ImDrawListPtr list, UiRect bounds, BookFace face, UiContext context)
+    {
+        var cloth = ImGui.GetColorU32(UiTheme.Edition);
+        var foil = ImGui.GetColorU32(UiTheme.Foil with { W = 0.6f });
+        var shadow = ImGui.GetColorU32(UiTheme.Shadow);
+        var thin = MathF.Max(1, context.Scale);
+        if (face == BookFace.Cover)
+        {
+            var (origin, unit) = CoverBoard(bounds);
+            var max = origin + new Vector2(420, 560) * unit;
+            list.AddRectFilled(origin + new Vector2(4, 6) * unit, max + new Vector2(4, 6) * unit, shadow, 10 * unit);
+            list.AddRectFilled(origin, max, cloth, 10 * unit);
+            list.AddRectFilled(origin, new Vector2(origin.X + 18 * unit, max.Y), ImGui.GetColorU32(new Vector4(0, 0, 0, 0.18f)), 10 * unit, ImDrawFlags.RoundCornersLeft);
+            list.AddRect(origin + new Vector2(30, 16) * unit, max - new Vector2(16) * unit, foil, 4 * unit, ImDrawFlags.None, thin);
+            return;
+        }
+        var spread = face == BookFace.Spread;
+        var natural = NaturalHeight(bounds.Size.X, spread);
+        var width = spread ? 1536f : 768f;
+        var (left, right) = face switch { BookFace.Spread => (24f, 1512f), BookFace.Right => (0f, 744f), _ => (24f, 768f) };
+        var top = bounds.Position.Y + natural * 36f / 1024f;
+        var bottom = bounds.Max.Y - natural * 36f / 1024f;
+        var boardMin = new Vector2(bounds.Position.X + bounds.Size.X * left / width, top);
+        var boardMax = new Vector2(bounds.Position.X + bounds.Size.X * right / width, bottom);
+        list.AddRectFilled(boardMin + new Vector2(3, 5) * context.Scale, boardMax + new Vector2(3, 5) * context.Scale, shadow, 8 * context.Scale);
+        list.AddRectFilled(boardMin, boardMax, cloth, 8 * context.Scale);
+        var paperTop = bounds.Position.Y + natural * 66f / 1024f;
+        var paperBottom = bounds.Max.Y - natural * 66f / 1024f;
+        var (paperLeft, paperRight) = face switch { BookFace.Spread => (66f, 1470f), BookFace.Right => (0f, 702f), _ => (66f, 768f) };
+        var paperMin = new Vector2(bounds.Position.X + bounds.Size.X * paperLeft / width, paperTop);
+        var paperMax = new Vector2(bounds.Position.X + bounds.Size.X * paperRight / width, paperBottom);
+        list.AddRectFilled(paperMin, paperMax, ImGui.GetColorU32(UiTheme.Paper), 2 * context.Scale);
+        // The gutter: a soft shadow on both sides of the spine, or along the bound edge of a single page.
+        var dark = ImGui.GetColorU32(new Vector4(0, 0, 0, 0.16f));
+        var clear = ImGui.GetColorU32(Vector4.Zero);
+        var reach = (paperMax.X - paperMin.X) * (spread ? 0.06f : 0.1f);
+        var spine = face switch { BookFace.Spread => (paperMin.X + paperMax.X) / 2, BookFace.Right => paperMin.X, _ => paperMax.X };
+        if (face != BookFace.Right) list.AddRectFilledMultiColor(new Vector2(spine - reach, paperMin.Y), new Vector2(spine, paperMax.Y), clear, dark, dark, clear);
+        if (face != BookFace.Left) list.AddRectFilledMultiColor(new Vector2(spine, paperMin.Y), new Vector2(spine + reach, paperMax.Y), dark, clear, clear, dark);
+        if (spread) list.AddLine(new Vector2(spine, paperMin.Y), new Vector2(spine, paperMax.Y), ImGui.GetColorU32(UiTheme.Ink with { W = 0.3f }), thin);
     }
 
     internal static void Portrait(UiRect bounds, IBookAssets assets, UiContext context)

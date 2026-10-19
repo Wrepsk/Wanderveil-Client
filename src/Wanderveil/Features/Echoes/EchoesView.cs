@@ -48,9 +48,13 @@ internal sealed class EchoesView(EchoPreview? preview)
 
     internal void DrawRight(UiContext context)
     {
-        if (dossier == null) return;
         UiTypography.Text("CHAPTERS", TextRole.Caption, context, UiTheme.MutedInk);
         Gap(12, context);
+        if (dossier == null)
+        {
+            UiTypography.Text("Chapters and objectives appear here once there is a dossier to read.", TextRole.Body, context, UiTheme.MutedInk);
+            return;
+        }
         var indent = MathF.Round(UiTypography.Size(TextRole.Heading, context) * 1.6f);
         foreach (var chapter in dossier.Chapters)
         {

@@ -12,7 +12,8 @@ Status: implemented foundations for static Passport and Discover previews, 18 Oc
 | `UiButton.cs` | Native ImGui button with scoped theme; keyboard/mouse behavior retained |
 | `UiCard.cs` | Whole-card native action with scoped parchment/hover styling and keyboard focus |
 | `StampPreview.cs` | Original decorative compass-stamp motif; no issued collectible state |
-| `BookSurface.cs`, `BookAssets.cs` | Asset-backed cover/spread/page-half painter, safe content bounds, and texture port |
+| `BookSurface.cs`, `BookAssets.cs` | Asset-backed cover/spread/page-half painter with a drawn cloth/paper fallback while plates load, safe content bounds, and texture port |
+| `UI/BookShellContent.cs` | The discoveries, Echoes dossier, and Studio templates the shell shows; empty or missing values are valid states |
 | `UI/BookShell.cs`, `BookShellLayout.cs`, `Components/BookControl.cs` | Borderless stationary host composition, viewport fitting, bounded live pages, attached native actions, and shell intents |
 | `Infrastructure/Media/PassportAssets.cs` | Embedded shared textures and plugin-owned managed heading fonts |
 | `Features/Passport/PassportLayout.cs` | Responsive page width, spacing, and padding |
@@ -43,6 +44,6 @@ Discover presents type, title, creator, imagined location, teaser, stamp motif/n
 
 ## Automated evidence
 
-Run the [native UI checks](../tests/README.md). All checks pass (3674 in Debug, 3684 in Release with previews). The check project compiles the same shell/component/Passport/Discover/Studio/Echoes sources and loads the installed ImGui native library. It verifies geometry across widths/scales/font sizes, rejects invalid geometry, checks selected text/button contrast pairs, exercises wrapping/cursor reservation, mouse release/cancel and keyboard card/Back activation, disabled collection, browse-scroll restoration, and style cleanup. Book checks cover material bounds, assets/fallbacks, font stack/fallback, long-page keyboard activation, complete borderless shell input/layout through viewport and size changes, and Gridania static composition/illustration/narrow-page behavior.
+Run the [native UI checks](../tests/README.md). All checks pass (4237 in Debug, 4363 in Release with previews). The check project compiles the same shell/component/Passport/Discover/Studio/Echoes sources and loads the installed ImGui native library. It verifies geometry across widths/scales/font sizes, rejects invalid geometry, checks selected text/button contrast pairs, exercises wrapping/cursor reservation, mouse release/cancel and keyboard card/Back activation, disabled collection, browse-scroll restoration, and style cleanup. Book checks cover material bounds, assets/fallbacks, font stack/fallback, long-page keyboard activation, complete borderless shell input/layout through viewport and size changes, and Gridania static composition/illustration/narrow-page behavior.
 
 Baseline software previews use ImGui's default font. Material previews add the bundled heading fonts and local Windows Segoe UI as a body-font surrogate; it is not redistributed. The CPU rasterizer supports asset RGBA and multi-page font atlases. These validate real component draw lists, not exact game fonts or GPU appearance. No test renderer/native library is included in the plugin package. The full design system, localization glyph coverage, animations, issued-stamp/passport controls, and broader navigation/overlay controls remain future work.

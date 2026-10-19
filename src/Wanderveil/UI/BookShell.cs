@@ -21,7 +21,7 @@ internal readonly record struct BookShellIntent(bool Close, Vector2 Drag);
 // Real items (tabs, printed controls, page content) keep their own clicks and keyboard navigation.
 // BookShellMotion sequences arrival, the cover swing, and dismissal; the book takes no input while it moves.
 // Moving between sections riffles several pages in book direction; Settings are pages of the book too.
-internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IReadOnlyList<PassportPage>? pages = null, IBookShellSettings? settings = null)
+internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IReadOnlyList<PassportPage>? pages = null, IBookShellSettings? settings = null, BookShellContent? content = null)
 {
     internal const ImGuiWindowFlags WindowFlags = ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.NoBackground | ImGuiWindowFlags.NoCollapse |
         ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoMove | ImGuiWindowFlags.NoDocking;
@@ -29,9 +29,9 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
     private const int TabCount = 4;
     private readonly PassportDocumentView passport = new(assets, profile);
     private readonly IReadOnlyList<PassportPage> documentPages = ValidatePages(pages ?? PassportDocumentView.SamplePages);
-    private readonly DiscoverView discover = new(DiscoveryPreview.Samples);
-    private readonly StudioView studio = new();
-    private readonly EchoesView echoes = new(EchoPreview.Sample);
+    private readonly DiscoverView discover = new((content ?? BookShellContent.Sample).Discoveries);
+    private readonly StudioView studio = new((content ?? BookShellContent.Sample).Templates);
+    private readonly EchoesView echoes = new((content ?? BookShellContent.Sample).Dossier);
     private readonly BookShellMotion motion = Arrived();
     private readonly BookShellTurn turn = new();
     private readonly BookShellRiffle riffle = new();
@@ -60,6 +60,8 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
     internal StudioView Studio => studio;
     // Largest scroll range among the pages drawn last frame; zero when every page fits its paper.
     internal float PageOverflow { get; private set; }
+    // Largest sideways overflow among the pages drawn last frame; text must always wrap within its paper.
+    internal float PageOverflowX { get; private set; }
     internal bool IsTurning => turn.Active;
     internal bool IsRiffling => riffle.Active;
 
@@ -82,7 +84,7 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
         // On a single page the page beneath a turning leaf decides which half of the plate shows.
         var layout = BookShellLayout.Create(bounds, context, Section == BookSection.Passport ? turning && turn.Step == 1 ? turn.Base + 1 : VisiblePage : 0);
         if (turn.Active && turn.Step != (layout.IsSpread ? 2 : 1)) { turn.Finish(); VisiblePage = turn.Target; turning = false; }
-        PageOverflow = 0;
+        PageOverflow = PageOverflowX = 0;
         if (layout.IsSpread) VisiblePage -= VisiblePage % 2;
         var step = layout.IsSpread ? 2 : 1;
 
@@ -387,6 +389,8 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
                     else list.AddRectFilledMultiColor(new Vector2(leaf.Hinge.X - reach, face.Position.Y), new Vector2(leaf.Hinge.X, face.Max.Y), clear, dark, dark, clear);
                     if (assets.TryGet(BookAsset.Open, out var open, layout.Book.Size.X))
                         leaf.Leaf(list, open.Texture, new Vector2(uvHinge, 66f / 1024f), new Vector2(uvOuter, 958f / 1024f), Vector4.One with { W = alpha });
+                    // Without the plate the leaf is plain paper, so its content never turns through the air.
+                    else list.AddQuadFilled(leaf.Project(0, 0), leaf.Project(1, 0), leaf.Project(1, 1), leaf.Project(0, 1), LeafProjection.Tint(UiTheme.Paper with { W = alpha }, leaf.Light));
                     var start = list.VtxBuffer.Size;
                     if (content != null)
                     {
@@ -422,7 +426,7 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
             try
             {
                 var visible = ImGui.BeginChild(id, region.Size, false, ImGuiWindowFlags.NoBackground | ImGuiWindowFlags.NoSavedSettings);
-                try { if (visible) { content(); PageOverflow = MathF.Max(PageOverflow, ImGui.GetScrollMaxY()); } }
+                try { if (visible) { content(); PageOverflow = MathF.Max(PageOverflow, ImGui.GetScrollMaxY()); PageOverflowX = MathF.Max(PageOverflowX, ImGui.GetScrollMaxX()); } }
                 finally { ImGui.EndChild(); }
             }
             finally { ImGui.PopStyleColor(2); ImGui.PopStyleVar(2); }
@@ -622,6 +626,8 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
                 if (spread) list.AddImage(open.Texture, moved.Position + new Vector2(moved.Size.X / 2, 0), moved.Max, new Vector2(0.5f, 0), Vector2.One);
                 else list.AddImage(open.Texture, moved.Position, moved.Max, Vector2.Zero, new Vector2(0.5f, 1));
             }
+            else if (spread) BookSurface.Fallback(list, new UiRect(moved.Position + new Vector2(moved.Size.X / 2, 0), new Vector2(moved.Size.X / 2, moved.Size.Y)), BookFace.Right, context);
+            else BookSurface.Fallback(list, moved, BookFace.Left, context);
             // The lifted leaf shades the paper next to the spine.
             var dark = ImGui.GetColorU32(new Vector4(0, 0, 0, 0.30f * MathF.Sin(angle)));
             var clear = ImGui.GetColorU32(Vector4.Zero);

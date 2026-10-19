@@ -54,7 +54,7 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportPreview p
             var spacing = MathF.Round(tracking * unit);
             var width = UiTypography.MeasureTracked(text, TextRole.Title, type, spacing);
             var position = new Vector2(centerX - width / 2, board.Y + top * unit);
-            var foil = hasCover ? UiTheme.Foil : UiTheme.Ink;
+            var foil = UiTheme.Foil;
             var shadow = new Vector4(0.02f, 0.05f, 0.03f, 0.55f * alpha);
             if (leaf is { } textLeaf)
             {
@@ -146,10 +146,15 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportPreview p
             flow.Gap(12);
             flow.Text(hasPortrait ? "Demo portrait placeholder" : "Offline portrait preview", TextRole.Caption, true);
             flow.Gap(24);
-            var signature = flow.Reserve(44 * context.Scale);
+            // A long name signs smaller, as a hand would to fit the line; past half size it wraps instead of clipping.
             var type = context with { HeadingFont = context.SignatureFont, FontSize = context.FontSize * 1.5f };
-            var measured = UiTypography.Measure(profile.Name, TextRole.Heading, type, width, false);
-            UiTypography.Draw(ImGui.GetWindowDrawList(), signature.Position + new Vector2((width - measured.X) / 2, 0), profile.Name, TextRole.Heading, type, width, UiTheme.Ink, false);
+            var natural = UiTypography.Measure(profile.Name, TextRole.Heading, type, float.MaxValue, false).X;
+            if (natural > width) type = type with { FontSize = type.FontSize * MathF.Max(0.5f, width / natural) };
+            var wraps = UiTypography.Measure(profile.Name, TextRole.Heading, type, float.MaxValue, false).X > width;
+            var measured = UiTypography.Measure(profile.Name, TextRole.Heading, type, width, wraps);
+            var signature = flow.Reserve(MathF.Max(44 * context.Scale, measured.Y));
+            if (flow.IsDrawing)
+                UiTypography.Draw(ImGui.GetWindowDrawList(), signature.Position + new Vector2(wraps ? 0 : (width - measured.X) / 2, MathF.Max(0, 44 * context.Scale - measured.Y) / 2), profile.Name, TextRole.Heading, type, width, UiTheme.Ink, wraps);
             flow.Rule();
             flow.Text("HOLDER'S SIGNATURE / DEMO", TextRole.Caption, true);
             return;

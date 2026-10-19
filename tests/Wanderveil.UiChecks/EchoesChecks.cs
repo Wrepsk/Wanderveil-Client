@@ -41,8 +41,10 @@ internal static class EchoesChecks
             {
                 var context = new UiContext(1, ImGui.GetFontSize());
                 view.DrawLeft(context);
+                var left = ImGui.GetCursorPosY();
                 view.DrawRight(context);
                 drawn = ImGui.GetCursorPosY();
+                check(drawn - left > 2 * ImGui.GetFontSize(), "The empty Echoes chapters page is blank.");
                 check(ImGui.GetScrollMaxX() == 0, "The empty Echoes pages overflow sideways.");
             }
             host.Frame(Draw);

@@ -68,6 +68,9 @@ internal sealed class StudioView(IReadOnlyList<StudioTemplate>? templates = null
         UiTypography.Text("CHOOSE A TEMPLATE", TextRole.Caption, context, UiTheme.MutedInk);
         Gap(12, context);
         StudioTemplateKind? chosen = null;
+        if (!catalog.Any(candidate => candidate.Available))
+            UiTypography.Text("No template can be started in this preview. Nothing has been fetched.", TextRole.Body, context, UiTheme.MutedInk);
+        if (!catalog.Any(candidate => candidate.Available)) Gap(14, context);
         foreach (var template in catalog.Where(candidate => candidate.Available))
         {
             UiTypography.Text(template.Name, TextRole.Heading, context, UiTheme.Ink);
@@ -86,8 +89,6 @@ internal sealed class StudioView(IReadOnlyList<StudioTemplate>? templates = null
             foreach (var template in later)
                 UiTypography.Text(template.Name + " / " + template.Summary, TextRole.Body, context, UiTheme.MutedInk);
         }
-        if (catalog.Count == 0)
-            UiTypography.Text("No templates are available.", TextRole.Body, context, UiTheme.MutedInk);
         if (chosen is { } kind) Choose(kind);
     }
 

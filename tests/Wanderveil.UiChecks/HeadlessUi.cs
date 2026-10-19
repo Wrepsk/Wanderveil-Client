@@ -20,7 +20,9 @@ internal sealed unsafe class HeadlessUi : IDisposable
     internal ImFontPtr DisplayFont { get; }
     internal ImFontPtr MonoFont { get; }
 
-    internal HeadlessUi(Vector2 size, float scale = 1f, float textScale = 1f, bool materials = false)
+    // japanese: the host font is local Yu Gothic with Japanese glyphs, a surrogate for the game's Japanese-capable
+    // default font. Like Segoe UI it is a preview stand-in, never a shipped asset.
+    internal HeadlessUi(Vector2 size, float scale = 1f, float textScale = 1f, bool materials = false, bool japanese = false)
     {
         displaySize = size;
         context = ImGui.CreateContext();
@@ -34,7 +36,8 @@ internal sealed unsafe class HeadlessUi : IDisposable
         if (materials)
         {
             // A local Windows UI font is a preview surrogate for the host font, never a shipped asset.
-            io.Fonts.AddFontFromFileTTF(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Fonts), "segoeui.ttf"), 18f);
+            if (japanese) io.Fonts.AddFontFromFileTTF(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Fonts), "YuGothM.ttc"), 18f, default, io.Fonts.GetGlyphRangesJapanese());
+            else io.Fonts.AddFontFromFileTTF(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Fonts), "segoeui.ttf"), 18f);
             TitleFont = io.Fonts.AddFontFromFileTTF(Path.Combine(AppContext.BaseDirectory, "Assets", "CormorantGaramond-Bold.ttf"), 30f);
             HeadingFont = io.Fonts.AddFontFromFileTTF(Path.Combine(AppContext.BaseDirectory, "Assets", "CormorantGaramond-SemiBold.ttf"), 24f);
             BodyFont = io.Fonts.AddFontFromFileTTF(Path.Combine(AppContext.BaseDirectory, "Assets", "CormorantGaramond-Medium.ttf"), 24f);
