@@ -1,6 +1,6 @@
 # Client documentation
 
-Status: Phase 02 in progress, 19 October 2026. The passport book holds Passport, Discover, Studio, Echoes, and Settings pages with motion, and the postcard's demo stamp can be collected, placed anywhere on unlimited blank stamp pages, arranged, and saved locally; identity and cover preferences are next.
+Status: Phase 02 in progress, 19 October 2026. The passport book holds Passport, Discover, Studio, Echoes, and Settings pages with motion, and the postcard's demo stamp can be collected, placed anywhere on blank stamp pages (up to page 100), arranged, and saved locally; identity and cover preferences are next.
 
 - [Development and current build](development.md)
 - [Client architecture and future layout](architecture.md)

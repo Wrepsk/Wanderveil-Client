@@ -64,10 +64,21 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
     internal float Lift => UiMotion.Ease(motion.Lift);
     internal bool ReducedMotion { get => motion.ReducedMotion; set => motion.ReducedMotion = value; }
     private bool focusSection;
-    // There is no last stamp page; this bound only keeps page numbers finite.
-    internal int PageCount => fixedPages.Count + StampPlacement.MaximumSheet + 1;
+    // The passport has 100 pages for now: the fixed pages, then blank stamp pages up to the hundredth.
+    internal const int TotalPages = 100;
+    internal int PageCount => Math.Max(fixedPages.Count, TotalPages);
     internal int FixedPageCount => fixedPages.Count;
     internal BookShellStamps Desk => desk;
+    // In game the plugin reads Escape from the game's own key state, so it can keep the game from also opening
+    // its system menu, and hands it over with RequestEscape; then the book must not read it from ImGui as well.
+    internal bool ReadsEscape { get; init; } = true;
+    // Whether Escape would do something here: put back a carried stamp, close stamp info, or close the book.
+    // Read from the game's update thread, so only a plain flag.
+    internal bool WantsEscape => wantsEscape;
+    private volatile bool wantsEscape;
+    private volatile bool escapeRequested;
+
+    internal void RequestEscape() => escapeRequested = true;
     internal float PreferredWidth { get; private set; } = 1040;
     internal DiscoveryPreview? SelectedDiscovery => discover.SelectedDiscovery;
     internal StudioView Studio => studio;
@@ -96,7 +107,14 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
     {
         solid.Clear();
         try { return DrawBook(bounds, context); }
-        finally { holding = pressing || dragging || desk.Busy || ImGui.IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows) && ImGui.IsAnyItemActive(); }
+        finally
+        {
+            holding = pressing || dragging || desk.Busy || ImGui.IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows) && ImGui.IsAnyItemActive();
+            // A field being written in keeps Escape for itself; otherwise the book wants it while it is shown and
+            // either holds a stamp or info, or has focus.
+            wantsEscape = motion.Phase != BookPhase.Hidden && !ImGui.IsAnyItemActive()
+                && (desk.Busy || desk.Info != null || ImGui.IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows));
+        }
     }
 
     private BookShellIntent DrawBook(UiRect bounds, UiContext context)
@@ -104,7 +122,10 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
         if (motion.Phase == BookPhase.Hidden) return new BookShellIntent(true, Vector2.Zero);
         // Escape plays the dismissal, except while a field is being written in: there it only leaves the field.
         // A carried stamp or an open stamp info page takes Escape first.
-        if (ImGui.IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows) && !ImGui.IsAnyItemActive() && ImGui.IsKeyPressed(ImGuiKey.Escape, false))
+        var escape = escapeRequested;
+        escapeRequested = false;
+        if (ReadsEscape && ImGui.IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows) && !ImGui.IsAnyItemActive() && ImGui.IsKeyPressed(ImGuiKey.Escape, false)) escape = true;
+        if (escape && !ImGui.IsAnyItemActive())
         {
             if (desk.Busy) desk.Cancel();
             else if (desk.Info != null) desk.CloseInfo();
@@ -304,7 +325,12 @@ internal sealed class BookShell(IBookAssets assets, PassportPreview profile, IRe
 
         void Contents(PassportPage entry, UiContext type, bool live, bool rightSide)
         {
-            if (entry.Kind == PassportPageKind.Stamps) { desk.DrawSheet(entry.Sheet, live, rightSide && layout.IsSpread, type); return; }
+            if (entry.Kind == PassportPageKind.Stamps)
+            {
+                passport.Engrave(type);
+                desk.DrawSheet(entry.Sheet, live, rightSide && layout.IsSpread, type);
+                return;
+            }
             passport.Compose(entry, type);
             if (entry.Kind == PassportPageKind.Information)
             {

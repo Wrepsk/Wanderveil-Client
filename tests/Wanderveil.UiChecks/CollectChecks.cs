@@ -21,7 +21,8 @@ internal static class CollectChecks
             Loop(check, artifacts, name, room);
         Spot(check);
         Arranging(check, artifacts);
-        Endless(check);
+        Limit(check);
+        Escape(check);
         Large(check);
         Unsaved(check);
     }
@@ -192,7 +193,6 @@ internal static class CollectChecks
 
         book.Click(book.StampControl());
         check(shell.Desk.Arrange, "The Arrange control does not start arranging.");
-        book.Save(artifacts, "collect-arrange.png");
         // Drag the first stamp from the left page to the right one.
         book.Drag(book.Spot(false, 0.3f, 0.3f), book.Spot(true, 0.8f, 0.15f));
         var moved = stamps.PlacementOf(first)!.Value;
@@ -227,41 +227,81 @@ internal static class CollectChecks
         // Escape puts it back where it was, on page 4, and keeps the passport open.
         book.Key(ImGuiKey.Escape);
         check(shell.Desk.Carrying == null && stamps.PlacementOf(first)!.Value.Sheet == 4 && shell.Phase == BookPhase.Open, "Escape does not put a carried stamp back.");
+        // The × beside the second stamp (a quarter turn from its knob, which now points right) takes it off
+        // the page; it waits to be placed again and is still held.
+        book.Key(ImGuiKey.PageUp);
+        book.Key(ImGuiKey.PageUp);
+        book.Key(ImGuiKey.PageUp);
+        check(shell.VisiblePage == shell.FixedPageCount, "Page Up does not return to the first stamp spread.");
+        var turned = stamps.PlacementOf(second)!.Value.Rotation;
+        var (removeSin, removeCos) = MathF.SinCos(turned + MathF.PI / 2);
+        book.Save(artifacts, "collect-arrange.png");
+        book.Click(center + new Vector2(removeSin, -removeCos) * diameter * 0.62f);
+        check(stamps.PlacementOf(second) == null && stamps.Unplaced.Single() == second && stamps.Stamps.Contains(second), "The × does not take its stamp off the page to wait.");
+        book.Click(book.StampControl());
+        check(shell.Desk.Carrying?.Stamp == second, "A removed stamp is not offered to place again.");
+        book.Click(center);
+        check(stamps.PlacementOf(second)?.Sheet == shell.VisiblePage - shell.FixedPageCount + 1 && !stamps.Unplaced.Any(), "A removed stamp cannot be placed again on the page after the last stamp.");
         book.Click(book.StampControl());
         check(!shell.Desk.Arrange, "Done does not end Arrange mode.");
         Console.WriteLine("PASS collect-arrange");
     }
 
-    // Stamp pages never run out: turning on keeps finding blank pages, and none of them is stored.
-    private static void Endless(Action<bool, string> check)
+    // The passport has 100 pages: turning stops at the last spread, and blank pages store nothing.
+    private static void Limit(Action<bool, string> check)
     {
         using var book = new Book(new Vector2(1200, 800), new StampCollection(() => Issued));
         book.Open();
-        for (var turn = 0; turn < 32; turn++) book.Key(ImGuiKey.PageDown);
-        check(book.Shell.VisiblePage == 64, $"Turning stops at page {book.Shell.VisiblePage + 1} instead of carrying on.");
+        check(book.Shell.PageCount == BookShell.TotalPages, "The passport does not have 100 pages.");
+        for (var turn = 0; turn < 60; turn++) book.Key(ImGuiKey.PageDown);
+        check(book.Shell.VisiblePage == BookShell.TotalPages - 2, $"Turning stops at page {book.Shell.VisiblePage + 1}, not at the last spread.");
         check(book.Shell.PageOverflow == 0 && book.Shell.Stamps.Placed.Count == 0, "Blank stamp pages overflow or create placements.");
-        Console.WriteLine("PASS collect-endless");
+        Console.WriteLine("PASS collect-limit");
     }
 
-    // A representative larger collection: 500 stamps spread over 1,500 pages. End reaches the last, and it
-    // costs no more to draw than the first because only the pages on screen are drawn.
+    // In game the plugin takes Escape from the game and hands it over; the book then ignores ImGui's Escape,
+    // says when it wants the key, and acts on the handed-over press.
+    private static void Escape(Action<bool, string> check)
+    {
+        var stamps = Seeded(1);
+        using var book = new Book(new Vector2(1200, 800), stamps, readsEscape: false);
+        var shell = book.Shell;
+        book.Open();
+        book.Key(ImGuiKey.End);
+        check(shell.WantsEscape, "An open, focused passport does not want Escape.");
+        book.Click(book.StampControl());
+        check(shell.Desk.Carrying != null && shell.WantsEscape, "A carried stamp does not want Escape.");
+        book.Key(ImGuiKey.Escape);
+        check(shell.Desk.Carrying != null && shell.Phase == BookPhase.Open, "The book read Escape from ImGui although the plugin hands it over.");
+        shell.RequestEscape();
+        book.Frames(2);
+        check(shell.Desk.Carrying == null && shell.Phase == BookPhase.Open && stamps.Unplaced.Count() == 1, "A handed-over Escape does not put the carried stamp back.");
+        shell.RequestEscape();
+        book.Frames(2);
+        check(shell.Phase != BookPhase.Open, "A handed-over Escape does not close the passport once nothing is held.");
+        Console.WriteLine("PASS collect-escape");
+    }
+
+    // A representative larger collection: 500 stamps over all 96 stamp pages, five or six on each. End reaches
+    // the last, and it costs no more to draw than the first because only the pages on screen are drawn.
     private static void Large(Action<bool, string> check)
     {
         const int Count = 500;
         var stamps = Seeded(Count);
-        for (var index = 0; index < Count; index++) stamps.Place(stamps.Stamps[index], new StampPlacement(index * 3, index % 3 / 2f, index % 5 / 4f, index * 0.2f));
+        var sheets = BookShell.TotalPages - PassportDocumentView.SamplePages.Count;
+        for (var index = 0; index < Count; index++) stamps.Place(stamps.Stamps[index], new StampPlacement(index % sheets, index % 3 / 2f, index / sheets % 5 / 4f, index * 0.2f));
         using var book = new Book(new Vector2(1200, 800), stamps);
         book.Open();
         book.Key(ImGuiKey.PageDown);
         book.Key(ImGuiKey.PageDown);
         var first = book.Measure();
         book.Key(ImGuiKey.End);
-        var last = book.Shell.FixedPageCount + (Count - 1) * 3;
+        var last = BookShell.TotalPages - 1;
         check(book.Shell.VisiblePage == last - last % 2, $"End reaches page {book.Shell.VisiblePage + 1}, not the last stamp's.");
         check(book.Shell.PageOverflow == 0 && book.Shell.PageOverflowX == 0, "A stamp page overflows its paper.");
         var end = book.Measure();
         check(end < first * 3 + 1, $"The page of the last of {Count} stamps costs {end:0.00} ms against {first:0.00} ms for the first.");
-        Console.WriteLine($"INFO collect-large {Count} stamps over {(Count - 1) * 3 + 1} pages: first stamp spread {first:0.00} ms, last {end:0.00} ms per frame (headless CPU)");
+        Console.WriteLine($"INFO collect-large {Count} stamps over {sheets} pages: first stamp spread {first:0.00} ms, last {end:0.00} ms per frame (headless CPU)");
         Console.WriteLine("PASS collect-large");
     }
 
@@ -282,11 +322,11 @@ internal static class CollectChecks
         private UiRect root;
         internal BookShell Shell { get; }
 
-        internal Book(Vector2 room, StampCollection stamps, BookShellContent? content = null, IStampStorage? storage = null)
+        internal Book(Vector2 room, StampCollection stamps, BookShellContent? content = null, IStampStorage? storage = null, bool readsEscape = true)
         {
             this.room = room;
             host = new HeadlessUi(room, materials: true);
-            Shell = new BookShell(host.Textures!, PassportPreview.Sample, content: content, stamps: stamps, storage: storage) { ReducedMotion = true };
+            Shell = new BookShell(host.Textures!, PassportPreview.Sample, content: content, stamps: stamps, storage: storage) { ReducedMotion = true, ReadsEscape = readsEscape };
             context = new UiContext(1, 18) { TitleFont = host.TitleFont, HeadingFont = host.HeadingFont, BodyFont = host.BodyFont, DisplayFont = host.DisplayFont, MonoFont = host.MonoFont, SignatureFont = host.SignatureFont };
             Frames(3);
         }

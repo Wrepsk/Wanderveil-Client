@@ -81,7 +81,7 @@ internal sealed class StampCollection
     // The last stamp page with a stamp on it, or -1 when none is placed.
     internal int LastSheet => placed.Count == 0 ? -1 : placed.Max(entry => entry.Placement.Sheet);
 
-    // Raised after a stamp is collected or placed.
+    // Raised after a stamp is collected, placed, or taken off its page.
     internal event Action? Changed;
 
     internal StampInstance? For(string discoveryId) => stamps.FirstOrDefault(stamp => string.Equals(stamp.DiscoveryId, discoveryId, StringComparison.Ordinal));
@@ -101,6 +101,16 @@ internal sealed class StampCollection
         stamps.Add(stamp);
         Changed?.Invoke();
         return new CollectResult(CollectOutcome.Collected, stamp);
+    }
+
+    // Takes a stamp off its page; it waits to be placed again. The stamp itself is never removed: an earned
+    // stamp stays in the passport. False when it was not placed.
+    internal bool Unplace(StampInstance stamp)
+    {
+        if (!places.Remove(stamp.Id)) return false;
+        placed.RemoveAll(entry => entry.Stamp.Id == stamp.Id);
+        Changed?.Invoke();
+        return true;
     }
 
     // Presses a held stamp onto a page, or moves it there; it lands on top of the others. False when the

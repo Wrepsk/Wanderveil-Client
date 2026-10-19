@@ -12,7 +12,8 @@ namespace Wanderveil.UI;
 // The owner's stamps on the passport's stamp pages: drawn where they were put, with an info page for any
 // stamp, and, in Arrange mode, picked up, carried (across page turns too), put down, and turned.
 // Clicking a stamp opens its info on the opposite page. In Arrange mode a press-and-drag carries a stamp
-// until release and a click picks it up until the next click; each round knob turns its stamp. While a
+// until release and a click picks it up until the next click; each round knob turns its stamp, and each ×
+// takes its stamp off the page to wait among the unplaced (an earned stamp is never deleted). While a
 // stamp is carried the mouse wheel turns it, resting at the book's outer edge turns the page, a click or
 // release on a stamp page puts it down, and Escape or a right click puts it back where it came from.
 internal sealed class BookShellStamps(StampCollection collection, IBookAssets assets)
@@ -89,7 +90,7 @@ internal sealed class BookShellStamps(StampCollection collection, IBookAssets as
             ImGui.PushID(entry.Stamp.Id);
             try
             {
-                if (Arrange) Knob(entry, center, diameter, context);
+                if (Arrange) { Knob(entry, center, diameter, context); Remove(entry, center, diameter, context); }
                 ImGui.SetCursorScreenPos(bounds.Position);
                 ImGui.InvisibleButton("Stamp", bounds.Size);
                 if (ImGui.IsItemHovered()) ImGui.SetMouseCursor(Arrange ? ImGuiMouseCursor.ResizeAll : ImGuiMouseCursor.Hand);
@@ -135,6 +136,32 @@ internal sealed class BookShellStamps(StampCollection collection, IBookAssets as
             collection.Place(entry.Stamp, entry.Placement with { Rotation = done.Rotation });
             turning = null;
         }
+    }
+
+    // The × beside a stamp in Arrange mode, a quarter turn round from its knob so the two never meet.
+    private void Remove(PlacedStamp entry, Vector2 center, float diameter, UiContext context)
+    {
+        var rotation = turning is { } held && held.Stamp == entry.Stamp ? held.Rotation : entry.Placement.Rotation;
+        var (sin, cos) = MathF.SinCos(rotation + MathF.PI / 2);
+        var mark = center + new Vector2(sin, -cos) * diameter * 0.62f;
+        var radius = MathF.Max(5f, diameter * 0.06f);
+        var list = ImGui.GetWindowDrawList();
+        ImGui.SetCursorScreenPos(mark - new Vector2(radius * 1.6f));
+        ImGui.InvisibleButton("Remove", new Vector2(radius * 3.2f));
+        var hovered = ImGui.IsItemHovered();
+        var ink = ImGui.GetColorU32(hovered ? UiTheme.Action : UiTheme.Ink);
+        list.AddCircleFilled(mark, radius, ImGui.GetColorU32(UiTheme.Paper));
+        list.AddCircle(mark, radius, ink, 24, MathF.Max(1f, 1.5f * context.Scale));
+        var arm = radius * 0.45f;
+        var stroke = MathF.Max(1f, 1.5f * context.Scale);
+        list.AddLine(mark - new Vector2(arm), mark + new Vector2(arm), ink, stroke);
+        list.AddLine(mark + new Vector2(-arm, arm), mark + new Vector2(arm, -arm), ink, stroke);
+        if (hovered)
+        {
+            ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
+            ImGui.SetTooltip("Take this stamp off the page. It waits to be placed again.");
+        }
+        if (ImGui.IsItemClicked()) collection.Unplace(entry.Stamp);
     }
 
     // After the pages are drawn: moves, turns, and puts down a carried stamp. Returns -1 or 1 when resting at

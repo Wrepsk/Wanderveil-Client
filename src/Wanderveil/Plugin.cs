@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using Dalamud.Game.ClientState.Keys;
 using Dalamud.Game.Command;
 using Dalamud.Interface.Windowing;
 using Dalamud.IoC;
@@ -18,6 +19,8 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] private static ICommandManager CommandManager { get; set; } = null!;
     [PluginService] private static IPluginLog Log { get; set; } = null!;
     [PluginService] private static ITextureProvider TextureProvider { get; set; } = null!;
+    [PluginService] private static IFramework Framework { get; set; } = null!;
+    [PluginService] private static IKeyState KeyState { get; set; } = null!;
 
     private const string CommandName = "/wanderveil";
 
@@ -53,6 +56,7 @@ public sealed class Plugin : IDalamudPlugin
                 throw new InvalidOperationException("Could not register /wanderveil; the command is already in use.");
 
             PluginInterface.UiBuilder.Draw += windowSystem.Draw;
+            Framework.Update += OnFrameworkUpdate;
             PluginInterface.UiBuilder.OpenMainUi += OpenMain;
             PluginInterface.UiBuilder.OpenConfigUi += OpenSettings;
             Log.Information("Wanderveil loaded.");
@@ -71,6 +75,7 @@ public sealed class Plugin : IDalamudPlugin
 
         disposed = true;
         PluginInterface.UiBuilder.Draw -= windowSystem.Draw;
+        Framework.Update -= OnFrameworkUpdate;
         PluginInterface.UiBuilder.OpenMainUi -= OpenMain;
         PluginInterface.UiBuilder.OpenConfigUi -= OpenSettings;
 
@@ -92,6 +97,15 @@ public sealed class Plugin : IDalamudPlugin
             OpenSettings();
         else
             mainWindow.ToggleAnimated();
+    }
+
+    // When the passport has a use for Escape (putting back a carried stamp, closing stamp info, or closing the
+    // book), it takes the key from the game's key state, so the game does not also open its system menu.
+    private void OnFrameworkUpdate(IFramework framework)
+    {
+        if (disposed || !mainWindow.WantsEscape || !KeyState[VirtualKey.ESCAPE]) return;
+        KeyState[VirtualKey.ESCAPE] = false;
+        mainWindow.RequestEscape();
     }
 
     private void OpenMain() => mainWindow.Summon();

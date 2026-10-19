@@ -25,12 +25,17 @@ internal sealed class MainWindow : Window
     {
         this.reducedMotion = reducedMotion;
         this.assets = assets;
-        shell = new BookShell(assets, PassportPreview.Sample, settings: settings, stamps: stamps, storage: storage);
+        shell = new BookShell(assets, PassportPreview.Sample, settings: settings, stamps: stamps, storage: storage) { ReadsEscape = false };
         SizeCondition = ImGuiCond.Always;
         // The shell handles Escape so it plays the dismissal sequence instead of hiding at once.
         RespectCloseHotkey = false;
         ForceMainWindow = true;
     }
+
+    // Whether the book has a use for Escape now; the plugin then takes the key from the game and hands it over.
+    internal bool WantsEscape => IsOpen && shell.WantsEscape;
+
+    internal void RequestEscape() => shell.RequestEscape();
 
     // The command and main-UI button: summon (or reverse a dismissal in progress), else dismiss.
     internal void ToggleAnimated()

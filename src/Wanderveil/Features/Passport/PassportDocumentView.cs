@@ -73,6 +73,23 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportPreview p
         }
     }
 
+    // The passport number engraved into the lower right corner of a stamp page, as on the printed design:
+    // pale typewriter letters pressed into the paper, with a dark edge along their upper left.
+    // Drawn inside the page's window, before its stamps, so a stamp pressed over it covers it.
+    internal void Engrave(UiContext context)
+    {
+        var type = context with { BodyFont = context.MonoFont };
+        var spacing = MathF.Round(3 * context.Scale);
+        var width = UiTypography.MeasureTracked(profile.Number, TextRole.Caption, type, spacing);
+        var height = UiTypography.Size(TextRole.Caption, type);
+        var page = new UiRect(ImGui.GetWindowPos(), ImGui.GetWindowSize());
+        var at = page.Max - new Vector2(width + 8 * context.Scale, height + 6 * context.Scale);
+        var list = ImGui.GetWindowDrawList();
+        var light = MathF.Max(1, MathF.Round(context.Scale));
+        UiTypography.DrawTracked(list, at - new Vector2(light), profile.Number, TextRole.Caption, type, spacing, UiTheme.MutedInk with { W = 0.5f });
+        UiTypography.DrawTracked(list, at, profile.Number, TextRole.Caption, type, spacing, new Vector4(0.93f, 0.9f, 0.84f, 0.9f));
+    }
+
     internal float Compose(PassportPage page, UiContext context)
     {
         var width = UiLayout.ContentWidth;
@@ -170,7 +187,7 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportPreview p
         flow.Gap(16);
         Pair(ref flow, "FAVORITE JOB", profile.FavoriteJobs, "FREE COMPANY", "Unassigned", width, context);
         flow.Gap(16);
-        Pair(ref flow, "DATE OF ISSUE", "18 OCT 2026 / DEMO", "PASSPORT NO.", "WV-GR-0001", width, context, true);
+        Pair(ref flow, "DATE OF ISSUE", "18 OCT 2026 / DEMO", "PASSPORT NO.", profile.Number, width, context, true);
         flow.Rule();
         flow.Text("A WISH FOR THE ROAD", TextRole.Caption, true);
         flow.Gap(8);
