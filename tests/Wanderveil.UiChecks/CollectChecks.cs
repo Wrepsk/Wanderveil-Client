@@ -573,6 +573,15 @@ internal static class CollectChecks
             return lowest;
         }
 
+        // Clicks at point only if a control is under the mouse there (never bare paper, which turns the page).
+        internal bool ClickControl(Vector2 point)
+        {
+            Move(point);
+            if (!ImGui.IsAnyItemHovered()) return false;
+            Click(point);
+            return true;
+        }
+
         internal void Type(string text) { foreach (var character in text) ImGui.GetIO().AddInputCharacter(character); Frames(2); }
 
         internal void SelectAll()

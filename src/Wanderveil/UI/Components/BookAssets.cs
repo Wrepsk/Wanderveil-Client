@@ -23,4 +23,19 @@ internal interface IBookAssets
 {
     // drawWidth is the on-screen width the whole image will span; 0 accepts any loaded size.
     bool TryGet(BookAsset asset, out BookImage image, float drawWidth = 0f);
+
+    // An edition's own plate (open book, cover, banner, map, crest), for drawing editions other than the one
+    // the book is in, as the edition chooser does. Shared plates ignore the edition. Without per-edition plates
+    // every edition draws the same.
+    bool TryGet(BookAsset asset, string edition, out BookImage image, float drawWidth = 0f) => TryGet(asset, out image, drawWidth);
+
+    internal static bool IsEditionPlate(BookAsset asset) => asset is BookAsset.Open or BookAsset.EditionCover or BookAsset.NationBanner or BookAsset.NationMap or BookAsset.EditionCrest;
+}
+
+// The book's view of its plates: the current edition's own, chosen anew each draw.
+internal sealed class EditionAssets(IBookAssets inner, System.Func<string> edition) : IBookAssets
+{
+    public bool TryGet(BookAsset asset, out BookImage image, float drawWidth = 0f) => inner.TryGet(asset, edition(), out image, drawWidth);
+
+    public bool TryGet(BookAsset asset, string id, out BookImage image, float drawWidth = 0f) => inner.TryGet(asset, id, out image, drawWidth);
 }

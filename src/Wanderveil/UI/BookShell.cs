@@ -35,6 +35,10 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
     // The passport's stamps: Discover adds to them and the collection pages print them.
     private readonly StampCollection collection = stamps ??= new StampCollection();
     private readonly PassportProfile holder = identity ??= new PassportProfile(profile);
+    // Every plate the book draws is its current edition's own.
+    private readonly IBookAssets editions = assets = new EditionAssets(assets, () => identity!.Identity.Edition.Id);
+    // An edition picked in Settings, waiting for the holder to confirm the change.
+    private string? pendingEdition;
     private readonly PassportDocumentView passport = new(assets, identity!, portrait);
     private readonly IdentityEditor editor = new(identity!, portrait, character);
     // The fixed pages (nation, identity); unlimited blank stamp pages follow them.
@@ -76,6 +80,8 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
     internal int FixedPageCount => fixedPages.Count;
     internal BookShellStamps Desk => desk;
     internal PassportProfile Identity => holder;
+    // An edition picked in Settings and waiting for confirmation, or null.
+    internal string? PendingEdition => pendingEdition;
     // Whether the identity pages are being written on (the footer's Edit / Done).
     internal bool EditingIdentity { get; private set; }
     // How far a page's printed contents are shrunk to fit its paper (1 when they fit as set).
@@ -127,6 +133,8 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
     internal BookShellIntent Draw(UiRect bounds, UiContext context)
     {
         solid.Clear();
+        var edition = holder.Identity.Edition;
+        UiTheme.UseEdition(edition.Cloth, edition.Foil, edition.FoilBright, edition.Ink);
         try { return DrawBook(bounds, context); }
         finally
         {
@@ -190,6 +198,7 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         var page = context with { Scale = unit, FontSize = MathF.Max(10f, MathF.Round(pageWidth * 16f / 420f * enlarged)) };
         var explore = false;
         var back = false;
+        PassportEdition? issued = null;
         desk.BeginFrame();
         if (riffle.Active) DrawRiffle();
         else if (turning) DrawTurn();
@@ -200,11 +209,17 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         if (BookControl.Draw("Larger", "+", layout.Tool(1, context), page, BookControlStyle.Ink, hint: "Larger passport")) PreferredWidth = MathF.Min(1400, PreferredWidth * 1.15f);
         var close = BookControl.Draw("Close", "×", layout.Tool(2, context), page, BookControlStyle.Ink, hint: "Close passport (Escape)");
         var resting = Section == BookSection.Passport && !riffle.Active && !turning;
-        if (resting) StampControls(identityShown);
+        // A passport still choosing its edition has nothing to arrange on its first spread.
+        if (resting && !(holder.Identity.Appearance == null && VisiblePage < 2)) StampControls(identityShown);
         ImGui.PopStyleVar();
         var edgeTurn = desk.Update(bounds, layout.Book, layout.LeftPage.Size.X, page, ImGui.GetIO().DeltaTime);
 
         var placeStamp = discover.TakePassportRequest();
+        if (issued != null)
+        {
+            holder.ChangeEdition(issued.Id);
+            CloseBook();
+        }
         if (chosen is { } tab) Navigate(tab);
         else if (explore) Navigate(BookSection.Discover);
         else if (placeStamp != null && collection.PlacementOf(placeStamp) is { } placed) { Navigate(BookSection.Passport); ShowPage(fixedPages.Count + placed.Sheet, layout.IsSpread); }
@@ -298,7 +313,7 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
             switch (section)
             {
                 case BookSection.Settings:
-                    if (side != Side.Right) back |= SettingsIntroduction(type);
+                    if (side != Side.Right) { back |= SettingsIntroduction(type); EditionOptions(type); }
                     if (side == Side.Single) ImGui.Dummy(new Vector2(0, 24 * type.Scale));
                     if (side != Side.Left) SettingsOptions(type);
                     break;
@@ -360,6 +375,8 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
 
         void Banner(int index, bool rightSide)
         {
+            // A passport not yet issued has no nation pages: its first spread chooses the edition instead.
+            if (holder.Identity.Appearance == null) return;
             var face = layout.IsSpread ? BookFace.Spread : index % 2 == 1 ? BookFace.Right : BookFace.Left;
             passport.DrawNationBanner(BookSurface.Paper(layout.Book, face, layout.IsSpread && rightSide), layout.Footer.Position.Y - 4 * context.Scale, page);
         }
@@ -372,12 +389,47 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
                 desk.DrawSheet(entry.Sheet, live, rightSide && layout.IsSpread, type);
                 return;
             }
+            if (holder.Identity.Appearance == null && entry.Kind is PassportPageKind.NationBanner or PassportPageKind.NationMap)
+            {
+                Issue(entry.Kind == PassportPageKind.NationBanner, !layout.IsSpread, live, type);
+                return;
+            }
             passport.Compose(entry, type, live && EditingIdentity ? editor : null);
             if (entry.Kind == PassportPageKind.Information && !(live && EditingIdentity))
             {
                 ImGui.Dummy(new Vector2(0, 10 * type.Scale));
                 explore |= BookControl.Link("Explore discoveries »", type);
             }
+        }
+
+        // A new passport's first spread: what an edition is (left), and the six to choose from (right); on a
+        // single page, both. Choosing one issues the passport in it and closes the book to show its new cover.
+        void Issue(bool intro, bool single, bool live, UiContext type)
+        {
+            if (intro)
+            {
+                UiTypography.Text("WANDERVEIL / A NEW PASSPORT", TextRole.Caption, type, UiTheme.MutedInk);
+                ImGui.Dummy(new Vector2(0, 16 * type.Scale));
+                UiTypography.Text("Choose your passport", TextRole.Title, type, UiTheme.Ink);
+                ImGui.Dummy(new Vector2(0, 12 * type.Scale));
+                UiTypography.Text("Each nation issues its own edition, with its own cover, crest, and opening pages. Choose the one you will carry. It is only how your passport looks; it says nothing about your character.", TextRole.Body, type, UiTheme.Ink);
+                ImGui.Dummy(new Vector2(0, 10 * type.Scale));
+                UiTypography.Text("You can change it any time in Settings. Your details, picture, stamps, and where you placed them always stay as they are.", TextRole.Body, type, UiTheme.MutedInk);
+                if (!single) return;
+                ImGui.Dummy(new Vector2(0, 20 * type.Scale));
+            }
+            else
+            {
+                UiTypography.Text("SIX EDITIONS", TextRole.Caption, type, UiTheme.MutedInk);
+                ImGui.Dummy(new Vector2(0, 14 * type.Scale));
+            }
+            // The covers shrink with the printed page, so the page can fit them all.
+            var width = UiLayout.ContentWidth * MathF.Min(1f, type.Scale / page.Scale);
+            var origin = ImGui.GetCursorScreenPos();
+            var picked = EditionShelf.Draw(passport, origin, width, 3, null, null, live, type);
+            ImGui.SetCursorScreenPos(origin);
+            ImGui.Dummy(new Vector2(width, EditionShelf.Height(width, 3, type)));
+            if (picked != null) issued = picked;
         }
 
         // The geometry of a turning paper leaf: in a spread it hinges on the spine; on a single page it
@@ -661,6 +713,7 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         desk.Cancel();
         desk.CloseInfo();
         pageEntry = null;
+        pendingEdition = null;
         var distance = (int)to - (int)Section;
         riffle.Start(Math.Sign(distance), BookShellRiffle.LeavesFor(distance), Section, VisiblePage, ReducedMotion);
         Section = to;
@@ -737,13 +790,54 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         if (Section == BookSection.Settings) Navigate(ReturnSection);
     }
 
+    // The passport's edition: the six covers, the current one marked. Picking another asks first, naming what
+    // changes and what stays; afterwards the previous edition can be put back. A passport not yet issued takes
+    // the first pick at once.
+    private void EditionOptions(UiContext context)
+    {
+        ImGui.Dummy(new Vector2(0, 24 * context.Scale));
+        UiTypography.Text("PASSPORT EDITION", TextRole.Caption, context, UiTheme.MutedInk);
+        ImGui.Dummy(new Vector2(0, 12 * context.Scale));
+        var identity = holder.Identity;
+        var width = UiLayout.ContentWidth;
+        var origin = ImGui.GetCursorScreenPos();
+        // One row of six small covers; hovering names each.
+        var picked = EditionShelf.Draw(passport, origin, width, PassportEdition.All.Count, identity.Appearance?.Edition, pendingEdition, true, context, labels: false);
+        ImGui.SetCursorScreenPos(origin);
+        ImGui.Dummy(new Vector2(width, EditionShelf.Height(width, PassportEdition.All.Count, context, labels: false)));
+        if (picked != null)
+        {
+            if (identity.Appearance == null) holder.ChangeEdition(picked.Id);
+            else pendingEdition = picked.Id == identity.Appearance.Edition ? null : picked.Id;
+        }
+        ImGui.Dummy(new Vector2(0, 6 * context.Scale));
+        var current = identity.Edition;
+        UiTypography.Text(identity.Appearance == null ? "Not chosen yet: pick the passport you will carry." : $"Your edition: {current.Name} / {current.Region}", TextRole.Body, context, UiTheme.Ink);
+        ImGui.Dummy(new Vector2(0, 8 * context.Scale));
+        if (pendingEdition is { } id)
+        {
+            var next = PassportEdition.Find(id);
+            UiTypography.Text($"Change to {next.Name}? Its cover, crest, colours, and opening pages replace {current.Name}'s. Your details, picture, cover line, and stamps stay as they are. You can change back.", TextRole.Body, context, UiTheme.Ink);
+            ImGui.Dummy(new Vector2(0, 8 * context.Scale));
+            if (BookControl.Link("Change to " + next.Name, context)) { holder.ChangeEdition(id); pendingEdition = null; }
+            ImGui.SameLine(0, 18 * context.Scale);
+            if (BookControl.Link("Keep " + current.Name, context)) pendingEdition = null;
+            return;
+        }
+        if (identity.PreviousAppearance is not { } previous) return;
+        var before = PassportEdition.Find(previous.Edition);
+        UiTypography.Text($"Your previous edition was {before.Name}.", TextRole.Body, context, UiTheme.MutedInk);
+        ImGui.Dummy(new Vector2(0, 6 * context.Scale));
+        if (BookControl.Link("Change back to " + before.Name, context)) holder.RestorePrevious();
+    }
+
     private bool SettingsIntroduction(UiContext context)
     {
         UiTypography.Text("WANDERVEIL / SETTINGS", TextRole.Caption, context, UiTheme.MutedInk);
         ImGui.Dummy(new Vector2(0, 16 * context.Scale));
         UiTypography.Text("Settings", TextRole.Title, context, UiTheme.Ink);
         ImGui.Dummy(new Vector2(0, 12 * context.Scale));
-        UiTypography.Text("How your passport moves. Changes are saved as you make them.", TextRole.Body, context, UiTheme.Ink);
+        UiTypography.Text("How your passport looks and moves. Changes are saved as you make them.", TextRole.Body, context, UiTheme.Ink);
         ImGui.Dummy(new Vector2(0, 20 * context.Scale));
         return BookControl.Link("« Back to " + Labels[(int)ReturnSection], context);
     }

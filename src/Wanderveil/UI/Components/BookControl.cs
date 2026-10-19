@@ -74,7 +74,7 @@ internal static class BookControl
         {
             var pressed = ImGui.Button("##Link", bounds.Size);
             var hovered = ImGui.IsItemHovered();
-            var ink = hovered ? UiTheme.Ink : UiTheme.Edition;
+            var ink = hovered ? UiTheme.Ink : UiTheme.EditionInk;
             UiTypography.Draw(list, bounds.Position + new Vector2(2, 2) * context.Scale, label, TextRole.Body, context, measured.X + 1, ink, false);
             var y = bounds.Position.Y + 2 * context.Scale + measured.Y + context.Scale;
             BookSurface.Line(list, new Vector2(bounds.Position.X + 2 * context.Scale, y), new Vector2(bounds.Position.X + 2 * context.Scale + measured.X, y), ImGui.GetColorU32(ink with { W = hovered ? 0.9f : 0.45f }), context.Scale);
@@ -101,7 +101,7 @@ internal static class BookControl
         {
             var pressed = ImGui.Button("##Toggle", bounds.Size);
             var hovered = ImGui.IsItemHovered();
-            var ink = ImGui.GetColorU32(hovered ? UiTheme.Ink : UiTheme.Edition);
+            var ink = ImGui.GetColorU32(hovered ? UiTheme.Ink : UiTheme.EditionInk);
             var min = new Vector2(bounds.Position.X + 2 * context.Scale, bounds.Position.Y + (bounds.Size.Y - box) / 2);
             var max = min + new Vector2(box);
             list.AddRect(min, max, ink, 2 * context.Scale, ImDrawFlags.None, MathF.Max(1, 1.5f * context.Scale));
@@ -112,7 +112,7 @@ internal static class BookControl
                 list.AddLine(min + new Vector2(box * 0.2f, box * 0.52f), min + new Vector2(box * 0.42f, box * 0.76f), ink, weight);
                 list.AddLine(min + new Vector2(box * 0.42f, box * 0.76f), min + new Vector2(box * 0.82f, box * 0.22f), ink, weight);
             }
-            UiTypography.Draw(list, new Vector2(max.X + gap, bounds.Position.Y + 3 * context.Scale), label, TextRole.Body, context, measured.X + 1, hovered ? UiTheme.Ink : UiTheme.Edition, false);
+            UiTypography.Draw(list, new Vector2(max.X + gap, bounds.Position.Y + 3 * context.Scale), label, TextRole.Body, context, measured.X + 1, hovered ? UiTheme.Ink : UiTheme.EditionInk, false);
             if (hovered) ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
             return pressed;
         }
@@ -150,7 +150,7 @@ internal static class BookControl
             if (ImGui.IsItemDeactivated() && ImGui.IsKeyPressed(ImGuiKey.Escape, false)) { value = before; changed = false; }
             var min = ImGui.GetItemRectMin();
             var max = ImGui.GetItemRectMax();
-            var ink = ImGui.IsItemActive() ? UiTheme.Ink : UiTheme.Edition with { W = ImGui.IsItemHovered() ? 0.7f : 0.4f };
+            var ink = ImGui.IsItemActive() ? UiTheme.Ink : UiTheme.EditionInk with { W = ImGui.IsItemHovered() ? 0.7f : 0.4f };
             BookSurface.Line(list, new Vector2(min.X, max.Y), max, ImGui.GetColorU32(ink), MathF.Max(1, context.Scale));
             return changed;
         }

@@ -29,40 +29,45 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportProfile h
         new PassportPage("portrait", PassportPageKind.Portrait), new PassportPage("information", PassportPageKind.Information) });
 
     // window is the cover plate's rectangle. With a leaf, the cover is drawn turning on its spine:
-    // window is then the flat placement whose board the leaf's Source describes.
-    internal void DrawCover(UiRect window, UiContext context, LeafProjection? leaf = null)
+    // window is then the flat placement whose board the leaf's Source describes. edition draws another
+    // edition's cover than the passport's (the edition chooser), without the holder's own line.
+    internal void DrawCover(UiRect window, UiContext context, LeafProjection? leaf = null, PassportEdition? edition = null)
     {
+        var shown = edition ?? holder.Identity.Edition;
         var list = ImGui.GetWindowDrawList();
         var light = leaf?.Light ?? 1f;
-        var hasCover = assets.TryGet(BookAsset.EditionCover, out var cover, window.Size.X) || assets.TryGet(BookAsset.Cover, out cover, window.Size.X);
+        var hasCover = assets.TryGet(BookAsset.EditionCover, shown.Id, out var cover, window.Size.X) || assets.TryGet(BookAsset.Cover, out cover, window.Size.X);
         if (leaf is { } turning)
         {
             // Only the board turns; the plate's soft shadow margin stays behind.
             if (hasCover) turning.Leaf(list, cover.Texture, new Vector2(42f / 1024f, 141f / 1536f), new Vector2(982f / 1024f, 1394f / 1536f), Vector4.One);
-            else list.AddQuadFilled(turning.Project(0, 0), turning.Project(1, 0), turning.Project(1, 1), turning.Project(0, 1), LeafProjection.Tint(UiTheme.Edition, light));
+            else list.AddQuadFilled(turning.Project(0, 0), turning.Project(1, 0), turning.Project(1, 1), turning.Project(0, 1), LeafProjection.Tint(shown.Cloth, light));
         }
         else if (hasCover) list.AddImage(cover.Texture, window.Position, window.Max);
-        else BookSurface.Draw(window, BookFace.Cover, assets, context);
+        else BookSurface.Fallback(list, window, BookFace.Cover, context, shown.Cloth, shown.Foil);
         // Sizes, tops, and letter-spacing come from the Gridania board in the Eorzea Passport design (420 x 560 units).
         var (board, unit) = BookSurface.CoverBoard(window);
         var centerX = board.X + 210 * unit;
-        CoverText("EORZEA PASSPORT", 117, 13, 6);
-        if (assets.TryGet(BookAsset.EditionCrest, out var crest, 150 * unit))
+        CoverText(shown.Heading, 117, 13, 6);
+        if (assets.TryGet(BookAsset.EditionCrest, shown.Id, out var crest, 150 * unit))
         {
             var placement = new UiRect(board + new Vector2(135, 153) * unit, new Vector2(150 * unit));
             if (leaf is { } crestLeaf) crestLeaf.Image(list, crest.Texture, BookSurface.Fit(placement, crest), LeafProjection.Tint(Vector4.One, light));
             else BookSurface.Illustration(placement, crest);
         }
-        CoverText("GRIDANIA", 321, 44, 8);
-        CoverText("THE BLACK SHROUD", 396, 14, 6);
+        CoverText(shown.Name.ToUpperInvariant(), 321, 44, 8);
+        CoverText(shown.Region, 396, 14, 6);
         // The holder's own line, if any, embossed in the same foil between the nation and the maker's mark.
-        if (holder.Identity.CoverLine is { Length: > 0 } line) CoverText(line, 440, 15, 4, fit: 280);
+        if (edition == null && holder.Identity.CoverLine is { Length: > 0 } line) CoverText(line, 440, 15, 4, fit: 280);
         CoverText("WANDERVEIL", 492, 10, 5, 0.7f);
 
         void CoverText(string text, float top, float size, float tracking, float alpha = 1, float fit = 360)
         {
-            // Title role at a font size that yields the design pixel size; the display face replaces it.
-            var type = context with { FontSize = MathF.Max(9, size * unit) / 1.65f, TitleFont = context.DisplayFont };
+            // Title role at a font size that yields the design pixel size; the display face replaces it. A full cover
+            // keeps small lettering legible (9 px at least); a thumbnail scales it with the board and leaves out
+            // lines too small to read, so nothing spills past its edges.
+            if (edition != null && size * unit < 5) return;
+            var type = context with { FontSize = (edition != null ? size * unit : MathF.Max(9, size * unit)) / 1.65f, TitleFont = context.DisplayFont };
             var spacing = MathF.Round(tracking * unit);
             var width = UiTypography.MeasureTracked(text, TextRole.Title, type, spacing);
             // A long line is set smaller to stay within fit design units (inside the vine border).
@@ -74,8 +79,9 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportProfile h
                 width = UiTypography.MeasureTracked(text, TextRole.Title, type, spacing);
             }
             var position = new Vector2(centerX - width / 2, board.Y + top * unit);
-            var foil = UiTheme.Foil;
-            var shadow = new Vector4(0.02f, 0.05f, 0.03f, 0.55f * alpha);
+            var foil = shown.Foil;
+            // Pressed into dark cloth the foil casts a dark edge; into pale cloth, a light one.
+            var shadow = shown.PaleCloth ? new Vector4(1f, 1f, 1f, 0.6f * alpha) : new Vector4(0.02f, 0.05f, 0.03f, 0.55f * alpha);
             if (leaf is { } textLeaf)
             {
                 var font = UiTypography.ResolveFont(text, TextRole.Title, type);
@@ -131,11 +137,12 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportProfile h
     // A pennant hung from the top edge of the page down to the lower margin, with foil lettering.
     internal void DrawNationBanner(UiRect paper, float bottom, UiContext context)
     {
+        var edition = holder.Identity.Edition;
         var list = ImGui.GetWindowDrawList();
         var height = MathF.Max(1, bottom - paper.Position.Y);
         if (!assets.TryGet(BookAsset.NationBanner, out var image, MathF.Min(paper.Size.X * 0.62f, height * 0.435f)))
         {
-            UiTypography.Draw(list, paper.Position + new Vector2(paper.Size.X * 0.12f, paper.Size.Y * 0.1f), "Gridania", TextRole.Title, context, paper.Size.X * 0.76f, UiTheme.Ink, false);
+            UiTypography.Draw(list, paper.Position + new Vector2(paper.Size.X * 0.12f, paper.Size.Y * 0.1f), edition.Name, TextRole.Title, context, paper.Size.X * 0.76f, UiTheme.Ink, false);
             return;
         }
         var width = MathF.Min(paper.Size.X * 0.62f, height * image.Width / image.Height);
@@ -144,34 +151,43 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportProfile h
         BookSurface.Image(list, image.Texture, banner.Position, banner.Max);
         // Proportions are in the banner's 200 x 460 design units.
         var unit = width / 200f;
-        Lettering("01 / THE FOREST NATION", 34, 8, 2.5f, 0.85f);
-        if (assets.TryGet(BookAsset.EditionCrest, out var crest, 110 * unit)) BookSurface.Illustration(new UiRect(banner.Position + new Vector2(45, 62) * unit, new Vector2(110 * unit)), crest);
-        Lettering("GRIDANIA", 198, 22, 4, 1);
-        Lettering("REALM OF EORZEA", 240, 8, 3, 0.85f);
+        Lettering(edition.Kicker, 34, 8, 2.5f, 0.85f);
+        if (assets.TryGet(BookAsset.EditionCrest, edition.Id, out var crest, 110 * unit)) BookSurface.Illustration(new UiRect(banner.Position + new Vector2(45, 62) * unit, new Vector2(110 * unit)), crest);
+        Lettering(edition.Name.ToUpperInvariant(), 198, 22, 4, 1);
+        Lettering(edition.Realm, 240, 8, 3, 0.85f);
 
         void Lettering(string text, float top, float size, float tracking, float alpha)
         {
             var type = context with { FontSize = MathF.Max(8, size * unit) / 1.65f, TitleFont = context.DisplayFont };
             var spacing = MathF.Round(tracking * unit);
             var measured = UiTypography.MeasureTracked(text, TextRole.Title, type, spacing);
+            // A long name is set smaller to stay inside the pennant's border.
+            if (measured > 176 * unit)
+            {
+                var shrink = MathF.Max(0.5f, 176 * unit / measured);
+                type = type with { FontSize = MathF.Max(8 / 1.65f, type.FontSize * shrink) };
+                spacing = MathF.Round(spacing * shrink);
+                measured = UiTypography.MeasureTracked(text, TextRole.Title, type, spacing);
+            }
             var position = new Vector2(banner.Position.X + (width - measured) / 2, banner.Position.Y + top * unit);
             UiTypography.DrawTracked(list, position + new Vector2(0, MathF.Max(1, unit * 0.6f)), text, TextRole.Title, type, spacing, new Vector4(0.02f, 0.05f, 0.03f, 0.5f * alpha));
-            UiTypography.DrawTracked(list, position, text, TextRole.Title, type, spacing, UiTheme.Foil with { W = alpha });
+            UiTypography.DrawTracked(list, position, text, TextRole.Title, type, spacing, edition.Foil with { W = alpha });
         }
     }
 
     private void Nation(ref PageFlow flow, bool isLeft, float width, UiContext context)
     {
-        flow.Text(isLeft ? "01 / THE FOREST NATION" : "THE TWELVESWOOD", TextRole.Caption, true);
+        var edition = holder.Identity.Edition;
+        flow.Text(isLeft ? edition.Kicker : edition.MapKicker, TextRole.Caption, true);
         flow.Gap(16);
-        flow.Text(isLeft ? "Gridania" : "An atlas of quiet paths", TextRole.Title);
+        flow.Text(isLeft ? edition.Name : edition.MapTitle, TextRole.Title);
         flow.Gap(16);
         var art = flow.Reserve(380 * context.Scale);
-        if (!assets.TryGet(isLeft ? BookAsset.NationBanner : BookAsset.NationMap, out var image, MathF.Min(width, art.Size.Y * 0.83f)))
+        if (!assets.TryGet(isLeft ? BookAsset.NationBanner : BookAsset.NationMap, edition.Id, out var image, MathF.Min(width, art.Size.Y * 0.83f)))
         { flow.Text("Artwork is loading or unavailable.", TextRole.Caption, true); return; }
         BookSurface.Illustration(art, image);
         flow.Gap(16);
-        flow.Text(isLeft ? "Wreath & sprout / Banner study" : "Illustrative map study / Geography not validated", TextRole.Caption, true);
+        flow.Text(isLeft ? edition.Crest + " / Banner study" : "Illustrative map study / Geography not validated", TextRole.Caption, true);
     }
 
     private void Portrait(ref PageFlow flow, float width, UiContext context, IdentityEditor? editor)
@@ -236,7 +252,7 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportProfile h
     private void Information(ref PageFlow flow, float width, UiContext context, IdentityEditor? editor)
     {
         var identity = holder.Identity;
-        flow.Text("GRIDANIA / ADVENTURER IDENTITY", TextRole.Caption, true);
+        flow.Text(identity.Edition.Name.ToUpperInvariant() + " / ADVENTURER IDENTITY", TextRole.Caption, true);
         editor?.CharacterLink(ref flow);
         flow.Gap(16);
         if (editor != null) editor.Field(ref flow, IdentityField.Name, TextRole.Title, "Your name");

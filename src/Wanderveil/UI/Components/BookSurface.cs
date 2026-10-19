@@ -137,10 +137,11 @@ internal static class BookSurface
 
     // While plates load (or if one cannot), a drawn book in the same places: edition cloth, paper, and spine,
     // so the cover still reads as a cover and pages keep their paper. Geometry follows the plates above.
-    internal static void Fallback(ImDrawListPtr list, UiRect bounds, BookFace face, UiContext context)
+    // clothColour and foilColour draw a given edition's cover; otherwise the current edition's.
+    internal static void Fallback(ImDrawListPtr list, UiRect bounds, BookFace face, UiContext context, Vector4? clothColour = null, Vector4? foilColour = null)
     {
-        var cloth = ImGui.GetColorU32(UiTheme.Edition);
-        var foil = ImGui.GetColorU32(UiTheme.Foil with { W = 0.6f });
+        var cloth = ImGui.GetColorU32(clothColour ?? UiTheme.Edition);
+        var foil = ImGui.GetColorU32((foilColour ?? UiTheme.Foil) with { W = 0.6f });
         var shadow = ImGui.GetColorU32(UiTheme.Shadow);
         var thin = MathF.Max(1, context.Scale);
         if (face == BookFace.Cover)

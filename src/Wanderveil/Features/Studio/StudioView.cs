@@ -189,7 +189,7 @@ internal sealed class StudioView(IReadOnlyList<StudioTemplate>? templates = null
     private static void Stamp(ref PageFlow flow, string? name, float size, UiContext context)
     {
         var motif = flow.Reserve(context.FontSize * size);
-        if (flow.IsDrawing) StampPreview.Draw(motif, context, UiTheme.Edition);
+        if (flow.IsDrawing) StampPreview.Draw(motif, context, UiTheme.EditionInk);
         flow.Gap();
         flow.Text(name ?? "Stamp name", TextRole.Body, name == null);
         flow.Text("A DESIGN PREVIEW, NOT AN ISSUED STAMP", TextRole.Caption, true);

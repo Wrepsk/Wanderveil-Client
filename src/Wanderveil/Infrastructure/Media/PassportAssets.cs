@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.ManagedFontAtlas;
@@ -22,9 +23,11 @@ internal sealed class PassportAssets : IBookAssets, IDisposable
     private const int MaxSizedFonts = 48;
     // Size copies written by tools/passport-art: full, then .half/.quarter/.eighth where present.
     private static readonly string[] Levels = ["", ".half", ".quarter", ".eighth"];
-    private static readonly string[] TextureNames = ["book-open", "book-cover", "demo-portrait", "stamp-atlas",
-        "gridania-cover", "gridania-banner", "gridania-map-overhead", "gridania-crest"];
-    private readonly (ISharedImmediateTexture Texture, int Width)[][] textures;
+    // Plates by BookAsset; edition plates are named per edition as <edition>-<plate>.
+    private static readonly string[] TextureNames = ["book-open", "book-cover", "demo-portrait", "stamp-atlas", "cover", "banner", "map-overhead", "crest"];
+    private const string DefaultEdition = "gridania";
+    // Shared plates under "", edition plates under their edition's id.
+    private readonly Dictionary<string, (ISharedImmediateTexture Texture, int Width)[][]> textures = new(StringComparer.Ordinal);
     private readonly IFontAtlas atlas;
     private readonly byte[][] fontBytes;
     private readonly IFontHandle[] fonts;
@@ -36,16 +39,21 @@ internal sealed class PassportAssets : IBookAssets, IDisposable
         var assembly = typeof(PassportAssets).Assembly;
         this.atlas = atlas;
         var resources = new HashSet<string>(assembly.GetManifestResourceNames(), StringComparer.Ordinal);
-        textures = Array.ConvertAll(TextureNames, name =>
-        {
-            var levels = new List<(ISharedImmediateTexture, int)>();
-            foreach (var level in Levels)
+        // Shared textures load from the host's cache only when first drawn, so unused editions cost no GPU memory.
+        foreach (var edition in new[] { "" }.Concat(Features.Passport.PassportEdition.All.Select(edition => edition.Id)))
+            textures[edition] = Array.ConvertAll(Enumerable.Range(0, TextureNames.Length).ToArray(), index =>
             {
-                var resource = "Wanderveil.Assets." + name + level + ".png";
-                if (resources.Contains(resource)) levels.Add((provider.GetFromManifestResource(assembly, resource), PngWidth(assembly, resource)));
-            }
-            return levels.ToArray();
-        });
+                var plate = IBookAssets.IsEditionPlate((BookAsset)index);
+                var name = plate == (edition.Length > 0) ? (plate ? edition + "-" : "") + TextureNames[index] : null;
+                var levels = new List<(ISharedImmediateTexture, int)>();
+                if (name != null)
+                    foreach (var level in Levels)
+                    {
+                        var resource = "Wanderveil.Assets." + name + level + ".png";
+                        if (resources.Contains(resource)) levels.Add((provider.GetFromManifestResource(assembly, resource), PngWidth(assembly, resource)));
+                    }
+                return levels.ToArray();
+            });
         fontBytes = Array.ConvertAll(FontFiles, name => ReadFont(assembly, name));
         fonts = new IFontHandle[FontFiles.Length];
         try { for (var index = 0; index < fonts.Length; index++) fonts[index] = CreateFont(index, BaseSizePx); }
@@ -53,12 +61,15 @@ internal sealed class PassportAssets : IBookAssets, IDisposable
         scope = new FontScope(this);
     }
 
-    public bool TryGet(BookAsset asset, out BookImage image, float drawWidth = 0f)
+    public bool TryGet(BookAsset asset, out BookImage image, float drawWidth = 0f) => TryGet(asset, DefaultEdition, out image, drawWidth);
+
+    public bool TryGet(BookAsset asset, string edition, out BookImage image, float drawWidth = 0f)
     {
         // The host asynchronously loads/caches shared resources; these frame wraps must not be retained/disposed.
         image = default;
-        if ((uint)asset >= textures.Length || textures[(int)asset].Length == 0) return false;
-        var levels = textures[(int)asset];
+        if (!textures.TryGetValue(IBookAssets.IsEditionPlate(asset) ? edition : "", out var plates)) plates = textures[DefaultEdition];
+        if ((uint)asset >= plates.Length || plates[(int)asset].Length == 0) return false;
+        var levels = plates[(int)asset];
         Span<int> widths = stackalloc int[levels.Length];
         for (var index = 0; index < levels.Length; index++) widths[index] = levels[index].Width;
         var wanted = BookImageLevels.Pick(widths, drawWidth);

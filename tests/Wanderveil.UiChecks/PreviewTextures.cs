@@ -42,6 +42,38 @@ internal sealed class PreviewTextures : IBookAssets
     }
 
     public bool TryGet(BookAsset asset, out BookImage image, float drawWidth = 0f) => images.TryGetValue(asset, out image);
+
+    // Other editions' plates load from disk the first time one is drawn.
+    private readonly Dictionary<(string, BookAsset), BookImage> editions = [];
+
+    public bool TryGet(BookAsset asset, string edition, out BookImage image, float drawWidth = 0f)
+    {
+        if (edition == "gridania" || !IBookAssets.IsEditionPlate(asset)) return TryGet(asset, out image, drawWidth);
+        if (editions.TryGetValue((edition, asset), out image)) return true;
+        var file = Path.Combine(AppContext.BaseDirectory, "Assets", "Editions", edition, asset switch
+        {
+            BookAsset.Open => "book-open.png",
+            BookAsset.EditionCover => "cover.png",
+            BookAsset.NationBanner => "banner.png",
+            BookAsset.NationMap => "map-overhead.png",
+            _ => "crest.png",
+        });
+        if (!File.Exists(file)) return false;
+        using var bitmap = new Bitmap(file);
+        var data = bitmap.LockBits(new Rectangle(0, 0, bitmap.Width, bitmap.Height), ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+        try
+        {
+            var pixels = new byte[bitmap.Width * bitmap.Height * 4];
+            for (var y = 0; y < bitmap.Height; y++) Marshal.Copy(data.Scan0 + y * data.Stride, pixels, y * bitmap.Width * 4, bitmap.Width * 4);
+            for (var pixel = 0; pixel < pixels.Length; pixel += 4) (pixels[pixel], pixels[pixel + 2]) = (pixels[pixel + 2], pixels[pixel]);
+            var id = 5000UL + (ulong)editions.Count;
+            Register(id, bitmap.Width, bitmap.Height, pixels);
+            image = new BookImage(new ImTextureID(id), bitmap.Width, bitmap.Height);
+            editions[(edition, asset)] = image;
+            return true;
+        }
+        finally { bitmap.UnlockBits(data); }
+    }
     internal Texture Get(ulong id) => textures[id];
     internal void Register(ulong id, int width, int height, byte[] pixels) => textures.Add(id, new Texture(width, height, pixels));
 

@@ -8,8 +8,8 @@ for this repository. No game textures, extracted pixels, third-party logos, or u
 included; nation names and heraldic ideas are attributable to Square Enix and are interpreted, not
 copied. These plates are project assets under the repository license.
 
-`editions/gridania/` plus `book-cover.png`, `demo-portrait.png`, and `stamp-atlas.png` are embedded
-in the plugin. The other editions are review plates for future nation selection. The map is
+Every `editions/<edition>/` folder plus `book-cover.png`, `demo-portrait.png`, and `stamp-atlas.png` are embedded
+in the plugin, one edition per choosable passport. The map is
 schematic, not validated geography, and the portrait is an anonymous placeholder.
 
 The earlier image-generated plates in `assets/passport/` and `assets/passport/studies/` are kept

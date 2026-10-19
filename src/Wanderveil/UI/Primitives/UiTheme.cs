@@ -14,10 +14,21 @@ internal static class UiTheme
     internal static readonly Vector4 ActionHovered = Rgb(58, 80, 89);
     internal static readonly Vector4 ActionPressed = Rgb(38, 57, 65);
     internal static readonly Vector4 Shadow = new(0f, 0f, 0f, 0.24f);
-    // Gridania edition cover cloth and foil (tools/passport-art/editions.mjs).
-    internal static readonly Vector4 Edition = Rgb(30, 58, 42);
-    internal static readonly Vector4 Foil = Rgb(169, 194, 138);
-    internal static readonly Vector4 FoilBright = Rgb(205, 222, 180);
+    // The current edition's cover cloth, foil, and its ink for printed controls on the paper. The book sets them
+    // each frame from the passport's edition (UseEdition); they start as Gridania's (tools/passport-art/editions.mjs).
+    internal static Vector4 Edition { get; private set; } = Rgb(30, 58, 42);
+    internal static Vector4 Foil { get; private set; } = Rgb(169, 194, 138);
+    internal static Vector4 FoilBright { get; private set; } = Rgb(205, 222, 180);
+    internal static Vector4 EditionInk { get; private set; } = Rgb(30, 58, 42);
+
+    // Drawing is single-threaded, so the edition being drawn sets these for everything drawn after it.
+    internal static void UseEdition(Vector4 cloth, Vector4 foil, Vector4 foilBright, Vector4 ink)
+    {
+        Edition = cloth;
+        Foil = foil;
+        FoilBright = foilBright;
+        EditionInk = ink;
+    }
 
     private static Vector4 Rgb(byte red, byte green, byte blue) => new(red / 255f, green / 255f, blue / 255f, 1f);
 }

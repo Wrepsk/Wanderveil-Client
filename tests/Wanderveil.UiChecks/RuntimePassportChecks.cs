@@ -32,7 +32,16 @@ internal static class RuntimePassportChecks
         check(BookImageLevels.Pick(widths, 150) == 3 && BookImageLevels.Pick(widths, 158) == 2 && BookImageLevels.Pick(widths, 600) == 1, "Size copy choice does not pick the smallest copy at least as wide as drawn.");
         check(BookImageLevels.Pick(widths, 4000) == 0 && BookImageLevels.Pick(widths, 0) == 3 && BookImageLevels.Pick([1024], 50) == 0, "Size copy choice mishandles oversized, unsized, or single-copy draws.");
         // Every plate ships reduced copies so the client never shrinks a texture more than about 2x.
-        foreach (var plate in new[] { "book-open", "book-cover", "demo-portrait", "stamp-atlas", "gridania-cover", "gridania-banner", "gridania-map-overhead", "gridania-crest" })
+        // Every edition's own plates are installed, each matching the generated plate byte for byte.
+        foreach (var edition in PassportEdition.All)
+            foreach (var plate in new[] { "book-open", "cover", "banner", "map-overhead", "crest" })
+            {
+                using var stream = plugin.GetManifestResourceStream($"Wanderveil.Assets.{edition.Id}-{plate}.png");
+                check(stream != null, $"Installed-client resource missing: {edition.Id}-{plate}");
+                using var original = File.OpenRead(Path.Combine(AppContext.BaseDirectory, "Assets", "Editions", edition.Id, plate + ".png"));
+                check(SHA256.HashData(stream!).SequenceEqual(SHA256.HashData(original)), $"Runtime and generated plate differ: {edition.Id}-{plate}");
+            }
+        foreach (var plate in new[] { "book-cover", "demo-portrait", "stamp-atlas" }.Concat(PassportEdition.All.SelectMany(edition => new[] { "book-open", "cover", "banner", "map-overhead", "crest" }.Select(plate => edition.Id + "-" + plate))))
             foreach (var level in new[] { ".half", ".quarter" })
                 check(plugin.GetManifestResourceNames().Contains("Wanderveil.Assets." + plate + level + ".png"), "Runtime plate lacks a reduced copy: " + plate + level);
         check(!plugin.GetManifestResourceNames().Any(name => name.Contains("SourceSerif4", StringComparison.Ordinal)), "Replaced Source Serif 4 font entered the runtime assembly.");

@@ -13,11 +13,16 @@ Early development build: a Passport whose identity pages you fill in yourself, d
     <Tags>exploration;passport;discoveries;journal</Tags>
   </PropertyGroup>
   <ItemGroup>
-    <!-- Plates generated from SVG by tools/passport-art; the runtime edition is Gridania. -->
+    <!-- Plates generated from SVG by tools/passport-art: shared plates, then each edition's own (cover, crest, banner,
+         map, open book) as <edition>-<plate>. Each plate also has .half/.quarter/.eighth copies; the client draws the
+         copy nearest its screen size. -->
     <EmbeddedResource Include="../../assets/passport/vector/*.png" LogicalName="Wanderveil.Assets.%(Filename)%(Extension)" />
-    <!-- Each plate also has .half/.quarter/.eighth copies; the client draws the copy nearest its screen size. -->
-    <EmbeddedResource Include="../../assets/passport/vector/editions/gridania/book-open*.png" LogicalName="Wanderveil.Assets.%(Filename)%(Extension)" />
-    <EmbeddedResource Include="../../assets/passport/vector/editions/gridania/*.png" Exclude="../../assets/passport/vector/editions/gridania/book-open*.png" LogicalName="Wanderveil.Assets.gridania-%(Filename)%(Extension)" />
+    <EmbeddedResource Include="../../assets/passport/vector/editions/eorzea/*.png" LogicalName="Wanderveil.Assets.eorzea-%(Filename)%(Extension)" />
+    <EmbeddedResource Include="../../assets/passport/vector/editions/gridania/*.png" LogicalName="Wanderveil.Assets.gridania-%(Filename)%(Extension)" />
+    <EmbeddedResource Include="../../assets/passport/vector/editions/uldah/*.png" LogicalName="Wanderveil.Assets.uldah-%(Filename)%(Extension)" />
+    <EmbeddedResource Include="../../assets/passport/vector/editions/limsa/*.png" LogicalName="Wanderveil.Assets.limsa-%(Filename)%(Extension)" />
+    <EmbeddedResource Include="../../assets/passport/vector/editions/ishgard/*.png" LogicalName="Wanderveil.Assets.ishgard-%(Filename)%(Extension)" />
+    <EmbeddedResource Include="../../assets/passport/vector/editions/garlemald/*.png" LogicalName="Wanderveil.Assets.garlemald-%(Filename)%(Extension)" />
     <EmbeddedResource Include="../../assets/fonts/*.ttf" Exclude="../../assets/fonts/SourceSerif4-*.ttf" LogicalName="Wanderveil.Assets.%(Filename)%(Extension)" />
     <None Include="../../assets/fonts/CormorantGaramond-LICENSE.md" Link="CormorantGaramond-LICENSE.md" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../../assets/fonts/Cinzel-LICENSE.md" Link="Cinzel-LICENSE.md" CopyToOutputDirectory="PreserveNewest" />

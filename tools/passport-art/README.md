@@ -52,4 +52,4 @@ that is still at least as wide as it appears on screen, falling back to any load
   The guilloche rings can show a seam there in very large text sizes.
 - `BookControl` samples the cover at u 0.30–0.70, v 0.73–0.77 for button leather; keep that area plain.
 - Stamp cell 1 is trimmed to 34%–65% of the atlas width.
-- Only the Gridania edition is embedded (`runtimeEdition`); the other nations are review plates.
+- Every edition is embedded in the client; `runtimeEdition` only picks the edition for review sheets. The client's edition words and colours (`Features/Passport/PassportEdition.cs`) must match `editions.mjs`.

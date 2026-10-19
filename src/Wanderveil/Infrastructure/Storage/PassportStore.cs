@@ -21,7 +21,7 @@ internal sealed record PassportLoad(LoadOutcome Outcome, PassportIdentity? Ident
 internal sealed class PassportStore(string directory)
 {
     internal const string Format = "wanderveil.passport";
-    internal const int Version = 1;
+    internal const int Version = 2;
     private const long MaximumBytes = 256 * 1024;
     // A chosen picture is kept as chosen up to this size; it is scaled down when shown.
     internal const long MaximumPictureBytes = 16 * 1024 * 1024;
@@ -68,6 +68,8 @@ internal sealed class PassportStore(string directory)
         foreach (var field in Enum.GetValues<IdentityField>()) file[Key(field)] = identity[field];
         if (identity.Portrait is { } crop) file["portrait"] = new JsonObject { ["x"] = crop.X, ["y"] = crop.Y, ["zoom"] = crop.Zoom };
         file["frame"] = JsonNamingPolicy.CamelCase.ConvertName(identity.Frame.ToString());
+        if (identity.Appearance is { } appearance) file["appearance"] = Appearance(appearance);
+        if (identity.PreviousAppearance is { } previous) file["previousAppearance"] = Appearance(previous);
         // Readable as written (names stay as typed); the file is never embedded in HTML.
         return file.ToJsonString(new JsonSerializerOptions { WriteIndented = true, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
     }
@@ -84,6 +86,9 @@ internal sealed class PassportStore(string directory)
         var version = file["version"] is JsonValue value && value.TryGetValue<int>(out var number) ? number : throw new FormatException("A passport file has a version.");
         if (version > Version) throw new NotSupportedException($"Passport file version {version} is newer than {Version}.");
         if (version < 1) throw new FormatException("A passport file version starts at 1.");
+        // Migrations: each step upgrades the object one version in memory; the next save writes the current
+        // version, and the backup keeps the old one.
+        if (version == 1) Migrate1To2(file);
         var passportNumber = Text(file, "number");
         if (string.IsNullOrWhiteSpace(passportNumber)) throw new FormatException("A passport file has its number.");
         DateOnly? issued = null;
@@ -100,7 +105,26 @@ internal sealed class PassportStore(string directory)
         else if (file["portrait"] != null) throw new FormatException("A passport's portrait is a JSON object.");
         // A frame this version does not draw falls back to the printed one rather than losing the passport.
         if (Text(file, "frame") is { } frame) identity = identity with { Frame = Enum.TryParse<PictureFrame>(frame, true, out var style) && Enum.IsDefined(style) && !char.IsDigit(frame[0]) ? style : PictureFrame.Printed };
+        identity = identity with { Appearance = ReadAppearance(file, "appearance"), PreviousAppearance = ReadAppearance(file, "previousAppearance") };
         return identity.Normalize();
+    }
+
+    // Version 1 came before editions, when every passport was Gridania: it keeps that edition, chosen.
+    private static void Migrate1To2(JsonObject file)
+    {
+        file["appearance"] = Appearance(PassportAppearance.Gridania);
+        file["version"] = 2;
+    }
+
+    private static JsonObject Appearance(PassportAppearance appearance) => new() { ["edition"] = appearance.Edition };
+
+    // An edition this version does not know is kept as written (it draws as Gridania), so nothing is lost.
+    private static PassportAppearance? ReadAppearance(JsonObject file, string name)
+    {
+        if (file[name] == null) return null;
+        if (file[name] is not JsonObject appearance || Text(appearance, "edition") is not { Length: > 0 } edition || edition.Length > 32)
+            throw new FormatException($"A passport's {name} names its edition.");
+        return new PassportAppearance(edition);
     }
 
     private static string Key(IdentityField field) => JsonNamingPolicy.CamelCase.ConvertName(field.ToString());

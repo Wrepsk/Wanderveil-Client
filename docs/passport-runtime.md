@@ -6,7 +6,7 @@ Status: runtime prototype, 19 October 2026. The SVG art, book-surface controls, 
 
 Build the client, then reload Wanderveil in Dalamud so it loads the new DLL. The Debug developer-plugin DLL is `src/Wanderveil/bin/x64/Debug/Wanderveil.dll`; the Release package is `src/Wanderveil/bin/x64/Release/Wanderveil/latest.zip`. Compilation does not replace an already loaded plugin instance.
 
-Run `/wanderveil`. Each summon starts with the closed Gridania cover; the first summon of a plugin session centers it on the screen, and later summons return it to where it was last dismissed (or dragged). The book itself is the control surface. Click the right side of the cover to open it. When open, click the right side to turn forward (nation banner/map, then portrait/signature and identity information, then blank stamp pages up to page 100) and the left side to turn back. Clicking the left side of the first page returns to the cover. Narrow views turn one logical page; wider views turn a spread. Press and drag anywhere on the book that is not a control to move it; a drag never turns a page. A soft shadow on the outer edge and a hand cursor show which way a click will go. On the keyboard, Space or Enter opens the cover, Page Down and Page Up turn pages, End jumps to the last page with a stamp, and Home returns to the cover.
+Run `/wanderveil`. Each summon starts with the closed cover of the passport's edition (see [Editions](#editions)); the first summon of a plugin session centers it on the screen, and later summons return it to where it was last dismissed (or dragged). The book itself is the control surface. Click the right side of the cover to open it. When open, click the right side to turn forward (nation banner/map, then portrait/signature and identity information, then blank stamp pages up to page 100) and the left side to turn back. Clicking the left side of the first page returns to the cover. Narrow views turn one logical page; wider views turn a spread. Press and drag anywhere on the book that is not a control to move it; a drag never turns a page. A soft shadow on the outer edge and a hand cursor show which way a click will go. On the keyboard, Space or Enter opens the cover, Page Down and Page Up turn pages, End jumps to the last page with a stamp, and Home returns to the cover.
 
 - [Runtime closed cover](previews/passport/runtime-cover.png)
 - [Runtime nation spread](previews/passport/runtime-nation.png)
@@ -48,6 +48,16 @@ Settings are pages of the book. The printed Settings mark riffles forward to the
 
 - [A riffle in flight](previews/passport/riffle.png)
 - [Settings pages](previews/passport/settings.png)
+
+## Editions
+
+The passport comes in six nation editions: **Eorzea**, **Gridania**, **Ul'dah**, **Limsa Lominsa**, **Ishgard**, and **Garlemald**. Each has its own cover (cloth, foil, decoration, crest, and lettering such as *Ul'dah / Thanalan* or *Garlean Passport*), its own banner and map pages, its own book cloth, and its own ink for the printed controls on the paper (links and toggles: Ul'dah's are wine red, Garlemald's crimson). Choosing one is only how the passport looks; it says nothing about the character.
+
+- **A new passport** starts unissued, with the shared Eorzea cover. Opening it shows *Choose your passport*: what an edition is on the left, and the six covers on the right, each named with its region (one page holds both when narrow). Clicking a cover issues the passport in that edition, and the book closes so its new cover shows. Passports saved before editions existed are Gridania and stay so. [The choosing spread](previews/passport/edition-issue.png).
+- **Changing it** is in Settings, under *Passport edition*: the six covers in a row (hover names each), with the current one underlined. Picking another asks first, naming what changes and what stays: *Change to Garlemald? Its cover, crest, colours, and opening pages replace Gridania's. Your details, picture, cover line, and stamps stay as they are.* **Change to …** or **Keep …** answers it. Afterwards *Your previous edition was …* offers **Change back to …**, which swaps them again. [The confirmation](previews/passport/edition-settings.png).
+- **What a change resets** is the appearance: today the edition's own design, and later the colours, symbols, and structure choices that will layer over it. Everything the holder wrote or chose stays: details, signature, picture and its frame, the cover line, stamps, and where they are placed (user decision, 20 October 2026).
+
+[Every edition's opening spread](previews/passport/editions-open.png). The six editions' plates are embedded, about 14 MB more than Gridania alone (the plugin is about 22 MB). Each edition's textures load only when first drawn. The editions' words and colours are in `Features/Passport/PassportEdition.cs`, matching `tools/passport-art/editions.mjs`; the edition's region names follow the game's geography loosely and are not checked against official lore.
 
 ## Your identity
 
@@ -132,7 +142,7 @@ The identity is saved beside the stamps as `passport-local.json`. Your picture, 
 ```json
 {
   "format": "wanderveil.passport",
-  "version": 1,
+  "version": 2,
   "number": "EZ 3383 2844",
   "issued": "2026-10-20",
   "name": "Wren Halloway",
@@ -145,11 +155,13 @@ The identity is saved beside the stamps as `passport-local.json`. Your picture, 
   "signature": "",
   "coverLine": "",
   "portrait": { "x": 0.5, "y": 0.5, "zoom": 1 },
-  "frame": "printed"
+  "frame": "printed",
+  "appearance": { "edition": "gridania" },
+  "previousAppearance": { "edition": "uldah" }
 }
 ```
 
-`portrait` is where the picture sits: the picture's point at the frame's centre (0 to 1 across and down) and its zoom past just covering the frame (1 to 4). Without it, the placeholder shows. `frame` is one of `printed`, `corners`, `embossed`, `deckled`, or `none`; a missing or unknown frame (from a later version, say) reads as `printed` rather than making the file unreadable. Text read back is held to the same rules as typing, so an over-long field is cut to its limit.
+`portrait` is where the picture sits: the picture's point at the frame's centre (0 to 1 across and down) and its zoom past just covering the frame (1 to 4). Without it, the placeholder shows. `frame` is one of `printed`, `corners`, `embossed`, `deckled`, or `none`; a missing or unknown frame (from a later version, say) reads as `printed` rather than making the file unreadable. `appearance` is the passport's edition, absent until a new passport's holder chooses one; `previousAppearance` is the one the last change replaced, for **Change back**. An edition this version does not know is kept as written and drawn as Eorzea. Version 1 files (before editions) migrate to version 2 as a chosen Gridania edition; the backup keeps the version 1 file. Text read back is held to the same rules as typing, so an over-long field is cut to its limit.
 
 Both files are saved and recovered the same way as the stamps (`SafeFile`): written to a temporary file, flushed, swapped in with the previous save kept as `.bak`, unreadable files kept aside as `.unreadable-<time>`, and newer or locked files left untouched with saving off. A newly issued passport is saved straight away, so its number stays the same. A picture is written only after it decodes, so a saved picture can always be shown. Settings shows a **Passport** note only when something needs saying (recovered, unreadable, newer, locked, or a failed save with a retry).
 
@@ -238,7 +250,7 @@ Each font is built at every pixel size that is actually drawn (rounded to whole 
 
 `PassportDocumentView` owns reusable live cover/page composition. `PassportPage` records supply stable IDs and presentation kinds; `BookShell` snapshots and validates a nonempty catalog with unique IDs, tracks closed/open state and reading position, and renders only visible pages. The demo provides six logical pages; catalog size is not fixed to six. Navigation clamps safely and preserves child scrolling through stable page IDs. New sessions start closed at the first page.
 
-The Gridania cover, banner, map, crest, and open-book plates, plus the generic cover, portrait placeholder, and stamp atlas, are embedded from `assets/passport/vector/` with their reduced copies; see [vector asset provenance](../assets/passport/vector/PROVENANCE.md). The earlier image-generated plates and Gridania studies stay in the repository for comparison and gallery checks but are not embedded. [Their provenance](../assets/passport/studies/gridania/PROVENANCE.md) still accompanies the package.
+Every edition's cover, banner, map, crest, and open-book plates (as `<edition>-<plate>`), plus the generic cover, portrait placeholder, and stamp atlas, are embedded from `assets/passport/vector/` with their reduced copies; see [vector asset provenance](../assets/passport/vector/PROVENANCE.md). The earlier image-generated plates and Gridania studies stay in the repository for comparison and gallery checks but are not embedded. [Their provenance](../assets/passport/studies/gridania/PROVENANCE.md) still accompanies the package.
 
 The demo signature uses bundled **Caveat**, replacing the gallery's Windows-only Segoe Script surrogate. The unmodified variable font is pinned to Google Fonts revision `5571d84c0d8c70ec1af4f64072d8c5cf1e4e9643`, renamed only from `Caveat[wght].ttf` to `Caveat.ttf`; its SIL OFL notice ships with the plugin. Six base font handles plus up to 48 per-size handles are owned and disposed, including partial-startup/lock failures; shared texture wraps retain host ownership. Draw callbacks perform no file/network access.
 

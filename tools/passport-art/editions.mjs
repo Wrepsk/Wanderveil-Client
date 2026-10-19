@@ -14,5 +14,5 @@ export const editions = {
   garlemald: { cover: "#FFFFFF", foil: "#141414", accent: "#C0272D", stampInk: "#8E1C22" },
 };
 
-// The edition whose plates the client embeds today. Others are generated for review only.
+// The edition shown first in review sheets. The client embeds every edition; its PassportEdition.cs keeps the same colours.
 export const runtimeEdition = "gridania";

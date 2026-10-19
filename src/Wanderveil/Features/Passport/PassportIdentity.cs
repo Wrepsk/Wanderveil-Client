@@ -21,6 +21,12 @@ internal sealed record PassportIdentity(string Name, string HomeWorld, string Fa
     internal PortraitCrop? Portrait { get; init; }
     // How the holder's own picture is set on the page.
     internal PictureFrame Frame { get; init; }
+    // The passport's appearance (its edition), or null until a new passport's holder chooses one; until then,
+    // and for an edition this version does not know, it draws as the shared Eorzea edition. PreviousAppearance is the one replaced by the last change, kept so it can be restored.
+    internal PassportAppearance? Appearance { get; init; }
+    internal PassportAppearance? PreviousAppearance { get; init; }
+
+    internal PassportEdition Edition => PassportEdition.Find(Appearance?.Edition);
 
     internal string SignedName => Signature.Length > 0 ? Signature : Name;
 
@@ -30,9 +36,9 @@ internal sealed record PassportIdentity(string Name, string HomeWorld, string Fa
         "Bard / Botanist",
         "A keeper of small stories, quiet paths, and views worth taking the long way around.",
         "Take the scenic route. There is always another story waiting.")
-    { DataCenter = "Demo DC", FreeCompany = "Unassigned", Issued = new DateOnly(2026, 10, 18) };
+    { DataCenter = "Demo DC", FreeCompany = "Unassigned", Issued = new DateOnly(2026, 10, 18), Appearance = PassportAppearance.Gridania };
 
-    // A new, empty passport issued today, with its own number.
+    // A new, empty passport issued today, with its own number; its holder then chooses its edition.
     internal static PassportIdentity Issue(DateOnly today, Random random) =>
         new("", "", "", "", "", string.Create(CultureInfo.InvariantCulture, $"EZ {random.Next(10000):D4} {random.Next(10000):D4}")) { Issued = today };
 
@@ -104,7 +110,7 @@ internal sealed record PassportIdentity(string Name, string HomeWorld, string Fa
         const int Length = 36;
         var digits = new StringBuilder();
         foreach (var character in Number) if (char.IsAsciiDigit(character)) digits.Append(character);
-        var builder = new StringBuilder("P<WV<GRIDANIA<");
+        var builder = new StringBuilder("P<WV<" + Edition.Code + "<");
         foreach (var character in Name.ToUpperInvariant())
             if (character is >= 'A' and <= 'Z') builder.Append(character);
             else if (builder[^1] != '<') builder.Append('<');
@@ -163,6 +169,19 @@ internal sealed class PassportProfile(PassportIdentity identity)
 {
     internal PassportIdentity Identity { get; private set; } = identity.Normalize();
     internal event Action? Changed;
+
+    // Changes the passport's edition, replacing its whole appearance; the appearance it had is kept so it can be
+    // restored. A first choice has nothing to keep. Details, picture, cover line, and stamps never change.
+    internal bool ChangeEdition(string edition)
+    {
+        var current = Identity.Appearance;
+        if (current?.Edition == edition) return false;
+        return Update(Identity with { Appearance = new PassportAppearance(edition), PreviousAppearance = current });
+    }
+
+    // Puts back the appearance the last change replaced (and keeps the one it replaces in turn).
+    internal bool RestorePrevious() =>
+        Identity.PreviousAppearance is { } previous && Update(Identity with { Appearance = previous, PreviousAppearance = Identity.Appearance });
 
     // Keeps the identity normalized; returns whether anything changed.
     internal bool Update(PassportIdentity next)

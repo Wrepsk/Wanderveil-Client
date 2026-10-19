@@ -78,7 +78,7 @@ internal static class IdentityChecks
         Throws<FormatException>(check, "{\"format\":\"wanderveil.passport\",\"version\":1}", "A file without a number");
         Throws<FormatException>(check, "{\"format\":\"wanderveil.passport\",\"version\":1,\"number\":\"EZ\",\"name\":7}", "A name that is not text");
         Throws<FormatException>(check, "{\"format\":\"wanderveil.passport\",\"version\":1,\"number\":\"EZ\",\"portrait\":{\"x\":3,\"y\":0,\"zoom\":1}}", "A portrait outside its frame");
-        Throws<NotSupportedException>(check, "{\"format\":\"wanderveil.passport\",\"version\":2,\"number\":\"EZ\"}", "A newer version");
+        Throws<NotSupportedException>(check, "{\"format\":\"wanderveil.passport\",\"version\":9,\"number\":\"EZ\"}", "A newer version");
         foreach (var unknown in new[] { "sparkly", "3", "" })
             check(PassportStore.Parse("{\"format\":\"wanderveil.passport\",\"version\":1,\"number\":\"EZ\",\"frame\":\"" + unknown + "\"}").Frame == PictureFrame.Printed, $"An unknown frame '{unknown}' is not read as the printed one.");
         check(PassportStore.Parse("{\"format\":\"wanderveil.passport\",\"version\":1,\"number\":\"EZ\"}").Frame == PictureFrame.Printed, "A passport without a frame is not printed.");

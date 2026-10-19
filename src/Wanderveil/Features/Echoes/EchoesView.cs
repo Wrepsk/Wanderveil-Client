@@ -100,12 +100,12 @@ internal sealed class EchoesView(EchoPreview? preview)
         var stroke = MathF.Max(1, 1.4f * context.Scale);
         if (!chapter.Sealed)
         {
-            list.AddCircle(center, radius, ImGui.GetColorU32(UiTheme.Edition), 32, stroke);
-            list.AddCircleFilled(center, radius * 0.38f, ImGui.GetColorU32(UiTheme.Edition), 16);
+            list.AddCircle(center, radius, ImGui.GetColorU32(UiTheme.EditionInk), 32, stroke);
+            list.AddCircleFilled(center, radius * 0.38f, ImGui.GetColorU32(UiTheme.EditionInk), 16);
             return;
         }
         list.AddCircleFilled(center + new Vector2(context.Scale), radius, ImGui.GetColorU32(UiTheme.Shadow), 32);
-        list.AddCircleFilled(center, radius, ImGui.GetColorU32(UiTheme.Edition), 32);
+        list.AddCircleFilled(center, radius, ImGui.GetColorU32(UiTheme.EditionInk), 32);
         list.AddCircle(center, radius * 0.72f, ImGui.GetColorU32(UiTheme.Foil with { W = 0.7f }), 32, MathF.Max(1, context.Scale));
     }
 
