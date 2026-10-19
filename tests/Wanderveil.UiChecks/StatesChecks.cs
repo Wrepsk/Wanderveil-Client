@@ -131,9 +131,9 @@ internal static class StatesChecks
         Click(BookShellLayout.OpenPoint(root));
         Frames(2);
         check(shell.IsBookOpen, name + ": the cover does not open.");
-        // Every passport spread, then every section.
+        // Every fixed passport spread and the first stamp spread, then every section.
         var layout = BookShellLayout.Create(root, context, 0);
-        for (var spread = 0; spread < shell.PageCount; spread += layout.IsSpread ? 2 : 1)
+        for (var spread = 0; spread < shell.FixedPageCount + 2; spread += layout.IsSpread ? 2 : 1)
         {
             if (spread == 2) Save("identity");
             var before = shell.VisiblePage;

@@ -1,6 +1,5 @@
 using System;
 using System.Globalization;
-using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using Wanderveil.UI.Components;
 using Wanderveil.UI.Primitives;
@@ -8,17 +7,19 @@ using Wanderveil.UI.Primitives;
 namespace Wanderveil.Features.Stamps;
 
 // How stamps appear on paper. A design not yet collected is a faint, square proof; an issued stamp is full
-// ink, pressed by hand at a slight tilt that is the same every time for that stamp. Both use the design's
-// impression art, or the procedural motif when that art is missing.
+// ink, turned however its owner pressed it. Both use the design's impression art, or the procedural motif
+// when that art is missing.
 internal static class StampArt
 {
     private const float ProofInk = 0.38f;
 
-    internal static void Proof(UiRect bounds, StampDesign design, IBookAssets? assets, UiContext context) => Draw(bounds, design, assets, context, ProofInk);
+    internal static void Proof(UiRect bounds, StampDesign design, IBookAssets? assets, UiContext context) => Draw(bounds, design, assets, context, ProofInk, 0f);
 
-    internal static void Issued(UiRect bounds, StampInstance stamp, IBookAssets? assets, UiContext context) => Draw(bounds, stamp.Design, assets, context, 1f, Tilt(stamp.Id));
+    internal static void Issued(UiRect bounds, StampInstance stamp, IBookAssets? assets, UiContext context, float rotation = 0f, float ink = 1f) =>
+        Draw(bounds, stamp.Design, assets, context, ink, rotation);
 
-    // Up to five degrees either way, from the stamp's identifier (a stable hash, unlike string.GetHashCode).
+    // A natural first turn for a stamp being placed, up to five degrees either way, the same every time for
+    // that stamp (a stable hash, unlike string.GetHashCode). The owner can turn it however they like.
     internal static float Tilt(string id)
     {
         var hash = 2166136261u;
@@ -26,26 +27,10 @@ internal static class StampArt
         return ((hash % 1001) / 1000f * 2f - 1f) * (5f * MathF.PI / 180f);
     }
 
-    // A place on the page still waiting for a stamp: a faint dashed ring.
-    internal static void Empty(UiRect bounds, UiContext context)
-    {
-        var list = ImGui.GetWindowDrawList();
-        var center = bounds.Position + bounds.Size / 2;
-        var radius = MathF.Min(bounds.Size.X, bounds.Size.Y) * 0.42f;
-        var color = ImGui.GetColorU32(UiTheme.MutedInk with { W = 0.45f });
-        const int Dashes = 28;
-        for (var index = 0; index < Dashes; index++)
-        {
-            var from = index * MathF.Tau / Dashes;
-            list.PathArcTo(center, radius, from, from + MathF.Tau / Dashes * 0.55f, 4);
-            list.PathStroke(color, ImDrawFlags.None, MathF.Max(1f, 1.5f * context.Scale));
-        }
-    }
-
-    // The issue date as printed under a stamp, in the offset it was collected in.
+    // The issue date as printed on a stamp's info page, in the offset it was collected in.
     internal static string Date(DateTimeOffset at) => at.ToString("dd MMM yyyy", CultureInfo.InvariantCulture).ToUpperInvariant();
 
-    private static void Draw(UiRect bounds, StampDesign design, IBookAssets? assets, UiContext context, float ink, float angle = 0f)
+    private static void Draw(UiRect bounds, StampDesign design, IBookAssets? assets, UiContext context, float ink, float angle)
     {
         if (assets != null && BookSurface.Stamp(bounds, design.Artwork, assets, ink, angle)) return;
         StampPreview.Draw(bounds, context, UiTheme.Action with { W = ink });

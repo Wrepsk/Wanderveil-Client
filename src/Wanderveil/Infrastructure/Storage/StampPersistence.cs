@@ -7,7 +7,7 @@ using Wanderveil.Features.Stamps;
 namespace Wanderveil.Infrastructure.Storage;
 
 // Keeps one profile's stamp collection on disk. It loads once when created (startup, not a draw callback),
-// then saves a snapshot on a background task each time a stamp is collected. Saves run one at a time and
+// then saves a snapshot on a background task each time a stamp is collected or placed. Saves run one at a time and
 // coalesce: only the newest snapshot waiting is written. Disposing waits briefly for a save in progress.
 internal sealed class StampPersistence : IStampStorage, IDisposable
 {
@@ -16,7 +16,7 @@ internal sealed class StampPersistence : IStampStorage, IDisposable
     private readonly string profile;
     private readonly Action<Exception>? report;
     private readonly object gate = new();
-    private IReadOnlyList<StampInstance>? pending;
+    private StampBook? pending;
     private Task worker = Task.CompletedTask;
     private volatile StampSaveState state;
     private bool disposed;
@@ -33,7 +33,7 @@ internal sealed class StampPersistence : IStampStorage, IDisposable
         Kept = load.Kept;
         // Never overwrite a file this version could not safely read.
         state = load.Outcome is StampLoadOutcome.Newer or StampLoadOutcome.Inaccessible ? StampSaveState.ReadOnly : StampSaveState.Saved;
-        Collection = new StampCollection(clock, load.Stamps);
+        Collection = new StampCollection(clock, load.Book.Stamps, load.Book.Placements);
         Collection.Changed += Queue;
     }
 
@@ -72,7 +72,7 @@ internal sealed class StampPersistence : IStampStorage, IDisposable
     private void Queue()
     {
         if (state == StampSaveState.ReadOnly) return;
-        var snapshot = Collection.Stamps.ToArray();
+        var snapshot = StampBook.Of(Collection);
         lock (gate)
         {
             if (disposed) return;
@@ -88,7 +88,7 @@ internal sealed class StampPersistence : IStampStorage, IDisposable
     {
         while (true)
         {
-            IReadOnlyList<StampInstance> snapshot;
+            StampBook snapshot;
             lock (gate)
             {
                 if (pending == null) { running = false; return; }

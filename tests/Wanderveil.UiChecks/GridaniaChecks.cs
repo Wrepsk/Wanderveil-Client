@@ -14,7 +14,6 @@ internal static class GridaniaChecks
             (Target: "cover-plum", Single: false, Info: false, TextScale: 1f, Long: false),
             (Target: "nation", Single: false, Info: false, TextScale: 1f, Long: false),
             (Target: "identity", Single: false, Info: false, TextScale: 1f, Long: false),
-            (Target: "collection", Single: false, Info: false, TextScale: 1f, Long: false),
             (Target: "identity", Single: true, Info: false, TextScale: 1f, Long: false),
             (Target: "identity", Single: true, Info: true, TextScale: 1f, Long: false),
             (Target: "identity", Single: true, Info: true, TextScale: 1.75f, Long: true) })

@@ -1,52 +1,26 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
-using Wanderveil.Features.Stamps;
 using Wanderveil.UI.Components;
 using Wanderveil.UI.Primitives;
 
 namespace Wanderveil.Features.Passport;
 
-internal enum PassportPageKind { NationBanner, NationMap, Portrait, Information, CollectionLeft, CollectionRight, Blank, Stamps }
-// First: on a Stamps page, the collection position of its first stamp place.
-internal sealed record PassportPage(string Id, PassportPageKind Kind, int First = 0);
-
-// Presentation data and composition; no ownership, persistence, or animation logic. The collection
-// pages print the stamps the collection holds, in the order they were collected.
-internal sealed class PassportDocumentView(IBookAssets assets, PassportPreview profile, StampCollection? stamps = null, IStampStorage? storage = null)
+internal enum PassportPageKind { NationBanner, NationMap, Portrait, Information, Blank, Stamps }
+// Sheet: on a Stamps page, which stamp page it is (0 is the first after the fixed pages).
+internal sealed record PassportPage(string Id, PassportPageKind Kind, int Sheet = 0)
 {
-    // Stamp places on the collection spread: two on its left page, one large on its right.
-    internal const int CollectionSlots = 3;
-    // Stamp places on each page that follows the collection spread, in two rows of two.
-    internal const int SheetSlots = 4;
+    internal static PassportPage StampPage(int sheet) => new($"stamps-{sheet}", PassportPageKind.Stamps, sheet);
+}
 
-    // The stamp pages after the collection spread: added once the spread is full, in pairs so every spread is
-    // whole, enough for every stamp beyond it and always with at least one empty place left. Only visible
-    // pages are ever drawn.
-    internal static IReadOnlyList<PassportPage> StampPages(int count)
-    {
-        if (count < CollectionSlots) return [];
-        var needed = (count - CollectionSlots) / SheetSlots + 1;
-        return Enumerable.Range(0, needed + needed % 2)
-            .Select(sheet => new PassportPage($"stamps-{sheet + 1}", PassportPageKind.Stamps, CollectionSlots + sheet * SheetSlots)).ToArray();
-    }
-
-    // Whether a page prints the stamp at a collection position.
-    internal static bool Holds(PassportPage page, int position) => page.Kind switch
-    {
-        PassportPageKind.CollectionLeft => position is 0 or 1,
-        PassportPageKind.CollectionRight => position == 2,
-        PassportPageKind.Stamps => position >= page.First && position < page.First + SheetSlots,
-        _ => false,
-    };
-    internal StampCollection Stamps { get; } = stamps ?? new StampCollection();
-
+// Presentation data and composition; no ownership, persistence, or animation logic. Stamp pages are blank
+// paper here: the stamps on them, placed by the owner, are drawn by the shell's stamp layer.
+internal sealed class PassportDocumentView(IBookAssets assets, PassportPreview profile)
+{
     internal static readonly IReadOnlyList<PassportPage> SamplePages = Array.AsReadOnly(new[] {
         new PassportPage("nation-banner", PassportPageKind.NationBanner), new PassportPage("nation-map", PassportPageKind.NationMap),
-        new PassportPage("portrait", PassportPageKind.Portrait), new PassportPage("information", PassportPageKind.Information),
-        new PassportPage("collection-left", PassportPageKind.CollectionLeft), new PassportPage("collection-right", PassportPageKind.CollectionRight) });
+        new PassportPage("portrait", PassportPageKind.Portrait), new PassportPage("information", PassportPageKind.Information) });
 
     // window is the cover plate's rectangle. With a leaf, the cover is drawn turning on its spine:
     // window is then the flat placement whose board the leaf's Source describes.
@@ -109,9 +83,7 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportPreview p
             case PassportPageKind.NationMap: Nation(ref flow, false, width, context); break;
             case PassportPageKind.Portrait: Identity(ref flow, true, width, context); break;
             case PassportPageKind.Information: Identity(ref flow, false, width, context); break;
-            case PassportPageKind.CollectionLeft: Collection(ref flow, true, width, context); break;
-            case PassportPageKind.CollectionRight: Collection(ref flow, false, width, context); break;
-            case PassportPageKind.Stamps: Sheet(ref flow, page.First, width, context); break;
+            case PassportPageKind.Stamps: break; // Blank paper; the owner's stamps are drawn over it.
             default: flow.Text("A place for future memories", TextRole.Title); break;
         }
         ImGui.Dummy(new Vector2(width, flow.Height));
@@ -233,74 +205,4 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportPreview p
         flow.Gap(5);
         flow.Text(value);
     }
-
-    private void Collection(ref PageFlow flow, bool isLeft, float width, UiContext context)
-    {
-        flow.Text(isLeft ? "03 / IMPRESSIONS" : "04 / PLACES WORTH REMEMBERING", TextRole.Caption, true);
-        flow.Gap(16);
-        flow.Text(isLeft ? "By root & river" : "Under another sky", TextRole.Title);
-        flow.Gap(20);
-        var held = Stamps.Stamps;
-        if (isLeft)
-        {
-            Slot(ref flow, 0, 140, context);
-            flow.Gap(24);
-            Slot(ref flow, 1, 140, context);
-            return;
-        }
-        Slot(ref flow, 2, 240, context);
-        flow.Rule();
-        flow.Text(held.Count == 0 ? "These pages are waiting for their first stamp. Collect one from a discovery and it is pressed here."
-            : "A place, a moment, a reason to return. Every impression holds a small story.");
-        flow.Gap(24);
-        flow.Text(StampStorageText.Count(held.Count, storage), TextRole.Caption, true);
-        if (held.Count > CollectionSlots)
-        {
-            flow.Gap(8);
-            flow.Text("Turn the page for the rest of your stamps.", TextRole.Caption, true);
-        }
-        if (StampStorageText.Notice(storage) is { } notice)
-        {
-            flow.Gap(12);
-            flow.Text(notice, TextRole.Body, true);
-        }
-    }
-
-    // A page after the collection spread: four places in two rows, numbered on from the spread's pages.
-    private void Sheet(ref PageFlow flow, int first, float width, UiContext context)
-    {
-        flow.Text($"{(first - CollectionSlots) / SheetSlots + 5:00} / MORE IMPRESSIONS", TextRole.Caption, true);
-        flow.Gap(24);
-        var gap = 16 * context.Scale;
-        var column = (width - gap) / 2;
-        for (var row = 0; row < SheetSlots / 2; row++)
-        {
-            var index = first + row * 2;
-            var left = new PageFlow(Vector2.Zero, column, context, false);
-            var right = new PageFlow(Vector2.Zero, column, context, false);
-            Slot(ref left, index, 130, context);
-            Slot(ref right, index + 1, 130, context);
-            var place = flow.Reserve(MathF.Max(left.Height, right.Height));
-            left = new PageFlow(place.Position, column, context, true);
-            right = new PageFlow(place.Position + new Vector2(column + gap, 0), column, context, true);
-            Slot(ref left, index, 130, context);
-            Slot(ref right, index + 1, 130, context);
-            flow.Gap(28);
-        }
-    }
-
-    // One stamp place: the stamp collected in that order with its name and date, or an empty ring.
-    private void Slot(ref PageFlow flow, int index, float size, UiContext context)
-    {
-        var place = flow.Reserve(size * context.Scale);
-        var stamp = index < Stamps.Stamps.Count ? Stamps.Stamps[index] : null;
-        if (flow.IsDrawing)
-        {
-            if (stamp != null) StampArt.Issued(place, stamp, assets, context);
-            else StampArt.Empty(place, context);
-        }
-        flow.Gap(8);
-        flow.Text(stamp != null ? $"{stamp.Design.Name} / {StampArt.Date(stamp.CollectedAt)}" : "Awaiting a stamp", TextRole.Caption, true);
-    }
-
 }

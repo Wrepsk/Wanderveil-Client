@@ -19,7 +19,7 @@ internal sealed class DiscoverView(IReadOnlyList<DiscoveryPreview> previews, Sta
     private bool focusPassportLink;
     private StampInstance? passportRequested;
 
-    // The stamp the reader asked to see in their passport, once; otherwise null.
+    // The stamp the reader asked to place or see in their passport, once; otherwise null.
     internal StampInstance? TakePassportRequest()
     {
         var requested = passportRequested;
@@ -140,7 +140,7 @@ internal sealed class DiscoverView(IReadOnlyList<DiscoveryPreview> previews, Sta
                 ImGui.SetKeyboardFocusHere();
                 focusPassportLink = false;
             }
-            if (BookControl.Link("See it in your passport »", context)) passportRequested = held;
+            if (BookControl.Link(Stamps.PlacementOf(held) == null ? "Place it in your passport »" : "See it in your passport »", context)) passportRequested = held;
             return;
         }
         if (!preview.CollectOnReading)
@@ -152,7 +152,7 @@ internal sealed class DiscoverView(IReadOnlyList<DiscoveryPreview> previews, Sta
             return;
         }
         // The action disappears once used, so keyboard focus moves on to the passport link.
-        if (UiButton.Draw("Collect demo stamp", context) && Stamps.Collect(preview.Id, preview.Stamp).Outcome == CollectOutcome.Collected)
+        if (UiButton.Draw("Collect demo stamp", context) && Stamps.Collect(preview.Id, preview.Stamp, new StampSource(preview.Kind, preview.Title)).Outcome == CollectOutcome.Collected)
             focusPassportLink = true;
         UiTypography.Text("Adds one local demo stamp to your passport. It is not an official achievement.", TextRole.Body, context, ink);
     }

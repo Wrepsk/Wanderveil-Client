@@ -6,12 +6,12 @@ Status: runtime prototype, 19 October 2026. The SVG art, book-surface controls, 
 
 Build the client, then reload Wanderveil in Dalamud so it loads the new DLL. The Debug developer-plugin DLL is `src/Wanderveil/bin/x64/Debug/Wanderveil.dll`; the Release package is `src/Wanderveil/bin/x64/Release/Wanderveil/latest.zip`. Compilation does not replace an already loaded plugin instance.
 
-Run `/wanderveil`. Each summon starts with the closed Gridania cover; the first summon of a plugin session centers it on the screen, and later summons return it to where it was last dismissed (or dragged). The book itself is the control surface. Click the right side of the cover to open it. When open, click the right side to turn forward (nation banner/map, then portrait/signature and identity information, then demo stamp pages) and the left side to turn back. Clicking the left side of the first page returns to the cover. Narrow views turn one logical page; wider views turn a spread. Press and drag anywhere on the book that is not a control to move it; a drag never turns a page. A soft shadow on the outer edge and a hand cursor show which way a click will go. On the keyboard, Space or Enter opens the cover, Page Down and Page Up turn pages, End jumps to the last stamp page, and Home returns to the cover.
+Run `/wanderveil`. Each summon starts with the closed Gridania cover; the first summon of a plugin session centers it on the screen, and later summons return it to where it was last dismissed (or dragged). The book itself is the control surface. Click the right side of the cover to open it. When open, click the right side to turn forward (nation banner/map, then portrait/signature and identity information, then blank stamp pages that never run out) and the left side to turn back. Clicking the left side of the first page returns to the cover. Narrow views turn one logical page; wider views turn a spread. Press and drag anywhere on the book that is not a control to move it; a drag never turns a page. A soft shadow on the outer edge and a hand cursor show which way a click will go. On the keyboard, Space or Enter opens the cover, Page Down and Page Up turn pages, End jumps to the last page with a stamp, and Home returns to the cover.
 
 - [Runtime closed cover](previews/passport/runtime-cover.png)
 - [Runtime nation spread](previews/passport/runtime-nation.png)
 - [Runtime identity spread](previews/passport/runtime-identity.png)
-- [Runtime collection spread](previews/passport/runtime-collection.png)
+- [The first stamp pages, blank](previews/passport/runtime-collection.png)
 - [Smallest book size, contents scaled down](previews/passport/runtime-smallest.png)
 
 These are native software previews of the production shell, not live game captures. Real host font/GPU/hotkey/lifecycle behavior remains unobserved here. The map retains its visible unvalidated-geography caption, and identity/signature are synthetic demo content. Stamps are collected in memory only (see below); signature input and all storage are not implemented.
@@ -49,23 +49,29 @@ Settings are pages of the book. The printed Settings mark riffles forward to the
 - [A riffle in flight](previews/passport/riffle.png)
 - [Settings pages](previews/passport/settings.png)
 
-## Collecting a stamp
+## Collecting and placing stamps
 
-The first product loop runs in the book: open Discover, open **The scenic route** postcard, and choose **Collect demo stamp** beneath it. The stamp is issued at once: the postcard's faint proof of the design becomes the inked stamp (*Your stamp*, *Collected 19 OCT 2026 / Local demo*), its card in the list says *Collected*, and a line beneath says whether it is saved to your passport on this PC. Keyboard focus moves to **See it in your passport »**, which riffles back to the passport page that holds the stamp, pressed there with its name and date. An issued stamp is full ink at a slight tilt (up to five degrees, the same every time for that stamp), while a design not yet collected is a faint, square proof. Empty places are faint dashed rings marked *Awaiting a stamp*; with no stamps the right page invites you to collect one and offers **Explore discoveries »**. A count of local demo stamps (*saved on this PC*, or *not saved*) closes the spread.
+The first product loop runs in the book: open Discover, open **The scenic route** postcard, and choose **Collect demo stamp** beneath it. The stamp is issued at once: the postcard's faint proof of the design becomes the inked stamp (*Your stamp*, *Collected 19 OCT 2026 / Local demo*), its card in the list says *Collected*, and a line beneath says whether it is saved. Keyboard focus moves to **Place it in your passport »**.
 
-The collection spread has three places (two on the left, one large on the right), in collection order. Once it is full, stamp pages follow it in pairs, numbered on from it (*05 / More impressions*), each with four places in two rows. There are always enough for every stamp plus at least one empty place, so the book grows as you collect. Turn through them like any page, or press End for the last one. Only the pages on screen are drawn, so a large collection costs no more per frame than a small one.
+**Stamp pages** follow the identity pages. They are blank paper with only their page numbers: no fixed places, no printed captions, nothing the owner did not put there. They never run out; turn on as far as you like, and End jumps to the last page with a stamp. Only pages with stamps are saved (see below).
+
+**Placing.** The link opens the first empty page after your last stamp with the new stamp in hand: it follows the mouse, faintly, with a shadow. Click anywhere on a stamp page to press it there. While it is in hand the mouse wheel turns it, Page Up/Down turn pages, and resting at the book's outer edge turns the page there, so you can carry it to any page. Escape, a right click, or **Put back** in the footer returns it. A stamp not placed yet waits: the footer then offers **Place stamp** (with a count when several wait), which picks the next one up the same way. Once placed, the postcard's link reads **See it in your passport »** and opens its page.
+
+**Stamp info.** Click a stamp to open its info page over the opposite page (over its own page when only one page shows), and click again, **Close**, or Escape to close it. It shows the stamp, its name, when it was collected and on which page, what it came from (*Postcard: The scenic route*), and who designed it (*Ari Vale / Demo creator*), with a note that it is a local demo stamp, not an official achievement. Turning the page or changing section closes it.
+
+**Arrange mode.** The footer's **Arrange** turns it on (**Done** turns it off), so stamps never shift by accident. While arranging, drag a stamp anywhere on the open pages, including across the spread; or click it to pick it up and carry it as above. Each stamp shows a round knob: drag it around the stamp to turn the stamp. A moved stamp lands on top of the others. Outside Arrange mode, a drag on a stamp does nothing and dragging the paper moves the book as before.
 
 Duplicate policy: a passport holds at most one stamp per discovery. Once collected, the postcard offers no Collect action, and collecting again (even after its design is revised) returns the stamp already held unchanged. **Where the lanterns wait** is a stamp spot: its stamp is collected at the place itself, which needs location awareness Wanderveil does not have, so its Collect action is printed but inert with that reason.
 
-`StampDesign` (identifier, revision, name, artwork, provenance), `StampInstance` (its own identifier, the design revision it was issued with, the discovery, the date, provenance), and `StampCollection` (the in-memory stamps and the collect rule) hold no ImGui state; `DiscoveryPreview` names the design a discovery awards and whether reading it is enough to collect. `StampArt` draws a design as a faint proof or an issued stamp, falling back to the procedural motif without art. Everything is local demo provenance.
+`StampDesign` (identifier, revision, name, designer, artwork, provenance), `StampInstance` (its own identifier, the design revision it was issued with, the discovery and what it was, the date, provenance), `StampPlacement` (page, place across and down the page from 0 to 1, turn), and `StampCollection` (the stamps, their placements in layer order, and the collect and place rules) hold no ImGui state. `BookShellStamps` draws and handles the stamps on stamp pages, Arrange mode, carrying, and the info page. Stamps scale with the page, at about a third of its width, and stay wholly on their page. Everything is local demo provenance. Settings shows how many stamps you hold, how many wait to be placed, and whether they are saved.
 
 - [Collected postcard](previews/passport/collect-discover.png)
-- [The stamp on the collection spread](previews/passport/collect-passport.png)
-- [The stamp on a single page](previews/passport/collect-narrow.png)
-- [A full collection spread, with a long name](previews/passport/collect-full.png)
-- [The stamp pages that follow it](previews/passport/collect-stamp-page.png)
-- [A fourth stamp, opened on its page](previews/passport/collect-fourth.png)
-- [An empty collection spread](previews/passport/runtime-collection.png)
+- [Placing it: the stamp in hand](previews/passport/collect-placing.png)
+- [Placed on the first stamp page](previews/passport/collect-passport.png)
+- [Its info page, opposite](previews/passport/collect-info.png)
+- [Its info page on a single page](previews/passport/collect-narrow-info.png)
+- [Arrange mode, with turning knobs](previews/passport/collect-arrange.png)
+- [Carrying a stamp to a later page](previews/passport/collect-carry.png)
 
 ## Saving stamps
 
@@ -76,27 +82,33 @@ The file is versioned JSON, written readable:
 ```json
 {
   "format": "wanderveil.passport-stamps",
-  "version": 1,
+  "version": 2,
   "stamps": [
     {
       "id": "local-demo-0001",
       "discoveryId": "demo-scenic-route",
       "collectedAt": "2026-10-19T18:30:00.0000000+02:00",
       "provenance": "local-demo",
-      "design": { "id": "demo-scenic-route-stamp", "revision": 1, "name": "Scenic route", "artwork": 0, "provenance": "local-demo" }
+      "source": { "kind": "POSTCARD", "title": "The scenic route" },
+      "design": { "id": "demo-scenic-route-stamp", "revision": 1, "name": "Scenic route", "artwork": 0, "provenance": "local-demo", "creator": "Ari Vale / Demo creator" }
     }
+  ],
+  "placements": [
+    { "stamp": "local-demo-0001", "page": 21, "x": 0.3, "y": 0.7, "rotation": -0.4 }
   ]
 }
 ```
 
 Each stamp keeps a copy of the design revision it was issued with, so a later design change never alters it. Only `local-demo` provenance is accepted, so a hand-edited file cannot add official or online stamps.
 
-- **Saving.** Each collect saves a snapshot on a background task, never in a draw callback. Saves run one at a time, and if several are waiting only the newest is written. The file is written to `stamps-local.json.tmp`, flushed to disk, then swapped in one step, and the previous save is kept as `stamps-local.json.bak`. Closing the plugin waits up to three seconds for a save in progress.
+Placements are sparse: one entry per placed stamp, in layer order (the last is on top). `page` counts stamp pages from 0 (the first after the identity pages, printed page 5), `x` and `y` place the stamp's centre across and down the page from 0 to 1, and `rotation` is its turn in radians. The example's stamp sits on page 21 of an otherwise empty book, and nothing is written for the empty pages before it. A stamp with no entry is waiting to be placed.
+
+- **Saving.** Each collect, placement, move, or turn saves a snapshot on a background task, never in a draw callback. Saves run one at a time, and if several are waiting only the newest is written. The file is written to `stamps-local.json.tmp`, flushed to disk, then swapped in one step, and the previous save is kept as `stamps-local.json.bak`. Closing the plugin waits up to three seconds for a save in progress.
 - **Interrupted save.** On load, a complete leftover `.tmp` file is the newest save, so the swap is finished. An incomplete one is dropped, since the file it was replacing is intact.
-- **Unreadable file.** A file that is corrupt, truncated, empty, not a Wanderveil stamp file, or breaks the rules (duplicate stamps or discoveries, missing fields, a bad date or revision, other provenance) is never partly loaded. It is renamed aside as `stamps-local.json.unreadable-<time>`, and the backup is restored (one stamp may be missing: the backup is the save before last). If the backup is unreadable too, both are kept aside and the passport starts empty. The collection page says what happened.
-- **Newer or locked file.** A file from a newer Wanderveil version, or one that cannot be opened (locked or access denied), is left untouched, and saving is turned off for the session. The page says so; stamps collected meanwhile last until the game closes.
+- **Unreadable file.** A file that is corrupt, truncated, empty, not a Wanderveil stamp file, or breaks the rules (duplicate stamps or discoveries, missing fields, a bad date or revision, other provenance, a placement off its page or for an unknown stamp, two placements for one stamp) is never partly loaded. It is renamed aside as `stamps-local.json.unreadable-<time>`, and the backup is restored (one stamp may be missing: the backup is the save before last). If the backup is unreadable too, both are kept aside and the passport starts empty. Settings says what happened.
+- **Newer or locked file.** A file from a newer Wanderveil version, or one that cannot be opened (locked or access denied), is left untouched, and saving is turned off for the session. Settings says so; stamps collected or moved meanwhile last until the game closes.
 - **Failed save.** If writing fails, the stamp stays collected, the line under it says it could not be saved, and **Try saving again** retries. The error goes to the Dalamud log.
-- **Migrations.** A future format bumps `version` and adds a step that upgrades the older file in memory when it is read. The next save writes the new version, and the backup keeps the old one. Version 1 is the first, so there are no steps yet. Local demo stamps are never promoted to server-issued stamps by a migration.
+- **Migrations.** Each format bump adds a step that upgrades the older file in memory when it is read; the next save writes the new version, and the backup keeps the old one. Version 1 (before placements) becomes version 2 with every stamp waiting to be placed and no designer or source recorded (the info page says *Not recorded*).
 
 `StampStore` (file format, atomic save, recovery) and `StampPersistence` (load at startup, background saves, state) live in `Infrastructure/Storage/`. The pages see only `IStampStorage`: what loading found and whether saving works.
 

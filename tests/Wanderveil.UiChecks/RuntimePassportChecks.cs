@@ -80,14 +80,15 @@ internal static class RuntimePassportChecks
             for (var page = 0; page < 2; page += step) Click(Side(true));
             check(shell.VisiblePage == 4, "Stamp pages do not follow identity.");
             if (!single && artifacts != null) SoftwarePreview.Save(Path.Combine(artifacts, "passport-runtime-collection.png"), host);
+            // Blank stamp pages carry on past the fixed pages; there is no last page.
             if (single) Click(Side(true));
             Click(Side(true));
-            check(shell.VisiblePage == (single ? 5 : 4), "Turning forward escapes the final page.");
+            check(shell.VisiblePage == 6, "Stamp pages do not carry on past the first.");
             Click(Side(false));
-            check(shell.VisiblePage == (single ? 4 : 2), "The left side cannot turn backward.");
+            check(shell.VisiblePage == (single ? 5 : 4), "The left side cannot turn backward.");
             ImGui.GetIO().AddKeyEvent(ImGuiKey.PageDown, true); Frame();
             ImGui.GetIO().AddKeyEvent(ImGuiKey.PageDown, false); Frame();
-            check(shell.VisiblePage == (single ? 5 : 4), "Page Down does not turn forward.");
+            check(shell.VisiblePage == 6, "Page Down does not turn forward.");
             while (shell.IsBookOpen && shell.VisiblePage > 0) Click(Side(false));
             check(shell.IsBookOpen && shell.VisiblePage == 0, "Turning back does not stop at the first page.");
             Click(Side(false));
@@ -118,7 +119,7 @@ internal static class RuntimePassportChecks
                 ImGui.GetIO().AddMouseButtonEvent(0, false); Frame(); Frame();
             }
             ImGui.GetIO().AddMousePosEvent(-100, -100); Frame();
-            for (var page = 0; page < shell.PageCount; page++)
+            for (var page = 0; page < shell.FixedPageCount + 2; page++)
             {
                 check(shell.PageOverflow < 1, $"Passport page {shell.VisiblePage + 1} scrolls by {shell.PageOverflow:0.0} at preferred width {shell.PreferredWidth:0} ({bounds.Size.X:0} x {bounds.Size.Y:0}).");
                 var before = shell.VisiblePage;
@@ -129,10 +130,10 @@ internal static class RuntimePassportChecks
         }
 
         var mutable = PassportDocumentView.SamplePages.ToList();
-        for (var index = 6; index < 17; index++) mutable.Add(new PassportPage("extra-" + index, PassportPageKind.Blank));
+        for (var index = 4; index < 17; index++) mutable.Add(new PassportPage("extra-" + index, PassportPageKind.Blank));
         var expanded = new BookShell(new MissingAssets(), PassportPreview.Sample, mutable);
         mutable.Clear();
-        check(expanded.PageCount == 17, "Logical page catalog is fixed to the demo or aliases mutable input.");
+        check(expanded.FixedPageCount == 17, "Logical page catalog is fixed to the demo or aliases mutable input.");
         foreach (var invalid in new[] { Array.Empty<PassportPage>(), new[] { new PassportPage("duplicate", PassportPageKind.Blank), new PassportPage("duplicate", PassportPageKind.Blank) } })
         {
             try { _ = new BookShell(new MissingAssets(), PassportPreview.Sample, invalid); check(false, "Invalid logical page identifiers accepted."); }

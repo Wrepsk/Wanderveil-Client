@@ -16,7 +16,7 @@ internal sealed record DiscoveryPreview(
         "A quiet path, a salt-touched breeze, and a horizon worth the detour.",
         "I took the long way home and found a place to pause. Below the path, the sea held the last light of the day. " +
         "This little postcard is a reminder to leave room for the unexpected view.",
-        new StampDesign("demo-scenic-route-stamp", 1, "Scenic route", 0, StampProvenance.LocalDemo), true, true);
+        new StampDesign("demo-scenic-route-stamp", 1, "Scenic route", 0, StampProvenance.LocalDemo, "Ari Vale / Demo creator"), true, true);
 
     internal static readonly DiscoveryPreview StampSpot = new(
         "demo-lantern-path", "STAMP SPOT", "Where the lanterns wait", "Wanderveil / Demo curator",
@@ -24,7 +24,7 @@ internal sealed record DiscoveryPreview(
         "A small light at the bend in the road. Some stories begin by standing still.",
         "Imagine a lantern-lined path beneath the trees, with one empty bench facing the evening sky. " +
         "No photograph accompanies this sample; the journal keeps the story readable without it.",
-        new StampDesign("demo-lantern-path-stamp", 1, "Lantern path", 1, StampProvenance.LocalDemo), false, false);
+        new StampDesign("demo-lantern-path-stamp", 1, "Lantern path", 1, StampProvenance.LocalDemo, "Wanderveil / Demo curator"), false, false);
 
     internal static readonly DiscoveryPreview[] Samples = [Postcard, StampSpot];
 }

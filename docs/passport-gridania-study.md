@@ -8,7 +8,6 @@ Status: static review slice delivered, then connected to the [runtime prototype]
 - [Plum cover variation](previews/passport/gridania-cover-plum.png): the same edition/composition in a user-personalized colorway study.
 - [Nation introduction](previews/passport/gridania-nation.png): textile banner left, overhead map study right.
 - [Identity spread](previews/passport/gridania-identity.png): prominent portrait and demo signature left; composed information, motto, and biography right.
-- [Demo collection](previews/passport/gridania-collection.png): engraved stamp specimens on parchment, with room for a collector layout.
 
 The previews run native ImGui draw lists against a borderless transparent host and an authored backdrop. `PassportDocumentView`, `BookSurface`, `PageFlow`, typography, portrait, and stamp primitives are shared with the plugin. All lettering remains live. The original Segoe Script surrogate has been replaced by bundled Caveat for the fictional signature in both runtime and regenerated gallery previews; this does not establish eventual signature input. Existing open-book materials are retained.
 
@@ -20,7 +19,7 @@ The introduction banner and emblem are original heraldic interpretations. The se
 
 `GridaniaTargets`/`GridaniaChecks` are test-only gallery sources around production `PassportDocumentView`. Art remains under `assets/passport/studies/gridania/`; four selected assets are now explicitly embedded for the runtime prototype. Plum/intermediate assets, gallery code, and PNG previews stay outside the plugin package. Discover behavior is preserved.
 
-The native suite includes both covers, nation/identity/collection spreads, narrow portrait/information pages, and enlarged long identity text. Checks cover stationary host bounds, default page fit without scrolling, font stack restoration, illustration aspect/bounds, and bounded long-page scrolling. Existing shell input and Discover checks remain. Software sampling and local body/signature fonts do not establish exact GPU/game-host output.
+The native suite includes both covers, nation/identity spreads, narrow portrait/information pages, and enlarged long identity text. Checks cover stationary host bounds, default page fit without scrolling, font stack restoration, illustration aspect/bounds, and bounded long-page scrolling. Existing shell input and Discover checks remain. Software sampling and local body/signature fonts do not establish exact GPU/game-host output.
 
 ## Next bounded step
 

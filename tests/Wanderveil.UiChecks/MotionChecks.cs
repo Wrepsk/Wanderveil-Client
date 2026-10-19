@@ -213,18 +213,10 @@ internal static class MotionChecks
         check(shell.IsTurning && shell.VisiblePage == 2, "Clicking forward mid-turn does not reverse the turn.");
         while (shell.IsTurning) Step();
         check(shell.VisiblePage == 2 && shell.IsBookOpen, "A reversed turn does not land on the spread it returned to.");
-        Click(BookShellLayout.Create(bounds, context, 2).TurnPoint(true, 2));
-        var turning = 0;
-        while (shell.IsTurning && turning < 120)
-        {
-            Step();
-            turning++;
-            if (artifacts != null && turning is 8 or 15 or 22) SoftwarePreview.Save(Path.Combine(artifacts, $"passport-motion-turn-{turning}.png"), host);
-        }
-        check(shell.VisiblePage == 4 && !shell.IsTurning, "A forward turn does not land on the stamp spread.");
 
         // Cost of a turn against a still spread: CPU time to build the frame and vertices submitted.
-        // Headless and software-only; GPU cost in game is not measured here.
+        // Headless and software-only; GPU cost in game is not measured here. The still spread is identity, the
+        // page that later turns back into view (stamp pages after it are blank paper, far cheaper).
         (double Milliseconds, int Vertices) Measure(Action between)
         {
             var timer = System.Diagnostics.Stopwatch.StartNew();
@@ -233,6 +225,16 @@ internal static class MotionChecks
             return (timer.Elapsed.TotalMilliseconds / 24, vertices);
         }
         var still = Measure(() => { });
+        Click(BookShellLayout.Create(bounds, context, 2).TurnPoint(true, 2));
+        var turning = 0;
+        while (shell.IsTurning && turning < 120)
+        {
+            Step();
+            turning++;
+            if (artifacts != null && turning is 8 or 15 or 22) SoftwarePreview.Save(Path.Combine(artifacts, $"passport-motion-turn-{turning}.png"), host);
+        }
+        check(shell.VisiblePage == 4 && !shell.IsTurning, "A forward turn does not land on the first stamp spread.");
+
         Click(BookShellLayout.Create(bounds, context, 4).TurnPoint(false, 4));
         var moving = Measure(() => { });
         Console.WriteLine($"INFO passport-turn still {still.Milliseconds:0.00} ms/{still.Vertices} vertices, turning {moving.Milliseconds:0.00} ms/{moving.Vertices} vertices per frame (headless CPU)");

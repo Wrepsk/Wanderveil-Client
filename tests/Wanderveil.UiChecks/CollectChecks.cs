@@ -8,7 +8,8 @@ using Wanderveil.UI.Primitives;
 
 namespace Wanderveil.UiChecks;
 
-// The first product loop: read a discovery, collect its local demo stamp, and find it in the passport.
+// The first product loop: read a discovery, collect its local demo stamp, place it in the passport, and
+// arrange it there. Stamp pages are blank and unlimited; stamps sit wherever their owner put them.
 internal static class CollectChecks
 {
     private static readonly DateTimeOffset Issued = new(2026, 10, 19, 18, 30, 0, TimeSpan.FromHours(2));
@@ -19,7 +20,8 @@ internal static class CollectChecks
         foreach (var (name, room) in new[] { ("wide", new Vector2(1200, 800)), ("narrow", new Vector2(452, 760)) })
             Loop(check, artifacts, name, room);
         Spot(check);
-        Full(check, artifacts);
+        Arranging(check, artifacts);
+        Endless(check);
         Large(check);
         Unsaved(check);
     }
@@ -45,8 +47,19 @@ internal static class CollectChecks
         foreach (var (id, design) in new (string, StampDesign?)[] { ("", postcard.Stamp), ("   ", postcard.Stamp), ("demo-other", null), ("demo-other", postcard.Stamp! with { Id = "" }), ("demo-other", postcard.Stamp! with { Revision = 0 }) })
             check(stamps.Collect(id, design).Outcome == CollectOutcome.Unavailable && stamps.Stamps.Count == 1, "An invalid discovery or design was collected.");
 
-        var spot = stamps.Collect(DiscoveryPreview.StampSpot.Id, DiscoveryPreview.StampSpot.Stamp);
+        var spot = stamps.Collect(DiscoveryPreview.StampSpot.Id, DiscoveryPreview.StampSpot.Stamp, new StampSource("STAMP SPOT", "Where the lanterns wait"));
         check(spot.Outcome == CollectOutcome.Collected && spot.Stamp!.Id != stamp.Id && stamps.Stamps[1] == spot.Stamp, "A second discovery's stamp is not kept in collection order.");
+        check(spot.Stamp!.Source == new StampSource("STAMP SPOT", "Where the lanterns wait"), "A stamp does not keep what it was collected from.");
+
+        // New stamps wait unplaced; placing puts them on top; moving one lifts it to the top again.
+        check(stamps.Unplaced.SequenceEqual([stamp, spot.Stamp]) && stamps.LastSheet == -1, "New stamps do not wait to be placed.");
+        check(stamps.Place(stamp, new StampPlacement(4, 0.2f, 0.3f, 0.1f)) && stamps.Place(spot.Stamp, new StampPlacement(4, 0.6f, 0.6f, 0f)), "Valid placements are refused.");
+        check(stamps.OnSheet(4).Select(entry => entry.Stamp).SequenceEqual([stamp, spot.Stamp]) && !stamps.Unplaced.Any() && stamps.LastSheet == 4, "Placed stamps are not layered in the order they were put down.");
+        check(stamps.Place(stamp, new StampPlacement(9, 1f, 0f, 7f)) && stamps.Placed[^1].Stamp == stamp && stamps.LastSheet == 9 && !stamps.OnSheet(4).Contains(new PlacedStamp(stamp, new StampPlacement(4, 0.2f, 0.3f, 0.1f))), "Moving a stamp does not move it or lift it to the top.");
+        check(MathF.Abs(stamps.PlacementOf(stamp)!.Value.Rotation - (7f - MathF.Tau)) < 1e-4f, "A turn past a full circle is not kept between -pi and pi.");
+        foreach (var invalid in new[] { new StampPlacement(-1, 0.5f, 0.5f, 0f), new StampPlacement(StampPlacement.MaximumSheet + 1, 0.5f, 0.5f, 0f), new StampPlacement(0, 1.1f, 0.5f, 0f), new StampPlacement(0, 0.5f, float.NaN, 0f) })
+            check(!stamps.Place(stamp, invalid) && stamps.PlacementOf(stamp)!.Value.Sheet == 9, "An invalid placement was accepted or moved the stamp.");
+        check(!stamps.Place(stamp with { Id = "local-demo-9999" }, new StampPlacement(0, 0.5f, 0.5f, 0f)), "A stamp the collection does not hold was placed.");
         Console.WriteLine("PASS collect-policy");
     }
 
@@ -62,27 +75,42 @@ internal static class CollectChecks
         book.OpenFirstCard();
         check(shell.SelectedDiscovery == DiscoveryPreview.Postcard, name + ": the postcard cannot be opened from its card.");
         book.Probe(() => shell.Stamps.Stamps.Count > 0 || shell.SelectedDiscovery == null);
-        check(shell.Stamps.Stamps.Count == 1 && shell.Stamps.For(DiscoveryPreview.Postcard.Id) != null, name + ": the postcard's Collect action does not collect its stamp.");
-        check(shell.SelectedDiscovery == DiscoveryPreview.Postcard, name + ": collecting leaves the postcard.");
+        var stamp = shell.Stamps.For(DiscoveryPreview.Postcard.Id);
+        check(shell.Stamps.Stamps.Count == 1 && stamp != null, name + ": the postcard's Collect action does not collect its stamp.");
+        check(stamp!.Source == new StampSource("POSTCARD", DiscoveryPreview.Postcard.Title) && stamp.Design.Creator != null, name + ": a collected stamp does not record its source and designer.");
+        check(shell.SelectedDiscovery == DiscoveryPreview.Postcard && shell.Stamps.Unplaced.Single() == stamp, name + ": collecting leaves the postcard or places the stamp by itself.");
         book.Frames(2);
         check(shell.PageOverflowX == 0, name + ": the collected postcard's text overflows sideways.");
         book.Save(artifacts, "collect-" + name + "-collected.png");
 
-        // The postcard now offers its passport page; following it lands on the collection spread.
+        // Its link opens the first stamp page with the stamp in hand; a click on the paper presses it there.
         book.Probe(() => shell.Section == BookSection.Passport || shell.SelectedDiscovery == null);
-        check(shell.Section == BookSection.Passport, name + ": the collected postcard does not lead to the passport.");
-        var collection = PassportDocumentView.SamplePages.ToList().FindIndex(page => page.Kind == PassportPageKind.CollectionLeft);
-        check(shell.VisiblePage == collection, name + ": the passport does not open on its collection page.");
-        check(shell.Stamps.Stamps.Count == 1, name + ": visiting the passport changes the collection.");
+        check(shell.Section == BookSection.Passport && shell.VisiblePage == shell.FixedPageCount, name + ": the place link does not open the first stamp page.");
+        check(shell.Desk.Carrying?.Stamp == stamp && !shell.Desk.Arrange, name + ": the new stamp is not in hand to place.");
+        book.Move(book.Spot(false, 0.5f, 0.4f));
+        book.Frames(2);
+        book.Save(artifacts, "collect-" + name + "-placing.png", keepMouse: true);
+        book.Click(book.Spot(false, 0.5f, 0.4f));
+        var placed = shell.Stamps.PlacementOf(stamp);
+        check(placed is { Sheet: 0 } && MathF.Abs(placed.Value.X - 0.5f) < 0.02f && MathF.Abs(placed.Value.Y - 0.4f) < 0.02f, name + $": the stamp is not pressed where it was clicked ({placed}).");
+        check(shell.Desk.Carrying == null && shell.VisiblePage == shell.FixedPageCount && shell.Phase == BookPhase.Open, name + ": placing a stamp also turned or closed the book.");
         book.Frames(3);
-        if (book.Layout.IsSpread) check(shell.PageOverflow == 0 && shell.PageOverflowX == 0, name + ": the collection spread overflows its paper.");
+        check(shell.PageOverflow == 0 && shell.PageOverflowX == 0, name + ": a stamp page overflows its paper.");
         book.Save(artifacts, "collect-" + name + "-passport.png");
 
-        // Back in Discover, the postcard still holds its one stamp: there is nothing left to collect.
+        // A click on the stamp opens its info: on the opposite page in a spread, over its own page on one page.
+        book.Click(book.Spot(false, 0.5f, 0.4f));
+        check(shell.Desk.Info == stamp && shell.Desk.InfoSide() == false, name + ": clicking a stamp does not open its info.");
+        book.Save(artifacts, "collect-" + name + "-info.png");
+        book.Key(ImGuiKey.Escape);
+        check(shell.Desk.Info == null && shell.Phase == BookPhase.Open, name + ": Escape does not close the stamp info first.");
+
+        // Back in Discover, the postcard holds its one stamp, and its link now shows where it is.
         book.Click(book.Tab(1));
         check(shell.SelectedDiscovery == DiscoveryPreview.Postcard, name + ": returning to Discover loses the open postcard.");
         book.Probe(() => shell.SelectedDiscovery == null || shell.Section != BookSection.Discover);
         check(shell.Stamps.Stamps.Count == 1, name + ": a collected postcard can be collected again.");
+        check(shell.Section == BookSection.Passport && shell.VisiblePage == shell.FixedPageCount && shell.Desk.Carrying == null, name + ": the link of a placed stamp does not open its page.");
         Console.WriteLine("PASS collect-" + name);
     }
 
@@ -131,64 +159,109 @@ internal static class CollectChecks
         public void Retry() => Retries++;
     }
 
-    // More stamps than the spread has places: stamp pages follow it, four places each, with one left empty.
-    private static void Full(Action<bool, string> check, string? artifacts)
+    // Arrange mode: drag a stamp across the spread, turn it by its knob and by the wheel, carry one across page
+    // turns (by key and by resting at the edge), and put one back with Escape.
+    private static void Arranging(Action<bool, string> check, string? artifacts)
     {
-        check(PassportDocumentView.StampPages(2).Count == 0 && PassportDocumentView.StampPages(3).Count == 2 && PassportDocumentView.StampPages(10).Count == 2 && PassportDocumentView.StampPages(11).Count == 4,
-            "Stamp pages are not added in pairs as the collection fills, with an empty place always left.");
-        var stamps = Seeded(5);
+        var stamps = Seeded(3);
+        stamps.Place(stamps.Stamps[0], new StampPlacement(0, 0.3f, 0.3f, 0.2f));
+        stamps.Place(stamps.Stamps[1], new StampPlacement(1, 0.4f, 0.8f, -0.3f));
         using var book = new Book(new Vector2(1200, 800), stamps);
-        check(book.Shell.PageCount == PassportDocumentView.SamplePages.Count + 2, "Five stamps do not add one stamp spread.");
+        var shell = book.Shell;
         book.Open();
-        book.Key(ImGuiKey.PageDown);
-        book.Key(ImGuiKey.PageDown);
-        book.Frames(4);
-        check(book.Shell.VisiblePage == 4, "The collection spread cannot be reached by turning pages.");
-        check(book.Shell.PageOverflow == 0 && book.Shell.PageOverflowX == 0, "A full collection spread overflows its paper.");
-        book.Save(artifacts, "collect-full-passport.png");
-        book.Key(ImGuiKey.PageDown);
-        book.Frames(4);
-        check(book.Shell.VisiblePage == 6, "The stamp page does not follow the collection spread.");
-        check(book.Shell.PageOverflow == 0 && book.Shell.PageOverflowX == 0, "A stamp page overflows its paper.");
-        book.Save(artifacts, "collect-stamp-page.png");
-        book.Key(ImGuiKey.PageDown);
-        check(book.Shell.VisiblePage == 6, "Turning forward escapes the last stamp spread.");
+        book.Click(book.Tab(0));
+        book.Key(ImGuiKey.End);
+        check(shell.VisiblePage == shell.FixedPageCount, "End does not reach the last page with a stamp.");
+        var first = stamps.Stamps[0];
+        var second = stamps.Stamps[1];
 
-        // A stamp collected once the spread is full lands on the next stamp page, and the link opens it.
-        var content = BookShellContent.Sample with { Discoveries = [DiscoveryPreview.Postcard] };
-        using var fourth = new Book(new Vector2(1200, 800), Seeded(3), content);
-        fourth.Open();
-        fourth.Click(fourth.Tab(1));
-        fourth.OpenFirstCard();
-        fourth.Probe(() => fourth.Shell.Stamps.Stamps.Count > 3);
-        check(fourth.Shell.PageCount == PassportDocumentView.SamplePages.Count + 2, "A fourth stamp does not keep its stamp spread.");
-        fourth.Probe(() => fourth.Shell.Section == BookSection.Passport || fourth.Shell.SelectedDiscovery == null);
-        check(fourth.Shell.Section == BookSection.Passport && fourth.Shell.VisiblePage == 6, "The passport link does not open the page holding the new stamp.");
-        fourth.Save(artifacts, "collect-fourth.png");
-        Console.WriteLine("PASS collect-full");
+        // Outside Arrange mode a drag on a stamp moves nothing; it opens nothing either.
+        book.Drag(book.Spot(false, 0.3f, 0.3f), book.Spot(true, 0.5f, 0.5f));
+        check(stamps.PlacementOf(first)!.Value.Sheet == 0 && shell.Desk.Info == null, "A stamp moved, or opened its info, from a drag without Arrange mode.");
+
+        // The footer offers the stamp waiting to be placed before Arrange.
+        check(stamps.Unplaced.Count() == 1, "The fixture does not leave one stamp waiting.");
+        book.Click(book.StampControl());
+        check(shell.Desk.Carrying?.Stamp == stamps.Stamps[2] && shell.VisiblePage == shell.FixedPageCount + 2, "Place stamp does not pick up the waiting stamp on the page after the last stamp.");
+        book.Move(book.Spot(false, 0.2f, 0.8f));
+        book.Wheel(-3);
+        book.Click(book.Spot(false, 0.2f, 0.8f));
+        var third = stamps.PlacementOf(stamps.Stamps[2]);
+        book.Key(ImGuiKey.PageUp);
+        check(third is { Sheet: 2 } && shell.VisiblePage == shell.FixedPageCount && MathF.Abs(third.Value.Rotation - (StampArt.Tilt(stamps.Stamps[2].Id) + 3 * 5f * MathF.PI / 180f)) < 1e-3f, $"The wheel does not turn a carried stamp ({third}).");
+
+        book.Click(book.StampControl());
+        check(shell.Desk.Arrange, "The Arrange control does not start arranging.");
+        book.Save(artifacts, "collect-arrange.png");
+        // Drag the first stamp from the left page to the right one.
+        book.Drag(book.Spot(false, 0.3f, 0.3f), book.Spot(true, 0.8f, 0.15f));
+        var moved = stamps.PlacementOf(first)!.Value;
+        check(moved.Sheet == 1 && MathF.Abs(moved.X - 0.8f) < 0.02f && MathF.Abs(moved.Y - 0.15f) < 0.02f && MathF.Abs(moved.Rotation - 0.2f) < 1e-4f && stamps.Placed[^1].Stamp == first,
+            $"Dragging a stamp across the spread does not move it there on top, keeping its turn ({moved}).");
+
+        // Turn the second stamp by dragging its knob a quarter turn round.
+        var center = book.Spot(true, 0.4f, 0.8f);
+        var diameter = book.Page(true).Size.X * BookShellStamps.Size;
+        var (sin, cos) = MathF.SinCos(-0.3f);
+        var knob = center + new Vector2(sin, -cos) * diameter * 0.62f;
+        book.Drag(knob, center + new Vector2(diameter, 0));
+        check(MathF.Abs(stamps.PlacementOf(second)!.Value.Rotation - MathF.PI / 2) < 0.05f && stamps.PlacementOf(second)!.Value.Sheet == 1, $"Dragging a knob does not turn its stamp ({stamps.PlacementOf(second)}).");
+
+        // Carry: click to pick up, Page Down twice, then put it down on a later page.
+        book.Click(book.Spot(true, 0.8f, 0.15f));
+        check(shell.Desk.Carrying?.Stamp == first, "A click in Arrange mode does not pick a stamp up.");
+        book.Key(ImGuiKey.PageDown);
+        book.Key(ImGuiKey.PageDown);
+        check(shell.VisiblePage == shell.FixedPageCount + 4 && shell.Desk.Carrying?.Stamp == first, "Turning pages drops the carried stamp.");
+        book.Move(book.Spot(false, 0.5f, 0.5f));
+        book.Save(artifacts, "collect-carry.png", keepMouse: true);
+        book.Click(book.Spot(false, 0.5f, 0.5f));
+        check(stamps.PlacementOf(first)!.Value.Sheet == 4, "A carried stamp is not put down on the page it was carried to.");
+
+        // Resting at the outer edge with a stamp in hand turns the page.
+        book.Click(book.Spot(false, 0.5f, 0.5f));
+        var edge = book.Layout.Book;
+        book.Move(new Vector2(edge.Max.X - edge.Size.X * 0.02f, edge.Position.Y + edge.Size.Y / 2));
+        book.Frames(45);
+        check(shell.VisiblePage == shell.FixedPageCount + 6 && shell.Desk.Carrying?.Stamp == first, "Resting at the edge with a stamp in hand does not turn the page.");
+        // Escape puts it back where it was, on page 4, and keeps the passport open.
+        book.Key(ImGuiKey.Escape);
+        check(shell.Desk.Carrying == null && stamps.PlacementOf(first)!.Value.Sheet == 4 && shell.Phase == BookPhase.Open, "Escape does not put a carried stamp back.");
+        book.Click(book.StampControl());
+        check(!shell.Desk.Arrange, "Done does not end Arrange mode.");
+        Console.WriteLine("PASS collect-arrange");
     }
 
-    // A representative larger collection: the book grows to fit and End reaches its last page, which costs
-    // no more to draw than the first stamp page, since only the visible pages are drawn.
+    // Stamp pages never run out: turning on keeps finding blank pages, and none of them is stored.
+    private static void Endless(Action<bool, string> check)
+    {
+        using var book = new Book(new Vector2(1200, 800), new StampCollection(() => Issued));
+        book.Open();
+        for (var turn = 0; turn < 32; turn++) book.Key(ImGuiKey.PageDown);
+        check(book.Shell.VisiblePage == 64, $"Turning stops at page {book.Shell.VisiblePage + 1} instead of carrying on.");
+        check(book.Shell.PageOverflow == 0 && book.Shell.Stamps.Placed.Count == 0, "Blank stamp pages overflow or create placements.");
+        Console.WriteLine("PASS collect-endless");
+    }
+
+    // A representative larger collection: 500 stamps spread over 1,500 pages. End reaches the last, and it
+    // costs no more to draw than the first because only the pages on screen are drawn.
     private static void Large(Action<bool, string> check)
     {
         const int Count = 500;
-        using var book = new Book(new Vector2(1200, 800), Seeded(Count));
-        var expected = PassportDocumentView.SamplePages.Count + PassportDocumentView.StampPages(Count).Count;
-        check(expected == 132, "500 stamps do not need 63 stamp spreads after the collection spread.");
-        check(book.Shell.PageCount == expected, $"{Count} stamps give {book.Shell.PageCount} pages, not {expected}.");
+        var stamps = Seeded(Count);
+        for (var index = 0; index < Count; index++) stamps.Place(stamps.Stamps[index], new StampPlacement(index * 3, index % 3 / 2f, index % 5 / 4f, index * 0.2f));
+        using var book = new Book(new Vector2(1200, 800), stamps);
         book.Open();
-        for (var turn = 0; turn < 3; turn++) book.Key(ImGuiKey.PageDown);
+        book.Key(ImGuiKey.PageDown);
+        book.Key(ImGuiKey.PageDown);
         var first = book.Measure();
         book.Key(ImGuiKey.End);
-        book.Frames(4);
-        check(book.Shell.VisiblePage == expected - 1 - ((expected - 1) % 2), "End does not reach the last stamp spread.");
-        check(book.Shell.PageOverflow == 0 && book.Shell.PageOverflowX == 0, "The last stamp page overflows its paper.");
-        var last = book.Measure();
-        check(last < first * 3 + 1, $"The last of {expected} pages costs {last:0.00} ms against {first:0.00} ms for the first stamp page.");
-        book.Key(ImGuiKey.PageUp);
-        check(book.Shell.VisiblePage == expected - 3 - ((expected - 1) % 2), "Page Up does not turn back from the last stamp spread.");
-        Console.WriteLine($"INFO collect-large {Count} stamps on {expected} pages: first stamp spread {first:0.00} ms, last {last:0.00} ms per frame (headless CPU)");
+        var last = book.Shell.FixedPageCount + (Count - 1) * 3;
+        check(book.Shell.VisiblePage == last - last % 2, $"End reaches page {book.Shell.VisiblePage + 1}, not the last stamp's.");
+        check(book.Shell.PageOverflow == 0 && book.Shell.PageOverflowX == 0, "A stamp page overflows its paper.");
+        var end = book.Measure();
+        check(end < first * 3 + 1, $"The page of the last of {Count} stamps costs {end:0.00} ms against {first:0.00} ms for the first.");
+        Console.WriteLine($"INFO collect-large {Count} stamps over {(Count - 1) * 3 + 1} pages: first stamp spread {first:0.00} ms, last {end:0.00} ms per frame (headless CPU)");
         Console.WriteLine("PASS collect-large");
     }
 
@@ -196,7 +269,7 @@ internal static class CollectChecks
     {
         var stamps = new StampCollection(() => Issued);
         for (var index = 0; index < count; index++)
-            stamps.Collect($"demo-{index}", new StampDesign($"demo-design-{index}", 1, index == 2 ? "An unusually long stamp name for a quiet evening beyond the last lantern" : $"Demo stamp {index + 1}", index % 3, StampProvenance.LocalDemo));
+            stamps.Collect($"demo-{index}", new StampDesign($"demo-design-{index}", 1, $"Demo stamp {index + 1}", index % 3, StampProvenance.LocalDemo, "Wanderveil / Demo curator"), new StampSource("POSTCARD", $"Demo discovery {index + 1}"));
         return stamps;
     }
 
@@ -218,7 +291,37 @@ internal static class CollectChecks
             Frames(3);
         }
 
-        internal BookShellLayout Layout => BookShellLayout.Create(root, context, 0);
+        internal BookShellLayout Layout => BookShellLayout.Create(root, context, Shell.VisiblePage);
+
+        // A page's region on screen: the right page of a spread, or its left (or only) page.
+        internal UiRect Page(bool right) => right && Layout.IsSpread ? Layout.RightPage : Layout.LeftPage;
+
+        // Where a stamp centred at (x, y) of a page sits on screen, as the stamp layer places it.
+        internal Vector2 Spot(bool right, float x, float y)
+        {
+            var page = Page(right);
+            var diameter = page.Size.X * BookShellStamps.Size;
+            return page.Position + new Vector2(diameter / 2) + new Vector2(x, y) * (page.Size - new Vector2(diameter));
+        }
+
+        // The stamp control in the footer, just before the size and close marks.
+        internal Vector2 StampControl()
+        {
+            var tools = Layout.Tool(0, context);
+            return new Vector2(tools.Position.X - BookShellLayout.Gap(context) - 12, tools.Position.Y + tools.Size.Y / 2);
+        }
+
+        internal void Move(Vector2 point) { ImGui.GetIO().AddMousePosEvent(point.X, point.Y); Frames(2); }
+
+        internal void Wheel(float notches) { ImGui.GetIO().AddMouseWheelEvent(0, notches); Frames(2); }
+
+        internal void Drag(Vector2 from, Vector2 to)
+        {
+            Move(from);
+            ImGui.GetIO().AddMouseButtonEvent(0, true); Frame();
+            for (var step = 1; step <= 8; step++) { var point = Vector2.Lerp(from, to, step / 8f); ImGui.GetIO().AddMousePosEvent(point.X, point.Y); Frame(); }
+            ImGui.GetIO().AddMouseButtonEvent(0, false); Frames(3);
+        }
         // Where discoveries are read: the right page of a spread, or the single page.
         private UiRect Reading => Layout.IsSpread ? Layout.RightPage : Layout.LeftPage;
 
@@ -277,10 +380,11 @@ internal static class CollectChecks
             return y + 6;
         }
 
-        internal void Save(string? artifacts, string name)
+        // Moves the mouse away first, unless the picture needs it where it is (a stamp in hand).
+        internal void Save(string? artifacts, string name, bool keepMouse = false)
         {
             if (artifacts == null) return;
-            ImGui.GetIO().AddMousePosEvent(-100, -100);
+            if (!keepMouse) ImGui.GetIO().AddMousePosEvent(-100, -100);
             Frames(2);
             SoftwarePreview.Save(Path.Combine(artifacts, name), host);
         }
