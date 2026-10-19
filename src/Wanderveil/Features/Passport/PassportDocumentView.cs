@@ -185,6 +185,7 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportProfile h
         flow.Gap(12);
         flow.Text(own ? editor != null ? "DRAG TO MOVE / SCROLL TO ZOOM" : "HOLDER'S PORTRAIT" : hasPlaceholder ? "Demo portrait placeholder" : "Offline portrait preview", TextRole.Caption, true);
         editor?.PictureLinks(ref flow);
+        if (own) editor?.FrameChoice(ref flow);
         flow.Gap(24);
         // A long name signs smaller, as a hand would to fit the line; past half size it wraps instead of clipping.
         var type = context with { HeadingFont = context.SignatureFont, FontSize = context.FontSize * 1.5f };
@@ -218,13 +219,13 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportProfile h
         {
             var width = MathF.Min(area.Size.X, area.Size.Y * PortraitAspect);
             var size = new Vector2(width, width / PortraitAspect);
-            var frame = new UiRect(area.Position + (area.Size - size) / 2, size);
-            var (uv0, uv1) = crop.Window(image.Width / (float)Math.Max(1, image.Height), PortraitAspect);
-            var list = ImGui.GetWindowDrawList();
-            var mount = new Vector2(4f * context.Scale);
-            BookSurface.Rect(list, frame.Position - mount, frame.Max + mount, ImGui.GetColorU32(UiTheme.Paper));
-            BookSurface.Image(list, image.Texture, frame.Position, frame.Max, uv0, uv1);
-            editor?.Crop(frame, image);
+            var outer = new UiRect(area.Position + (area.Size - size) / 2, size);
+            var style = holder.Identity.Frame;
+            // The picture spans the frame's opening; a deckled picture runs to the frame's edge, torn there.
+            var shows = style == PictureFrame.Deckled ? outer : PictureFrames.Inner(outer, style, context.Scale);
+            var (uv0, uv1) = crop.Window(image.Width / (float)Math.Max(1, image.Height), shows.Size.X / shows.Size.Y);
+            PictureFrames.Draw(ImGui.GetWindowDrawList(), outer, style, image, uv0, uv1, context.Scale);
+            editor?.Crop(shows, image);
             return true;
         }
         if (assets.TryGet(BookAsset.Portrait, out _)) BookSurface.Portrait(area, assets, context);

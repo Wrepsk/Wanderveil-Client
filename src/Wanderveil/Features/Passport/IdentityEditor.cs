@@ -104,6 +104,52 @@ internal sealed class IdentityEditor
         flow.Text(status, TextRole.Caption, true);
     }
 
+    // The frame styles as a row of words, the chosen one in ink and underlined; it wraps when the page is narrow.
+    internal void FrameChoice(ref PageFlow flow)
+    {
+        var context = flow.Context;
+        flow.Gap(8);
+        flow.Text("FRAME", TextRole.Caption, true);
+        flow.Gap(4);
+        var gap = 14 * context.Scale;
+        var styles = Enum.GetValues<PictureFrame>();
+        var sizes = Array.ConvertAll(styles, style => UiTypography.Measure(Label(style), TextRole.Body, context, float.MaxValue, false) + new Vector2(4, 6) * context.Scale);
+        var rows = 1;
+        var x = 0f;
+        foreach (var size in sizes) { if (x > 0 && x + size.X > flow.Width) { rows++; x = 0; } x += size.X + gap; }
+        var line = sizes[0].Y;
+        var area = flow.Reserve(rows * line);
+        if (!flow.IsDrawing) return;
+        var list = ImGui.GetWindowDrawList();
+        var at = area.Position;
+        for (var index = 0; index < styles.Length; index++)
+        {
+            var size = sizes[index];
+            if (at.X > area.Position.X && at.X + size.X > area.Max.X) at = new Vector2(area.Position.X, at.Y + line);
+            var chosen = profile.Identity.Frame == styles[index];
+            ImGui.SetCursorScreenPos(at);
+            ImGui.PushID("Frame " + styles[index]);
+            if (ImGui.InvisibleButton("##Frame", size)) profile.Update(profile.Identity with { Frame = styles[index] });
+            var hovered = ImGui.IsItemHovered();
+            ImGui.PopID();
+            if (hovered) { ImGui.SetMouseCursor(ImGuiMouseCursor.Hand); ImGui.SetTooltip(Hint(styles[index])); }
+            var ink = chosen || hovered ? UiTheme.Ink : UiTheme.MutedInk;
+            UiTypography.Draw(list, at + new Vector2(2, 1) * context.Scale, Label(styles[index]), TextRole.Body, context, size.X, ink, false);
+            if (chosen) BookSurface.Line(list, at + new Vector2(2 * context.Scale, size.Y - 3 * context.Scale), at + new Vector2(size.X - 2 * context.Scale, size.Y - 3 * context.Scale), ImGui.GetColorU32(UiTheme.Ink), MathF.Max(1, context.Scale * 1.5f));
+            at += new Vector2(size.X + gap, 0);
+        }
+
+        static string Label(PictureFrame style) => style.ToString();
+        static string Hint(PictureFrame style) => style switch
+        {
+            PictureFrame.Printed => "An ink line around a light mount, like a printed passport photo",
+            PictureFrame.Corners => "Held by black photo corners, like an album",
+            PictureFrame.Embossed => "Set in a mount pressed into the paper",
+            PictureFrame.Deckled => "The picture's edge torn rough",
+            _ => "The picture as it is",
+        };
+    }
+
     internal void CoverLinks(ref PageFlow flow)
     {
         var identity = profile.Identity;
@@ -120,7 +166,8 @@ internal sealed class IdentityEditor
         ImGui.SetCursorScreenPos(frame.Position);
         ImGui.InvisibleButton("Portrait placement", frame.Size);
         var next = crop;
-        var (min, max) = crop.Window(aspect, PassportDocumentView.PortraitAspect);
+        var frameAspect = frame.Size.X / frame.Size.Y;
+        var (min, max) = crop.Window(aspect, frameAspect);
         var span = max - min;
         var center = (min + max) / 2;
         if (ImGui.IsItemActive() && ImGui.IsMouseDragging(ImGuiMouseButton.Left, 0f))
@@ -136,7 +183,7 @@ internal sealed class IdentityEditor
             var list = ImGui.GetWindowDrawList();
             list.AddRect(frame.Position, frame.Max, ImGui.GetColorU32(UiTheme.Gold), 0, ImDrawFlags.None, MathF.Max(1, frame.Size.X / 160));
         }
-        if (next != crop) profile.Update(profile.Identity with { Portrait = next.Clamped(aspect, PassportDocumentView.PortraitAspect) });
+        if (next != crop) profile.Update(profile.Identity with { Portrait = next.Clamped(aspect, frameAspect) });
     }
 
     // A printed link at the flow's cursor, taking its height in the flow.

@@ -70,7 +70,7 @@ internal static class IdentityChecks
 
     private static void Storage(Action<bool, string> check)
     {
-        var full = PassportIdentity.Sample with { Signature = "A. Vale", CoverLine = "Ari Vale", FavoriteJob = "Bard + Botanist", Portrait = new PortraitCrop(0.4f, 0.6f, 1.5f) };
+        var full = PassportIdentity.Sample with { Signature = "A. Vale", CoverLine = "Ari Vale", FavoriteJob = "Bard + Botanist", Portrait = new PortraitCrop(0.4f, 0.6f, 1.5f), Frame = PictureFrame.Deckled };
         var parsed = PassportStore.Parse(PassportStore.Serialize(full));
         check(parsed == full.Normalize(), "The passport file does not round-trip an identity.");
         check(PassportStore.Serialize(full).Contains("Bard + Botanist", StringComparison.Ordinal), "Saved names are escaped instead of readable.");
@@ -79,6 +79,9 @@ internal static class IdentityChecks
         Throws<FormatException>(check, "{\"format\":\"wanderveil.passport\",\"version\":1,\"number\":\"EZ\",\"name\":7}", "A name that is not text");
         Throws<FormatException>(check, "{\"format\":\"wanderveil.passport\",\"version\":1,\"number\":\"EZ\",\"portrait\":{\"x\":3,\"y\":0,\"zoom\":1}}", "A portrait outside its frame");
         Throws<NotSupportedException>(check, "{\"format\":\"wanderveil.passport\",\"version\":2,\"number\":\"EZ\"}", "A newer version");
+        foreach (var unknown in new[] { "sparkly", "3", "" })
+            check(PassportStore.Parse("{\"format\":\"wanderveil.passport\",\"version\":1,\"number\":\"EZ\",\"frame\":\"" + unknown + "\"}").Frame == PictureFrame.Printed, $"An unknown frame '{unknown}' is not read as the printed one.");
+        check(PassportStore.Parse("{\"format\":\"wanderveil.passport\",\"version\":1,\"number\":\"EZ\"}").Frame == PictureFrame.Printed, "A passport without a frame is not printed.");
         var lenient = PassportStore.Parse("{\"format\":\"wanderveil.passport\",\"version\":1,\"number\":\"EZ 1\",\"bio\":\"" + new string('x', 900) + "\"}");
         check(lenient.Bio.Length == 400 && lenient.Name == "", "A saved identity is not held to the typing rules.");
 
@@ -194,7 +197,7 @@ internal static class IdentityChecks
     {
         var profile = new PassportProfile(PassportIdentity.Sample);
         FakePortrait? picture = null;
-        using var book = new CollectChecks.Book(new Vector2(1200, 820), new StampCollection(), identity: profile, portrait: textures => picture = new FakePortrait(profile, textures.Study("crest")));
+        using var book = new CollectChecks.Book(new Vector2(1200, 820), new StampCollection(), identity: profile, portrait: textures => picture = new FakePortrait(profile, Sketch(textures)));
         book.Open();
         book.Key(ImGuiKey.PageDown);
         book.Click(book.StampControl());
@@ -211,8 +214,23 @@ internal static class IdentityChecks
         check(profile.Identity.Portrait is { Zoom: > 1.2f }, "Scrolling over the picture did not zoom it.");
         check(book.Shell.EditingIdentity && book.Shell.VisiblePage == 2, "Moving the picture turned or moved the book.");
         book.Save(artifacts, "identity-picture.bmp");
+        // The frame row: starting from None, clicking the first word (Printed) chooses it. Probed upward from
+        // the signature, so the picture links above the row are never reached.
+        profile.Update(profile.Identity with { Frame = PictureFrame.None });
+        book.Frames(2);
+        for (var y = page.Size.Y * 0.8f; profile.Identity.Frame == PictureFrame.None && y > page.Size.Y * 0.5f; y -= 4) book.Click(page.Position + new Vector2(30, y));
+        check(profile.Identity.Frame == PictureFrame.Printed && profile.Identity.Portrait != null, "Clicking a frame did not choose it, or reached the picture links.");
+        check(book.Shell.PageOverflow == 0 && book.Shell.PageOverflowX == 0, "The frame row overflows the page.");
         book.Key(ImGuiKey.Escape);
         book.Save(artifacts, "identity-picture-done.bmp");
+        // Every frame keeps the picture inside its area and draws without overflow.
+        foreach (var style in Enum.GetValues<PictureFrame>())
+        {
+            profile.Update(profile.Identity with { Frame = style });
+            book.Frames(3);
+            check(book.Shell.PageOverflow == 0, $"The {style} frame makes the page overflow.");
+            book.Save(artifacts, $"identity-frame-{style.ToString().ToLowerInvariant()}.bmp");
+        }
         Console.WriteLine("PASS identity-picture");
     }
 
@@ -250,6 +268,28 @@ internal static class IdentityChecks
             if (line.Length > 20) book.Save(artifacts, "cover-line-long.bmp");
         }
         Console.WriteLine("PASS identity-cover");
+    }
+
+    // A square stand-in for a holder's drawing: red line work on white running out to the edges, the case
+    // where a bare picture meets the paper most harshly.
+    private static BookImage Sketch(PreviewTextures textures)
+    {
+        const int Size = 512;
+        var pixels = new byte[Size * Size * 4];
+        Array.Fill(pixels, (byte)255);
+        for (var y = 0; y < Size; y++)
+            for (var x = 0; x < Size; x++)
+            {
+                var dx = x - Size / 2f;
+                var dy = y - Size * 0.42f;
+                var ring = MathF.Abs(MathF.Sqrt(dx * dx + dy * dy) - 120) < 3 || MathF.Abs(MathF.Sqrt(dx * dx + (y - Size * 1.1f) * (y - Size * 1.1f)) - 260) < 3;
+                var hatch = (x + y) % 23 < 2 && y > Size * 0.7f;
+                if (!ring && !hatch) continue;
+                var at = (y * Size + x) * 4;
+                pixels[at + 1] = pixels[at + 2] = 30;
+            }
+        textures.Register(9000, Size, Size, pixels);
+        return new BookImage(new ImTextureID(9000), Size, Size);
     }
 
     private static DateTimeOffset Clock() => new(2026, 10, 20, 9, 0, 0, TimeSpan.FromHours(2));

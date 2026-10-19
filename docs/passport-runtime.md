@@ -57,7 +57,7 @@ The identity spread is yours to fill in. A new passport is issued the first time
 
 - **Fill in from my character** copies the logged-in character's name, home world, and data center (read from Dalamud's player state on the game's thread) once. They are then yours to change. Nothing on the page is treated as verified: the passport is self-reported. Without a logged-in character, nothing changes and the page says so.
 - **Signature.** The signature line signs in the handwriting face (Caveat). Left empty, your name signs, as before. Typing a signature replaces it.
-- **Picture.** **Choose a picture** opens Dalamud's file picker for a PNG, JPEG, WebP, or BMP up to 16 MB. The picture is read, decoded, and copied beside the passport on a background task, so the game never waits on it. A picture taller than 1200 pixels is scaled down once for display. It then fills the 3:4 portrait frame. Drag it to move it, and scroll over it to zoom (up to 4×); it always covers the frame. **Remove picture** takes it out and deletes the copy, and the placeholder returns. A file that is too large or not a picture says so under the frame.
+- **Picture.** **Choose a picture** opens Dalamud's file picker for a PNG, JPEG, WebP, or BMP up to 16 MB. The picture is read, decoded, and copied beside the passport on a background task, so the game never waits on it. A picture taller than 1200 pixels is scaled down once for display. It then fills the 3:4 portrait frame. Drag it to move it, and scroll over it to zoom (up to 4×); it always covers the frame. **Remove picture** takes it out and deletes the copy, and the placeholder returns. A file that is too large or not a picture says so under the frame. So that a picture never sits on the paper as a bare rectangle, it is set in a frame, chosen in Edit mode from the row of words under the picture (hover one for what it is): **Printed** (the default: an ink keyline around a slightly lighter mount, with a soft shadow, like a printed passport photo), **Corners** (black album photo corners), **Embossed** (a mount pressed into the paper, no ink), **Deckled** (the picture's own edge torn rough), or **None**. The frame stays within the portrait area, and the picture is dragged within the frame's opening. All of it is drawn geometry, so it turns with the page. See [the five frames](previews/passport/portrait-frames.png).
 - **On the cover.** An optional line, up to 28 characters, is embossed in the cover's foil between *The Black Shroud* and the maker's mark, set smaller when long so it stays inside the vine border. **Use my name** fills it with your name; left empty, the cover is as printed.
 
 Previews: [a new passport](previews/passport/identity-blank.png), [editing](previews/passport/identity-edit.png), [filled in from a character](previews/passport/identity-filled.png), [a placed picture](previews/passport/identity-picture.png), [a name on the cover](previews/passport/cover-line.png). The picker, picture loading, and character reading need the game and are not covered by the headless checks; the checks use stand-ins for them.
@@ -144,11 +144,12 @@ The identity is saved beside the stamps as `passport-local.json`. Your picture, 
   "bio": "",
   "signature": "",
   "coverLine": "",
-  "portrait": { "x": 0.5, "y": 0.5, "zoom": 1 }
+  "portrait": { "x": 0.5, "y": 0.5, "zoom": 1 },
+  "frame": "printed"
 }
 ```
 
-`portrait` is where the picture sits: the picture's point at the frame's centre (0 to 1 across and down) and its zoom past just covering the frame (1 to 4). Without it, the placeholder shows. Text read back is held to the same rules as typing, so an over-long field is cut to its limit.
+`portrait` is where the picture sits: the picture's point at the frame's centre (0 to 1 across and down) and its zoom past just covering the frame (1 to 4). Without it, the placeholder shows. `frame` is one of `printed`, `corners`, `embossed`, `deckled`, or `none`; a missing or unknown frame (from a later version, say) reads as `printed` rather than making the file unreadable. Text read back is held to the same rules as typing, so an over-long field is cut to its limit.
 
 Both files are saved and recovered the same way as the stamps (`SafeFile`): written to a temporary file, flushed, swapped in with the previous save kept as `.bak`, unreadable files kept aside as `.unreadable-<time>`, and newer or locked files left untouched with saving off. A newly issued passport is saved straight away, so its number stays the same. A picture is written only after it decodes, so a saved picture can always be shown. Settings shows a **Passport** note only when something needs saying (recovered, unreadable, newer, locked, or a failed save with a retry).
 

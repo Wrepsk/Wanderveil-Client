@@ -20,6 +20,7 @@ Status: implemented foundations for static Passport and Discover previews, 18 Oc
 | `Features/Passport/PassportLayout.cs` | Responsive page width, spacing, and padding |
 | `PassportView.cs` | Earlier identity/notes composition and procedural portrait placeholder (gallery and checks) |
 | `PassportIdentity.cs` | The holder's identity (self-reported fields, number, issue date, portrait placement) with field limits and normalization, `PortraitCrop`, and the `PassportProfile` the pages edit |
+| `PictureFrames.cs` | The five frames for the holder's picture (printed, corners, embossed, deckled, none), as draw-list geometry |
 | `IdentityEditor.cs` | Writing on the identity pages in place: soft-wrapped fields over a faint inset, picture placement, the character fill, and the cover line |
 | `PassportServices.cs` | What the host provides the identity pages (`IPassportPortrait`, `ICharacterSource`) and the sentences about the saved identity |
 | `Features/Discover/DiscoveryLayout.cs` | Text-size-aware two-column/stacked card and detail layouts |

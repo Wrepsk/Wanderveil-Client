@@ -9,7 +9,7 @@ namespace Wanderveil.Features.Passport;
 // Number is the passport number, printed on the identity page and engraved on every stamp page; it is given
 // once, when the passport is first issued, and never edited. An empty Signature signs with the name; an empty
 // CoverLine leaves the cover as the edition printed it. Portrait is where the holder's own picture sits in its
-// frame, or null for the edition's placeholder.
+// frame, or null for the edition's placeholder; Frame is how that picture is set on the page.
 internal sealed record PassportIdentity(string Name, string HomeWorld, string FavoriteJob, string Bio, string Motto, string Number = PassportIdentity.SampleNumber)
 {
     internal const string SampleNumber = "EZ 0042 1187";
@@ -19,6 +19,8 @@ internal sealed record PassportIdentity(string Name, string HomeWorld, string Fa
     internal string CoverLine { get; init; } = "";
     internal DateOnly? Issued { get; init; }
     internal PortraitCrop? Portrait { get; init; }
+    // How the holder's own picture is set on the page.
+    internal PictureFrame Frame { get; init; }
 
     internal string SignedName => Signature.Length > 0 ? Signature : Name;
 
@@ -75,7 +77,7 @@ internal sealed record PassportIdentity(string Name, string HomeWorld, string Fa
     // runs of spaces one space), trimmed, within its limit; a portrait placement inside its frame.
     internal PassportIdentity Normalize()
     {
-        var result = this with { Number = Clean(Number, 16), Portrait = Portrait?.Normalize() };
+        var result = this with { Number = Clean(Number, 16), Portrait = Portrait?.Normalize(), Frame = Enum.IsDefined(Frame) ? Frame : PictureFrame.Printed };
         foreach (var field in Enum.GetValues<IdentityField>()) result = result.With(field, Clean(result[field], Limit(field)));
         return result;
     }
@@ -113,6 +115,11 @@ internal sealed record PassportIdentity(string Name, string HomeWorld, string Fa
         return builder.ToString(0, Length);
     }
 }
+
+// Printed: an ink keyline around a lighter mount, with a soft shadow, as a printed passport photo.
+// Corners: dark paper photo corners holding the picture. Embossed: a mount pressed into the paper, no ink.
+// Deckled: the picture's own edge torn rough. None: the picture as it is.
+internal enum PictureFrame { Printed, Corners, Embossed, Deckled, None }
 
 internal enum IdentityField { Name, HomeWorld, DataCenter, FavoriteJob, FreeCompany, Motto, Bio, Signature, CoverLine }
 

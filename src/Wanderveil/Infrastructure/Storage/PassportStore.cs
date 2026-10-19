@@ -67,6 +67,7 @@ internal sealed class PassportStore(string directory)
         if (identity.Issued is { } issued) file["issued"] = issued.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         foreach (var field in Enum.GetValues<IdentityField>()) file[Key(field)] = identity[field];
         if (identity.Portrait is { } crop) file["portrait"] = new JsonObject { ["x"] = crop.X, ["y"] = crop.Y, ["zoom"] = crop.Zoom };
+        file["frame"] = JsonNamingPolicy.CamelCase.ConvertName(identity.Frame.ToString());
         // Readable as written (names stay as typed); the file is never embedded in HTML.
         return file.ToJsonString(new JsonSerializerOptions { WriteIndented = true, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
     }
@@ -97,6 +98,8 @@ internal sealed class PassportStore(string directory)
             identity = identity with { Portrait = crop.IsValid ? crop : throw new FormatException("A portrait sits inside its frame.") };
         }
         else if (file["portrait"] != null) throw new FormatException("A passport's portrait is a JSON object.");
+        // A frame this version does not draw falls back to the printed one rather than losing the passport.
+        if (Text(file, "frame") is { } frame) identity = identity with { Frame = Enum.TryParse<PictureFrame>(frame, true, out var style) && Enum.IsDefined(style) && !char.IsDigit(frame[0]) ? style : PictureFrame.Printed };
         return identity.Normalize();
     }
 
