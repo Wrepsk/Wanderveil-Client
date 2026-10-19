@@ -10,7 +10,7 @@ dotnet run --project tests/Wanderveil.UiChecks -c Release -p:Platform=x64 --no-b
 
 The final directory argument is optional. With it, the test-only CPU rasterizer writes BMP previews, three Passport target PNGs, and complete-shell PNGs under the ignored artifact directory. Shell previews use production window flags/preparation against an authored backdrop to expose transparency and the actual host composition. Native libraries/test code never enter the plugin package. Material checks use Windows Desktop drawing APIs to decode/export PNGs and local Segoe UI as a body-font surrogate; that font is not redistributed. Assets/heading fonts come from the same files embedded in the plugin.
 
-All checks pass locally: 4251 in Debug and 4377 in Release when writing previews (preview capture adds frames that are themselves checked). Coverage includes:
+All checks pass locally: 4252 in Debug and 4378 in Release when writing previews (preview capture adds frames that are themselves checked). Coverage includes:
 
 - Page geometry across 45 width/scale/text-size combinations, invalid geometry, and spread/stack transitions.
 - Paper body/caption and button-state label contrast.
@@ -29,6 +29,7 @@ All checks pass locally: 4251 in Debug and 4377 in Release when writing previews
 - Echoes: the sample dossier opens on its first chapter and sealed chapters reveal no objectives, invalid dossiers are refused, the real shell's Echoes tab fits its spread at wide/narrow/enlarged-text sizes, clicking its pages acts on nothing, and the no-dossier fallback draws readable text.
 - States across the real shell (cover, every passport spread, Discover, Echoes, Studio, and a Studio draft): empty content, missing artwork (including the cover swing and a page turn on plain paper), long German text at wide and narrow sizes, and Japanese text with a local Yu Gothic stand-in for the host font. Each frame checks that the host stays still and no page overflows sideways; Japanese checks that every character resolves to a font with its glyph.
 - Input ownership: with the same per-frame flags as the plugin window, the margins beside the closed cover and beside the open book's tabs let the mouse through (ImGui does not capture it and clicks do nothing), the cover, tabs, and pages capture it, a drag keeps it past the book's edge until release, and an active Studio field asks for text input until Escape hands it back.
+- Layout stability: at book sizes from 640 to 1600 px wide in 6 px steps, filled postcard and stamp spot drafts, Echoes, and Discover settle within a few frames; no page alternates between overflowing and fitting (it did at two sizes before the fix).
 - Actual built-plugin manifest resource presence and hash equality for the selected Gridania images/font; native cover opening, ordered wide/narrow page navigation, final-page bounds, backward navigation, return-to-cover keyboard focus, new-session reset, expanded catalogs, and invalid/duplicate IDs.
 
 This is an executable check suite: failures exit nonzero; use `dotnet run` as above rather than expecting a `dotnet test` adapter. CI runs it for both build configurations and uploads previews. It does not prove game-host lifecycle, localization glyph coverage, GPU output, or performance. Routine commits use appropriate automated evidence and preview review without requiring user in-game testing.

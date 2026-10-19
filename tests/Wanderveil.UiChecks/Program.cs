@@ -130,6 +130,7 @@ StudioChecks.Run(Check, artifacts);
 EchoesChecks.Run(Check, artifacts);
 StatesChecks.Run(Check, artifacts);
 InputChecks.Run(Check);
+StabilityChecks.Run(Check);
 Console.WriteLine($"PASS {checks} checks using the real ImGui native context.");
 
 static double Contrast(Vector4 first, Vector4 second)
