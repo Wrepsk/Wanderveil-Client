@@ -10,6 +10,7 @@ Status: Phase 02 in progress, 19 October 2026. The passport book holds Passport,
 - [Intended passport experience, nation editions, and page order](passport-experience.md)
 - [Gridania static cover and spread review](passport-gridania-study.md)
 - [Gridania runtime controls, reload instructions, and previews](passport-runtime.md)
+- [Drawing on pages: brush spike](drawing-brush-spike.md)
 - [Optional rendering investigation](rendering.md)
 - [API contract status](api/README.md)
 - [Asset organization](../assets/README.md)

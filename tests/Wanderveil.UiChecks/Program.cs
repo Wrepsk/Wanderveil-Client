@@ -137,6 +137,7 @@ ColourChecks.Run(Check, artifacts);
 SettingsChecks.Run(Check, artifacts);
 SymbolChecks.Run(Check, artifacts);
 LayoutChecks.Run(Check, artifacts);
+BrushSpike.Run(Check, artifacts);
 InputChecks.Run(Check);
 StabilityChecks.Run(Check);
 Console.WriteLine($"PASS {checks} checks using the real ImGui native context.");
