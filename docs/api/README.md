@@ -1,6 +1,6 @@
 # Public API contract
 
-Status: **draft**, 20 October 2026. [`v1.yaml`](v1.yaml) (OpenAPI 3.1) describes the first online slice: signing in by character verification, the session, and the holder's private passport record. This client implements the Lodestone sign-in, the session, and the passport record ([how](../online.md)); XIVAuth is not implemented. No hosted server exists. Until the first client release that uses it, the draft may change without compatibility promises; afterwards, changes within `v1` only add things.
+Status: **draft**, 20 October 2026. [`v1.yaml`](v1.yaml) (OpenAPI 3.1) describes the first online slice: signing in by character verification, the session, and the holder's private passport record. This client implements both sign-ins, the session, and the passport record ([how](../online.md)). No hosted server exists. Until the first client release that uses it, the draft may change without compatibility promises; afterwards, changes within `v1` only add things.
 
 ## What it covers
 

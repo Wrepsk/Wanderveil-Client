@@ -10,9 +10,10 @@ namespace Wanderveil.Infrastructure.Online;
 // for now: the passport still opens, from this PC's copy).
 internal enum AccountState { NoCharacter, NoServer, SignedOut, SignedIn }
 
-// The Lodestone sign-in, step by step. Ready: nothing asked yet. Requesting: asking for a code. Code: the code is
-// shown, waiting for the holder to put it on their profile. Checking: the server is reading the profile.
-internal enum SignInStep { Ready, Requesting, Code, Checking }
+// The sign-in, step by step. Ready: nothing asked yet. Requesting: asking for a code (or for an XIVAuth sign-in).
+// Code: the Lodestone code is shown, waiting for the holder to put it on their profile. Checking: the server is
+// reading the profile. Approving: waiting for the holder to approve Wanderveil on XIVAuth's page.
+internal enum SignInStep { Ready, Requesting, Code, Checking, Approving }
 
 // The logged-in character's account: its saved session, the Lodestone sign-in, sign-out, and the server's word on
 // whether the session still holds. Network work runs on background tasks; the UI reads the state each frame and
@@ -44,6 +45,10 @@ internal sealed class OnlineAccount : IDisposable
 
     internal SignInStep Step { get; private set; }
     internal LodestoneChallenge? Challenge { get; private set; }
+    // The XIVAuth sign-in waiting for approval, if any.
+    internal XivAuthFlow? Flow { get; private set; }
+    // One second of the server's polling interval; shorter only in checks.
+    internal TimeSpan PollUnit { get; init; } = TimeSpan.FromSeconds(1);
     // Why the last step did not work, in words for the holder; null when nothing went wrong.
     internal string? Problem { get; private set; }
     // Whether the server could not be reached on the last try (signed-in work continues from this PC's copy).
@@ -161,6 +166,75 @@ internal sealed class OnlineAccount : IDisposable
         });
     }
 
+    // Starts an XIVAuth sign-in for the logged-in character, then waits for approval, asking the server at the
+    // interval it gives (longer when it says to slow down, or cannot be reached) until XIVAuth answers or the sign-in
+    // expires. Restart (or another character) stops it.
+    internal void StartXivAuth()
+    {
+        WanderveilApi? server;
+        int ticket;
+        string asked, on;
+        ulong character;
+        lock (gate)
+        {
+            server = Refresh();
+            if (server == null || contentId == 0 || Step is SignInStep.Requesting or SignInStep.Checking or SignInStep.Approving) return;
+            ticket = Reset();
+            Step = SignInStep.Requesting;
+            asked = name;
+            on = world;
+            character = contentId;
+        }
+        _ = Run(ticket, async token =>
+        {
+            var started = await server.StartXivAuth(asked, on, token).ConfigureAwait(false);
+            XivAuthFlow flow;
+            lock (gate)
+            {
+                if (ticket != generation) return;
+                offline = started.Offline;
+                if (!started.Ok || started.Value == null) { Step = SignInStep.Ready; Problem = Explain(started); return; }
+                flow = started.Value;
+                Flow = flow;
+                Step = SignInStep.Approving;
+            }
+            var wait = TimeSpan.Zero;
+            while (true)
+            {
+                if (wait > TimeSpan.Zero) await Task.Delay(wait, token).ConfigureAwait(false);
+                wait = PollUnit * Math.Max(1, flow.Interval);
+                lock (gate) if (ticket != generation) return;
+                var poll = await server.PollXivAuth(flow.FlowId, token).ConfigureAwait(false);
+                lock (gate)
+                {
+                    if (ticket != generation) return;
+                    offline = poll.Offline;
+                    if (poll.Ok && poll.Value is { Status: "approved", Session: { } grant })
+                    {
+                        store.Put(new SavedSession(character, server.Server, grant.Token, grant.Account, grant.ExpiresAt));
+                        Flow = null;
+                        Step = SignInStep.Ready;
+                        return;
+                    }
+                    if (poll.Ok) continue;
+                    // Polled too soon, or XIVAuth asked to slow down: wait as long as the server says.
+                    if (poll.Status == 429) { wait = poll.RetryAfter is { } after ? PollUnit * Math.Max(1, after.TotalSeconds) : wait * 2; continue; }
+                    // No answer, or XIVAuth down for now: keep trying, more slowly, while the sign-in lasts.
+                    if (poll.Offline || poll.Code == "xivauth_unavailable" && poll.RetryAfter != null)
+                    {
+                        wait = PollUnit * Math.Max(flow.Interval * 2, poll.RetryAfter?.TotalSeconds ?? 0);
+                        if (DateTimeOffset.UtcNow < flow.ExpiresAt) continue;
+                        Problem = "The XIVAuth sign-in expired while the server could not be reached. Start again.";
+                    }
+                    else Problem = Explain(poll);
+                    Flow = null;
+                    Step = SignInStep.Ready;
+                    return;
+                }
+            }
+        });
+    }
+
     // Back to the start of the sign-in, forgetting the code shown.
     internal void Restart()
     {
@@ -227,7 +301,7 @@ internal sealed class OnlineAccount : IDisposable
         catch (Exception exception)
         {
             lock (gate)
-                if (ticket == generation) { Problem = "Something went wrong: " + exception.Message; if (Step is SignInStep.Requesting or SignInStep.Checking) Step = Challenge != null ? SignInStep.Code : SignInStep.Ready; }
+                if (ticket == generation) { Problem = "Something went wrong: " + exception.Message; Flow = null; if (Step is SignInStep.Requesting or SignInStep.Checking or SignInStep.Approving) Step = Challenge != null ? SignInStep.Code : SignInStep.Ready; }
         }
     }
 
@@ -235,6 +309,7 @@ internal sealed class OnlineAccount : IDisposable
     private int Reset()
     {
         Challenge = null;
+        Flow = null;
         Step = SignInStep.Ready;
         Problem = null;
         return ++generation;
@@ -267,6 +342,13 @@ internal sealed class OnlineAccount : IDisposable
         "client_outdated" => "This version of Wanderveil is too old for the server. Update the plugin.",
         "session_invalid" => "Your session has ended. Sign in again.",
         "invalid_request" => "The server did not accept this character's name or world.",
+        "xivauth_unavailable" => result.RetryAfter == null
+            ? "This server does not offer XIVAuth sign-in yet. Sign in with a Lodestone code instead."
+            : "XIVAuth cannot be reached right now. Try again in a little while, or sign in with a Lodestone code.",
+        "access_denied" => "The sign-in was declined on XIVAuth.",
+        "flow_expired" => "The XIVAuth sign-in expired before it was approved. Start again.",
+        "flow_not_found" => "That XIVAuth sign-in is over. Start again.",
+        "xivauth_character_not_verified" => "XIVAuth did not vouch for this character. On XIVAuth, verify it and share it with Wanderveil when approving, then start again.",
         _ => result.Detail ?? $"The server refused this ({result.Status}).",
     };
 }

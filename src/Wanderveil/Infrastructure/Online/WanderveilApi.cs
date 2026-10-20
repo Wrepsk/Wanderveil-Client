@@ -17,6 +17,13 @@ internal sealed record AccountInfo(Guid AccountId, CharacterInfo Character, stri
 internal sealed record SessionInfo(AccountInfo Account, DateTimeOffset ExpiresAt);
 internal sealed record SessionGrant(AccountInfo Account, DateTimeOffset ExpiresAt, string Token);
 internal sealed record PassportRecord(int Revision, DateTimeOffset UpdatedAt, JsonElement Document);
+internal sealed record XivAuthFlow(string FlowId, string UserCode, Uri VerificationUri, Uri? VerificationUriComplete, int Interval, DateTimeOffset ExpiresAt)
+{
+    // The page to open: with the code filled in where XIVAuth gives one.
+    internal Uri Page => VerificationUriComplete ?? VerificationUri;
+}
+// "pending" (keep polling) or "approved" (with the session).
+internal sealed record XivAuthPoll(string Status, SessionGrant? Session);
 
 // What a call came to. Offline: no answer (no network, a timeout, the server or its proxy down). Otherwise the HTTP
 // status and, for a refusal, the contract's stable code. Clients branch on Code, never on Detail.
@@ -70,6 +77,12 @@ internal sealed class WanderveilApi
 
     internal Task<ApiResult<SessionGrant>> VerifyLodestone(string challengeId, CancellationToken cancellationToken) =>
         Send<SessionGrant>(HttpMethod.Post, $"v1/auth/lodestone/challenges/{Uri.EscapeDataString(challengeId)}/verify", null, null, cancellationToken);
+
+    internal Task<ApiResult<XivAuthFlow>> StartXivAuth(string name, string world, CancellationToken cancellationToken) =>
+        Send<XivAuthFlow>(HttpMethod.Post, "v1/auth/xivauth/flows", null, Body(new { name, world }), cancellationToken);
+
+    internal Task<ApiResult<XivAuthPoll>> PollXivAuth(string flowId, CancellationToken cancellationToken) =>
+        Send<XivAuthPoll>(HttpMethod.Post, $"v1/auth/xivauth/flows/{Uri.EscapeDataString(flowId)}/poll", null, null, cancellationToken);
 
     internal Task<ApiResult<SessionInfo>> Session(string token, CancellationToken cancellationToken) =>
         Send<SessionInfo>(HttpMethod.Get, "v1/session", token, null, cancellationToken);

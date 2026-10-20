@@ -9,10 +9,10 @@ using Wanderveil.UI.Primitives;
 namespace Wanderveil.UI;
 
 // What the holder asked for on the sign-in sheet.
-internal enum SignInAction { None, RequestCode, CopyCode, OpenProfile, CheckCode, Restart, ChangeServer, SaveServer, Close }
+internal enum SignInAction { None, RequestCode, CopyCode, OpenProfile, CheckCode, StartXivAuth, OpenXivAuth, Restart, ChangeServer, SaveServer, Close }
 
 // What the sheet shows: the character's account state and sign-in step, as OnlineAccount has them.
-internal sealed record SignInView(AccountState State, SignInStep Step, string Name, string World, LodestoneChallenge? Challenge, string? Problem, string? Server);
+internal sealed record SignInView(AccountState State, SignInStep Step, string Name, string World, LodestoneChallenge? Challenge, string? Problem, string? Server, XivAuthFlow? Flow = null);
 
 // The sign-in, as an application form on passport paper: who is applying, the code to put on the Lodestone profile,
 // and the check. Drawn in its own window before the passport opens; returns what the holder asked for. Holds only
@@ -112,12 +112,34 @@ internal sealed class SignInSheet
         Rule(inner, context);
         Gap(14, context);
 
-        if (view.Challenge is not { } challenge)
+        if (view.Flow is { } flow)
         {
-            Body("Your passport is kept for this character, so Wanderveil needs to know it is yours. You prove it the way many FFXIV tools do: put a short code on the character's Lodestone profile, and the server reads it there.", context);
+            Step("1", "Approve Wanderveil on XIVAuth. Its page opened in your browser; check that it shows this code.", context);
+            CodeBox(flow.UserCode, inner, context);
+            ImGui.SetCursorScreenPos(ImGui.GetCursorScreenPos() + new Vector2(18 * context.Scale, 0));
+            if (Link("Open XIVAuth again", context)) action = SignInAction.OpenXivAuth;
+            Gap(10, context);
+            Step("2", "Share this character with Wanderveil when XIVAuth asks, and approve.", context);
+            Gap(10, context);
+            var dots = new string('.', 1 + (int)(ImGui.GetTime() * 2) % 3);
+            UiTypography.Text("Waiting for your approval" + dots, TextRole.Heading, context, UiTheme.EditionInk);
+            Problem(view, inner, context);
+            Gap(10, context);
+            UiTypography.Text("This sign-in works until " + flow.ExpiresAt.ToLocalTime().ToString("HH:mm", CultureInfo.CurrentCulture) + ". XIVAuth vouches for characters it has verified through their Lodestone profiles.", TextRole.Caption, context, UiTheme.MutedInk);
+            Gap(4, context);
+            if (Link("Cancel", context)) action = SignInAction.Restart;
+        }
+        else if (view.Challenge is not { } challenge)
+        {
+            Body("Your passport is kept for this character, so Wanderveil needs to know it is yours. Prove it with a short code on the character's Lodestone profile, which the server reads there, or with XIVAuth if you use it.", context);
             Gap(16, context);
-            var asking = view.Step == SignInStep.Requesting;
-            if (Stamp(asking ? "Asking for a code" : "Get my code", inner, context, enabled: !asking)) action = SignInAction.RequestCode;
+            var busy = view.Step == SignInStep.Requesting;
+            var row = ImGui.GetCursorScreenPos();
+            if (Stamp(busy ? "Asking" : "Get my code", inner, context, enabled: !busy)) action = SignInAction.RequestCode;
+            var after = ImGui.GetCursorScreenPos();
+            ImGui.SetCursorScreenPos(new Vector2(row.X + StampWidth(busy ? "Asking" : "Get my code", inner, context) + 14 * context.Scale, row.Y));
+            if (Stamp("Sign in with XIVAuth", inner, context, enabled: !busy)) action = SignInAction.StartXivAuth;
+            ImGui.SetCursorScreenPos(after);
             Problem(view, inner, context);
             // The small print, before anything is sent.
             Gap(18, context);
@@ -126,15 +148,8 @@ internal sealed class SignInSheet
         else
         {
             Step("1", "Copy this code.", context);
-            var code = context with { BodyFont = context.MonoFont, FontSize = MathF.Round(context.FontSize * 1.7f) };
-            var codeSize = UiTypography.Measure(challenge.Code, TextRole.Body, code, inner.Size.X, false);
-            var at = ImGui.GetCursorScreenPos() + new Vector2(18 * context.Scale, 4 * context.Scale);
-            var box = new UiRect(at - new Vector2(10, 6) * context.Scale, codeSize + new Vector2(20, 12) * context.Scale);
-            var list = ImGui.GetWindowDrawList();
-            list.AddRectFilled(box.Position, box.Max, ImGui.GetColorU32(UiTheme.PaperInset), 3 * context.Scale);
-            list.AddRect(box.Position, box.Max, ImGui.GetColorU32(UiTheme.EditionInk with { W = 0.6f }), 3 * context.Scale, ImDrawFlags.None, context.Scale);
-            UiTypography.Draw(list, at, challenge.Code, TextRole.Body, code, inner.Size.X, UiTheme.EditionInk, false);
-            ImGui.SetCursorScreenPos(new Vector2(box.Max.X + 14 * context.Scale, at.Y + (codeSize.Y - UiTypography.Size(TextRole.Caption, context)) / 2));
+            var (box, middle) = CodeBox(challenge.Code, inner, context);
+            ImGui.SetCursorScreenPos(new Vector2(box.Max.X + 14 * context.Scale, middle - UiTypography.Size(TextRole.Caption, context) / 2));
             if (Link("Copy", context)) action = SignInAction.CopyCode;
             ImGui.SetCursorScreenPos(new Vector2(inner.Position.X, box.Max.Y + 12 * context.Scale));
             Step("2", "Paste it anywhere in your Character Profile on the Lodestone, and save.", context);
@@ -192,11 +207,31 @@ internal sealed class SignInSheet
         Notice(problem, inner, context);
     }
 
+    // A code to read or copy, large in the typewriter face on an inset slip; leaves the cursor below it. Returns the
+    // slip and the height of its middle, for anything set beside it.
+    private static (UiRect Box, float Middle) CodeBox(string text, UiRect inner, UiContext context)
+    {
+        var code = context with { BodyFont = context.MonoFont, FontSize = MathF.Round(context.FontSize * 1.7f) };
+        var size = UiTypography.Measure(text, TextRole.Body, code, inner.Size.X, false);
+        var at = ImGui.GetCursorScreenPos() + new Vector2(18 * context.Scale, 4 * context.Scale);
+        var box = new UiRect(at - new Vector2(10, 6) * context.Scale, size + new Vector2(20, 12) * context.Scale);
+        var list = ImGui.GetWindowDrawList();
+        list.AddRectFilled(box.Position, box.Max, ImGui.GetColorU32(UiTheme.PaperInset), 3 * context.Scale);
+        list.AddRect(box.Position, box.Max, ImGui.GetColorU32(UiTheme.EditionInk with { W = 0.6f }), 3 * context.Scale, ImDrawFlags.None, context.Scale);
+        UiTypography.Draw(list, at, text, TextRole.Body, code, inner.Size.X, UiTheme.EditionInk, false);
+        ImGui.SetCursorScreenPos(new Vector2(inner.Position.X, box.Max.Y + 12 * context.Scale));
+        ImGui.Dummy(Vector2.Zero);
+        return (box, at.Y + size.Y / 2);
+    }
+
+    private static float StampWidth(string label, UiRect inner, UiContext context) =>
+        MathF.Min(inner.Size.X, UiTypography.Measure(label, TextRole.Caption, context, inner.Size.X, false).X + 44 * context.Scale);
+
     // A primary action: an inked frame, filled faintly when hovered, around a printed label.
     private bool Stamp(string label, UiRect inner, UiContext context, bool enabled = true)
     {
         var s = context.Scale;
-        var size = new Vector2(MathF.Min(inner.Size.X, UiTypography.Measure(label, TextRole.Caption, context, inner.Size.X, false).X + 44 * s), MathF.Round(34 * s));
+        var size = new Vector2(StampWidth(label, inner, context), MathF.Round(34 * s));
         var bounds = new UiRect(ImGui.GetCursorScreenPos(), size);
         var list = ImGui.GetWindowDrawList();
         var hovered = enabled && ImGui.IsMouseHoveringRect(bounds.Position, bounds.Max);

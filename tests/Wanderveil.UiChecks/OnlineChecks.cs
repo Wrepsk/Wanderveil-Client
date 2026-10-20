@@ -26,6 +26,7 @@ internal static class OnlineChecks
             CheckApi(check);
             CheckSessions(check, directory);
             CheckSignIn(check, Path.Combine(directory, "sign-in"));
+            CheckXivAuth(check, Path.Combine(directory, "xivauth"));
             CheckSync(check, Path.Combine(directory, "sync"));
         }
         finally { Directory.Delete(directory, recursive: true); }
@@ -203,6 +204,68 @@ internal static class OnlineChecks
         check(account.State == AccountState.SignedIn, "Returning to the server lost the session.");
     }
 
+    private static void CheckXivAuth(Action<bool, string> check, string directory)
+    {
+        var server = new FakeServer();
+        server.Add(1001, "Wander Veil", "Ravana");
+        using var store = new SessionStore(directory);
+        using var account = new OnlineAccount(store, server.Client(), "0.0.0.1", () => FakeServer.Address) { PollUnit = TimeSpan.FromMilliseconds(20) };
+        account.SetCharacter(Content, "Wander Veil", "Ravana");
+
+        // Approval after a wait: pending polls, then signed in with XIVAuth's word.
+        server.XivAuthAnswers.Enqueue("pending");
+        server.XivAuthAnswers.Enqueue("pending");
+        server.XivAuthAnswers.Enqueue("approve");
+        account.StartXivAuth();
+        check(OnlineChecks.Until(() => account.Step == SignInStep.Approving) && account.Flow is { UserCode: "ABCD-EFGH" } flow && flow.Page.ToString().Contains("user_code", StringComparison.Ordinal),
+            "Starting an XIVAuth sign-in did not wait for approval with its code and page.");
+        check(Until(() => account.State == AccountState.SignedIn) && account.Session!.Account.VerifiedBy == "xivauth" && account.Flow == null && server.XivAuthPolls == 3,
+            $"An approved XIVAuth sign-in did not sign in after polling ({server.XivAuthPolls} polls).");
+        account.SignOut();
+
+        // Declined, or no verified character shared: the reason, and back to the start.
+        foreach (var (answer, words) in new[] { ("deny", "declined"), ("unverified", "did not vouch"), ("expire", "expired") })
+        {
+            server.XivAuthAnswers.Enqueue(answer);
+            account.StartXivAuth();
+            check(Until(() => account.Problem?.Contains(words, StringComparison.Ordinal) == true) && account.Step == SignInStep.Ready && account.Flow == null && account.State == AccountState.SignedOut,
+                $"XIVAuth's '{answer}' was not explained, or the sign-in went on.");
+        }
+
+        // Too fast, XIVAuth briefly down, or the server unreachable: polling carries on, then signs in.
+        server.XivAuthAnswers.Enqueue("slow");
+        server.XivAuthAnswers.Enqueue("down");
+        server.XivAuthAnswers.Enqueue("pending");
+        server.XivAuthAnswers.Enqueue("approve");
+        account.StartXivAuth();
+        check(Until(() => account.Step == SignInStep.Approving), "The second XIVAuth sign-in did not start.");
+        server.Down = true;
+        Thread.Sleep(150);
+        server.Down = false;
+        check(Until(() => account.State == AccountState.SignedIn, 8000) && account.Problem == null, $"Polling did not carry on through slow-downs and outages ({account.Problem}).");
+        account.SignOut();
+
+        // Cancelling, or another character logging in, stops the polling.
+        account.StartXivAuth();
+        check(Until(() => account.Step == SignInStep.Approving), "The third XIVAuth sign-in did not start.");
+        account.Restart();
+        var polls = server.XivAuthPolls;
+        Thread.Sleep(200);
+        check(server.XivAuthPolls <= polls + 1 && account.Flow == null && account.Step == SignInStep.Ready, "Cancelling an XIVAuth sign-in did not stop it.");
+        account.StartXivAuth();
+        check(Until(() => account.Step == SignInStep.Approving), "The fourth XIVAuth sign-in did not start.");
+        account.SetCharacter(OtherContent, "Other Self", "Ravana");
+        polls = server.XivAuthPolls;
+        Thread.Sleep(200);
+        check(server.XivAuthPolls <= polls + 1 && account.Flow == null, "Another character logging in did not stop an XIVAuth sign-in.");
+
+        // A server without XIVAuth says so.
+        account.SetCharacter(Content, "Wander Veil", "Ravana");
+        server.XivAuthEnabled = false;
+        account.StartXivAuth();
+        check(Until(() => account.Problem?.Contains("does not offer XIVAuth", StringComparison.Ordinal) == true) && account.Step == SignInStep.Ready, "A server without XIVAuth was not explained.");
+    }
+
     private static void CheckSync(Action<bool, string> check, string directory)
     {
         var server = new FakeServer();
@@ -327,6 +390,11 @@ internal static class OnlineChecks
         private readonly Dictionary<string, Guid> sessions = [];
         private readonly Dictionary<long, Guid> accounts = [];
         private readonly Dictionary<Guid, (int Revision, string Document)> passports = [];
+        private readonly Dictionary<string, (long Id, string Name)> flows = [];
+        internal bool XivAuthEnabled { get; set; } = true;
+        // What XIVAuth answers each poll, in turn (pending, approve, deny, unverified, expire, slow, down); pending once empty.
+        internal Queue<string> XivAuthAnswers { get; } = new();
+        internal int XivAuthPolls { get; private set; }
         internal bool Down { get; set; }
         internal bool Gateway { get; set; }
         internal bool LodestoneDown { get; set; }
@@ -382,6 +450,38 @@ internal static class OnlineChecks
                 var token = (Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N"))[..43];
                 sessions[token] = account;
                 return Json(200, new { account = Account(account, challenge.Id), expiresAt = DateTimeOffset.UtcNow.AddDays(30), token });
+            }
+            if (request.Method == HttpMethod.Post && path == "/v1/auth/xivauth/flows")
+            {
+                if (!XivAuthEnabled) return Problem(503, "xivauth_unavailable");
+                var asked = JsonNode.Parse(body)!;
+                var found = characters.FirstOrDefault(c => c.Value.Name == (string?)asked["name"] && c.Value.World == (string?)asked["world"]);
+                var id = Guid.NewGuid().ToString("N")[..22];
+                flows[id] = (found.Key, found.Value.Name ?? "");
+                return Json(201, new { flowId = id, userCode = "ABCD-EFGH", verificationUri = "https://xivauth.test/oauth/device", verificationUriComplete = "https://xivauth.test/oauth/device?user_code=ABCD-EFGH", interval = 1, expiresAt = DateTimeOffset.UtcNow.AddMinutes(5) });
+            }
+            if (request.Method == HttpMethod.Post && path.StartsWith("/v1/auth/xivauth/flows/", StringComparison.Ordinal) && path.EndsWith("/poll", StringComparison.Ordinal))
+            {
+                var id = path.Split('/')[5];
+                if (!flows.TryGetValue(id, out var flow)) return Problem(404, "flow_not_found");
+                XivAuthPolls++;
+                var answer = XivAuthAnswers.TryDequeue(out var next) ? next : "pending";
+                if (answer is "deny" or "unverified" or "expire" or "approve") flows.Remove(id);
+                switch (answer)
+                {
+                    case "deny": return Problem(403, "access_denied");
+                    case "unverified": return Problem(422, "xivauth_character_not_verified");
+                    case "expire": return Problem(410, "flow_expired");
+                    case "slow": return Problem(429, "rate_limited", retryAfter: 1);
+                    case "down": return Problem(503, "xivauth_unavailable", retryAfter: 1);
+                    case "approve":
+                        if (!accounts.TryGetValue(flow.Id, out var holder)) accounts[flow.Id] = holder = Guid.NewGuid();
+                        var token = (Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N"))[..43];
+                        sessions[token] = holder;
+                        var account = new { accountId = holder, character = Character(flow.Id), verifiedBy = "xivauth", verifiedAt = DateTimeOffset.UtcNow };
+                        return Json(200, new { status = "approved", session = new { account, expiresAt = DateTimeOffset.UtcNow.AddDays(30), token } });
+                    default: return Json(200, new { status = "pending" });
+                }
             }
             var bearer = request.Headers.Authorization?.Parameter;
             if (bearer == null || !sessions.TryGetValue(bearer, out var owner)) return Problem(401, "session_invalid");

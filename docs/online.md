@@ -12,7 +12,9 @@ The first time a character logs in without a session, Wanderveil opens the sign-
 2. You paste the code anywhere in your Character Profile on the Lodestone and save. **Copy** and **Open my Lodestone profile settings** help with this.
 3. **Check my profile** asks the server to read the profile. When the code is there you are signed in, the sheet closes, and the passport opens. If it is not there yet, the sheet says so and keeps the code, which works for 15 minutes. **Start again** asks for a new one.
 
-Every refusal has its own words: an unknown character, a Lodestone under maintenance, an expired or already used code, too many tries (with the wait), or an outdated plugin. The sheet's small print says that signing in sends the character's name and world to the Wanderveil server, which reads the public Lodestone profile. Wanderveil never asks for a game password. XIVAuth sign-in comes later.
+Every refusal has its own words: an unknown character, a Lodestone under maintenance, an expired or already used code, too many tries (with the wait), or an outdated plugin. The sheet's small print says that signing in sends the character's name and world to the Wanderveil server, which reads the public Lodestone profile. Wanderveil never asks for a game password.
+
+**Sign in with XIVAuth**, beside **Get my code**, is the other way. It is for players who already use [XIVAuth](https://xivauth.net), which vouches for characters it has verified through their Lodestone profiles. The server starts XIVAuth's device flow, and the sheet opens XIVAuth's approval page in the browser (once by itself; **Open XIVAuth again** reopens it). The sheet shows XIVAuth's code to check against the page and waits for approval. Meanwhile the plugin asks the server at the interval it gives, waits longer when told to slow down, and keeps trying through brief outages while the sign-in lasts. Approving, with this character shared and verified on XIVAuth, signs in as a Lodestone code does. A refusal, an expired sign-in, or a character XIVAuth did not vouch for is explained, and **Cancel** (or another character logging in) stops the waiting. A server not yet set up for XIVAuth says so, and the Lodestone code still works. Preview: [waiting for XIVAuth](previews/online/signin-xivauth.png).
 
 Previews: [no character](previews/online/signin-no-character.png), [choosing a server](previews/online/signin-server.png), [ready](previews/online/signin-ready.png), [the code](previews/online/signin-code.png), [checked too early](previews/online/signin-problem.png).
 
@@ -45,4 +47,4 @@ A change is sent two seconds after the last edit. With no answer, it waits and t
 
 ## What is not covered yet
 
-There is no XIVAuth, and no sharing. The live test ran on Windows against a local server. Not yet observed: a hosted server over HTTPS, DPAPI under Wine, and other players' characters.
+There is no sharing yet. XIVAuth has been tried only against stand-ins: a real XIVAuth sign-in needs Wanderveil's XIVAuth application to be registered and configured on the server. The live test ran on Windows against a local server. Not yet observed: a hosted server over HTTPS, DPAPI under Wine, and other players' characters.

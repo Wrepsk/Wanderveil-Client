@@ -20,6 +20,8 @@ internal sealed class SignInWindow : Window
     private readonly Action<string> saveServer;
     private readonly Action signedIn;
     private readonly SignInSheet sheet = new();
+    // The XIVAuth sign-in whose page was opened, so each opens the browser once by itself.
+    private string? opened;
 
     internal SignInWindow(OnlineAccount account, PassportAssets assets, Func<string> server, Action<string> saveServer, Action signedIn)
         : base("Wanderveil sign-in###Wanderveil.SignIn", ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.NoBackground | ImGuiWindowFlags.NoCollapse |
@@ -55,11 +57,14 @@ internal sealed class SignInWindow : Window
         }
         using var fonts = assets.LockFonts();
         var context = new UiContext(ShellStyle.Scale, ImGui.GetFontSize()) { TitleFont = fonts.Title, HeadingFont = fonts.Heading, BodyFont = fonts.Body, DisplayFont = fonts.Display, MonoFont = fonts.Mono, SignatureFont = fonts.Signature, Fonts = fonts };
-        var view = new SignInView(state, account.Step, account.CharacterName, account.CharacterWorld, account.Challenge, account.Problem, account.Api?.Server.Authority);
+        if (account.Flow is { } flow && flow.FlowId != opened) { opened = flow.FlowId; Util.OpenLink(flow.Page.ToString()); }
+        var view = new SignInView(state, account.Step, account.CharacterName, account.CharacterWorld, account.Challenge, account.Problem, account.Api?.Server.Authority, account.Flow);
         switch (sheet.Draw(new UiRect(ImGui.GetWindowPos(), ImGui.GetWindowSize() - new Vector2(0, 4 * context.Scale)), view, context))
         {
             case SignInAction.RequestCode: account.RequestCode(); break;
             case SignInAction.CheckCode: account.CheckCode(); break;
+            case SignInAction.StartXivAuth: account.StartXivAuth(); break;
+            case SignInAction.OpenXivAuth when account.Flow is { } current: Util.OpenLink(current.Page.ToString()); break;
             case SignInAction.Restart: account.Restart(); break;
             case SignInAction.CopyCode when account.Challenge is { } challenge: ImGui.SetClipboardText(challenge.Code); break;
             case SignInAction.OpenProfile when account.Challenge is { } challenge: Util.OpenLink(challenge.ProfileUrl); break;
