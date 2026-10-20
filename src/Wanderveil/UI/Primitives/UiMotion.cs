@@ -21,6 +21,8 @@ internal static class UiMotion
     // The selected tab's ribbon unrolling after the pages appear, and rolling up before a tab change.
     internal const float RibbonUnroll = 0.22f;
     internal const float RibbonRoll = 0.12f;
+    // The tab bar swapping between section tabs and Settings category tabs: the old tabs sink, the new ones rise.
+    internal const float TabSwap = 0.36f;
     // The most one frame may advance motion: a long hitch must not skip a sequence's ordering.
     internal const float LongestFrame = 0.1f;
 

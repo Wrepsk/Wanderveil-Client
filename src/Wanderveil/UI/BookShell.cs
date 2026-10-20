@@ -17,6 +17,8 @@ namespace Wanderveil.UI;
 // Tabbed sections, in book order, then the Settings pages reached from the printed Settings mark.
 internal enum BookSection { Passport, Discover, Echoes, Studio, Settings }
 internal readonly record struct BookShellIntent(bool Close, Vector2 Drag);
+// The Settings pages' categories, chosen by icon tabs that take the section tabs' place while Settings are open.
+internal enum SettingsCategory { General, Customization, Saved }
 
 // The book itself is the control surface: press-and-drag anywhere moves it, a click on its right side
 // opens it or turns forward, and a click on its left side turns back (from the first page, to the cover).
@@ -124,6 +126,12 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
     // How many leaves are turning at once (quick clicks lift one each).
     internal int LeavesInAir => turn.Leaves.Count;
     internal bool IsRiffling => riffle.Active;
+    // The Settings category shown (kept for the session), and how far the tab bar has swapped: 0 shows the section
+    // tabs, 1 the Settings category tabs. The section tabs slide down behind the book first, then the category tabs
+    // rise in their place; leaving Settings reverses it.
+    internal SettingsCategory Category { get; private set; }
+    internal float TabSwap { get; private set; }
+    private static readonly string[] CategoryNames = ["General", "Customization", "Saved data"];
 
     // Advances motion; the host calls it before sizing the window so size and drawing agree each frame.
     internal void Advance(float seconds)
@@ -132,6 +140,8 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         if (swapTo != null && motion.Phase == BookPhase.Hidden) { holder.ChangeEdition(swapTo); swapTo = null; motion.Summon(); }
         turn.Update(seconds, ReducedMotion);
         riffle.Update(seconds, ReducedMotion);
+        var target = Section == BookSection.Settings && motion.WantsOpen ? 1f : 0f;
+        TabSwap = ReducedMotion ? target : TabSwap < target ? MathF.Min(target, TabSwap + UiMotion.Frame(seconds) / UiMotion.TabSwap) : MathF.Max(target, TabSwap - UiMotion.Frame(seconds) / UiMotion.TabSwap);
     }
 
     // The host's window flags for this frame: the book's own, plus pass-through when the mouse is off the book.
@@ -191,10 +201,36 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         ImGui.PushStyleVar(ImGuiStyleVar.Alpha, MathF.Max(0.01f, motion.Reveal));
         // Tabs first: the book surface drawn next covers their feet, so they read as tucked behind the pages.
         BookSection? chosen = null;
-        for (var index = 0; index < TabCount; index++)
+        SettingsCategory? category = null;
+        // Far enough down that a tab hides behind the board.
+        var hide = layout.Bookmark(TabCount - 1).Max.Y - layout.Bookmark(0).Position.Y + 6 * context.Scale;
+        if (TabSwap < 0.5f)
         {
-            if ((ImGui.IsWindowAppearing() || focusSection) && (int)Section == index) ImGui.SetKeyboardFocusHere();
-            if (BookControl.Draw(Labels[index], Labels[index], layout.Bookmark(index), context, BookControlStyle.Tab, (int)Section == index)) chosen = (BookSection)index;
+            var drop = new Vector2(0, UiMotion.Ease(TabSwap * 2) * hide);
+            ImGui.BeginDisabled(TabSwap > 0f);
+            for (var index = 0; index < TabCount; index++)
+            {
+                if ((ImGui.IsWindowAppearing() || focusSection) && (int)Section == index) ImGui.SetKeyboardFocusHere();
+                var mark = layout.Bookmark(index);
+                if (BookControl.Draw(Labels[index], Labels[index], mark with { Position = mark.Position + drop }, context, BookControlStyle.Tab, (int)Section == index)) chosen = (BookSection)index;
+            }
+            ImGui.EndDisabled();
+        }
+        else
+        {
+            var drop = new Vector2(0, (1 - UiMotion.Ease((TabSwap - 0.5f) * 2)) * hide);
+            ImGui.BeginDisabled(TabSwap < 1f);
+            for (var index = 0; index < CategoryNames.Length; index++)
+            {
+                var mark = layout.Bookmark(index);
+                var shown = mark with { Position = mark.Position + drop };
+                var selected = (int)Category == index;
+                if (focusSection && selected) ImGui.SetKeyboardFocusHere();
+                if (BookControl.Draw("Settings category " + index, "", shown, context, BookControlStyle.Tab, selected, hint: CategoryNames[index])) category = (SettingsCategory)index;
+                var ink = selected || ImGui.IsItemHovered() ? UiTheme.Ink : UiTheme.MutedInk;
+                CategoryIcon(ImGui.GetWindowDrawList(), shown.Position + shown.Size / 2 + new Vector2(0, selected ? 0 : 1.5f * context.Scale), shown.Size.Y * 0.62f, (SettingsCategory)index, ink, context);
+            }
+            ImGui.EndDisabled();
         }
         focusSection = false;
         solid.Add(BookSurface.Board(layout.Book, layout.IsSpread ? BookFace.Spread : Section == BookSection.Passport && VisiblePage % 2 == 1 ? BookFace.Right : BookFace.Left));
@@ -215,7 +251,7 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         desk.BeginFrame();
         if (riffle.Active) DrawRiffle();
         else if (turning) DrawTurn();
-        else DrawSpread(Section, VisiblePage);
+        else DrawSpread(Section, Section == BookSection.Settings ? (int)Category : VisiblePage);
 
         var openSettings = Section != BookSection.Settings && BookControl.Draw("Settings", "Settings", layout.Settings(context), page, BookControlStyle.Ink, hint: "Wanderveil settings");
         if (BookControl.Draw("Smaller", "-", layout.Tool(0, context), page, BookControlStyle.Ink, hint: "Smaller passport")) PreferredWidth = MathF.Max(420, PreferredWidth / 1.15f);
@@ -231,6 +267,13 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
 
         var placeStamp = discover.TakePassportRequest();
         if (issued != null) Exchange(issued.Id);
+        if (category is { } next && next != Category && !riffle.Active)
+        {
+            // Another category riffles a few leaves, as another section does.
+            riffle.Start(next > Category ? 1 : -1, BookShellRiffle.LeavesFor(1), BookSection.Settings, (int)Category, ReducedMotion);
+            Category = next;
+            pendingEdition = null;
+        }
         if (chosen is { } tab) Navigate(tab);
         else if (explore) Navigate(BookSection.Discover);
         else if (placeStamp != null && collection.PlacementOf(placeStamp) is { } placed) { Navigate(BookSection.Passport); ShowPage(fixedPages.Count + placed.Sheet, layout.IsSpread); }
@@ -314,21 +357,37 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
                 return;
             }
             ImGui.PushID((int)section);
-            try { Page(side == Side.Left ? "Section heading" : "Section content", region, () => SectionSide(section, side, page)); }
+            try { Page(side == Side.Left ? "Section heading" : "Section content", region, () => SectionSide(section, side, page, at)); }
             finally { ImGui.PopID(); }
         }
 
-        // What one side of a section shows, drawn at the cursor of the current (page or leaf) window.
-        void SectionSide(BookSection section, Side side, UiContext type)
+        // What one side of a section shows, drawn at the cursor of the current (page or leaf) window. For the
+        // Settings pages, at is the category.
+        void SectionSide(BookSection section, Side side, UiContext type, int at = 0)
         {
             switch (section)
             {
                 case BookSection.Settings:
-                    // Left: how the book moves and what it holds; right: how it looks.
-                    if (side != Side.Right) { back |= SettingsIntroduction(type); ImGui.Dummy(new Vector2(0, 24 * type.Scale)); SettingsOptions(type); colours.Preview(type); }
-                    if (side == Side.Single) ImGui.Dummy(new Vector2(0, 24 * type.Scale));
-                    // While a change of edition waits for its answer the colours step aside: the change would reset them.
-                    if (side != Side.Left) { EditionOptions(type); if (pendingEdition == null) colours.Draw(type); }
+                    var shownCategory = (SettingsCategory)Math.Clamp(at, 0, CategoryNames.Length - 1);
+                    if (side != Side.Right) back |= SettingsIntroduction(type, shownCategory);
+                    switch (shownCategory)
+                    {
+                        case SettingsCategory.General:
+                            if (side == Side.Single) ImGui.Dummy(new Vector2(0, 24 * type.Scale));
+                            if (side != Side.Left) MotionOptions(type);
+                            break;
+                        case SettingsCategory.Customization:
+                            // Left: the edition and a preview in the exact colours; right: the colours. While a change of
+                            // edition waits for its answer the colours and preview step aside: the change would reset them.
+                            if (side != Side.Right) { ImGui.Dummy(new Vector2(0, 16 * type.Scale)); EditionOptions(type); if (pendingEdition == null) colours.Preview(type); }
+                            if (side == Side.Single) ImGui.Dummy(new Vector2(0, 24 * type.Scale));
+                            if (side != Side.Left && pendingEdition == null) colours.Draw(type);
+                            break;
+                        default:
+                            if (side == Side.Single) ImGui.Dummy(new Vector2(0, 24 * type.Scale));
+                            if (side != Side.Left) { StampOptions(type); IdentityOptions(type); }
+                            break;
+                    }
                     break;
                 case BookSection.Discover when side != Side.Left:
                     discover.Draw(type, onPaper: true);
@@ -352,7 +411,7 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         // The content a turning leaf carries for one side of a section, or null for a blank leaf.
         Action? LeafSide(BookSection section, int at, Side side)
         {
-            if (section != BookSection.Passport) return () => SectionSide(section, side, page);
+            if (section != BookSection.Passport) return () => SectionSide(section, side, page, at);
             var index = at + (side == Side.Right ? 1 : 0);
             if (index >= PageCount) return null;
             var entry = PageAt(index);
@@ -528,7 +587,7 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         void DrawRiffle()
         {
             var from = (Section: riffle.FromSection, Page: riffle.FromPage);
-            var to = (Section, Page: VisiblePage);
+            var to = (Section, Page: Section == BookSection.Settings ? (int)Category : VisiblePage);
             var forward = riffle.Direction > 0;
             var count = riffle.Leaves;
             var noneStarted = riffle.Progress(0) <= 0f;
@@ -713,7 +772,7 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
             ribbonExtension = ReducedMotion ? 0f : ribbonExtension - dt / UiMotion.RibbonRoll;
             if (ribbonExtension <= 0f) { ribbonExtension = 0f; if (wanted is { } next) ribbonSection = next; }
         }
-        else ribbonExtension = ReducedMotion ? 1f : motion.Reveal < 0.5f || riffle.Active ? ribbonExtension : MathF.Min(1f, ribbonExtension + dt / UiMotion.RibbonUnroll);
+        else ribbonExtension = ReducedMotion ? 1f : motion.Reveal < 0.5f || riffle.Active || TabSwap > 0f ? ribbonExtension : MathF.Min(1f, ribbonExtension + dt / UiMotion.RibbonUnroll);
         if (ribbonExtension > 0f) BookControl.Ribbon(layout.Bookmark((int)ribbonSection), context, UiMotion.Ease(ribbonExtension));
     }
 
@@ -728,7 +787,7 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         pageEntry = null;
         pendingEdition = null;
         var distance = (int)to - (int)Section;
-        riffle.Start(Math.Sign(distance), BookShellRiffle.LeavesFor(distance), Section, VisiblePage, ReducedMotion);
+        riffle.Start(Math.Sign(distance), BookShellRiffle.LeavesFor(distance), Section, Section == BookSection.Settings ? (int)Category : VisiblePage, ReducedMotion);
         Section = to;
         pressing = dragging = false;
     }
@@ -868,18 +927,58 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
     // Whether the passport is being exchanged for another edition.
     internal bool Exchanging => swapTo != null;
 
-    private bool SettingsIntroduction(UiContext context)
+    // Each category's left page opens with its name, what it holds, and the way back.
+    private bool SettingsIntroduction(UiContext context, SettingsCategory category)
     {
         UiTypography.Text("WANDERVEIL / SETTINGS", TextRole.Caption, context, UiTheme.MutedInk);
         ImGui.Dummy(new Vector2(0, 16 * context.Scale));
-        UiTypography.Text("Settings", TextRole.Title, context, UiTheme.Ink);
+        UiTypography.Text(CategoryNames[(int)category], TextRole.Title, context, UiTheme.Ink);
         ImGui.Dummy(new Vector2(0, 12 * context.Scale));
-        UiTypography.Text("How your passport looks and moves. Changes are saved as you make them.", TextRole.Body, context, UiTheme.Ink);
+        UiTypography.Text(category switch
+        {
+            SettingsCategory.General => "How your passport moves. Changes are saved as you make them.",
+            SettingsCategory.Customization => "Your passport's edition and colours.",
+            _ => "What your passport keeps on this PC, and whether it is saved.",
+        }, TextRole.Body, context, UiTheme.Ink);
         ImGui.Dummy(new Vector2(0, 20 * context.Scale));
         return BookControl.Link("« Back to " + Labels[(int)ReturnSection], context);
     }
 
-    private void SettingsOptions(UiContext context)
+    // The category tabs' symbols: a gear (General), a painter's palette (Customization), a storage box (Saved data).
+    private static void CategoryIcon(ImDrawListPtr list, Vector2 centre, float size, SettingsCategory category, Vector4 ink, UiContext context)
+    {
+        var colour = ImGui.GetColorU32(ink);
+        var line = MathF.Max(1, 1.5f * context.Scale);
+        var r = size / 2;
+        switch (category)
+        {
+            case SettingsCategory.General:
+                for (var tooth = 0; tooth < 8; tooth++)
+                {
+                    var angle = tooth * MathF.Tau / 8;
+                    var direction = new Vector2(MathF.Cos(angle), MathF.Sin(angle));
+                    list.AddLine(centre + direction * r * 0.62f, centre + direction * r * 0.95f, colour, MathF.Max(1.5f, r * 0.28f));
+                }
+                list.AddCircleFilled(centre, r * 0.66f, colour, 24);
+                list.AddCircleFilled(centre, r * 0.26f, ImGui.GetColorU32(UiTheme.Paper), 16);
+                break;
+            case SettingsCategory.Customization:
+                list.AddCircle(centre, r * 0.9f, colour, 28, line);
+                list.AddCircleFilled(centre + new Vector2(r * 0.32f, r * 0.38f), r * 0.2f, colour, 12);
+                foreach (var (x, y) in new[] { (-0.42f, -0.12f), (-0.12f, -0.48f), (0.32f, -0.36f) })
+                    list.AddCircleFilled(centre + new Vector2(x, y) * r, r * 0.15f, colour, 10);
+                break;
+            default:
+                var lid = new UiRect(centre + new Vector2(-r * 0.92f, -r * 0.72f), new Vector2(r * 1.84f, r * 0.42f));
+                var body = new UiRect(centre + new Vector2(-r * 0.78f, -r * 0.3f), new Vector2(r * 1.56f, r * 1.06f));
+                list.AddRect(lid.Position, lid.Max, colour, 1.5f * context.Scale, ImDrawFlags.None, line);
+                list.AddRect(body.Position, body.Max, colour, 1.5f * context.Scale, ImDrawFlags.None, line);
+                list.AddLine(centre + new Vector2(-r * 0.28f, r * 0.02f), centre + new Vector2(r * 0.28f, r * 0.02f), colour, line);
+                break;
+        }
+    }
+
+    private void MotionOptions(UiContext context)
     {
         UiTypography.Text("MOTION", TextRole.Caption, context, UiTheme.MutedInk);
         ImGui.Dummy(new Vector2(0, 10 * context.Scale));
@@ -902,14 +1001,13 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
             ImGui.Dummy(new Vector2(0, 6 * context.Scale));
             if (BookControl.Link("Try saving again", context)) saveFailed = !settings.Save();
         }
-        StampOptions(context);
-        IdentityOptions(context);
     }
 
-    // Anything loading the passport's identity found, and a retry when saving it failed.
+    // Whether the passport's identity is saved, anything loading it found, and a retry when saving it failed.
     private void IdentityOptions(UiContext context)
     {
-        if (IdentityStorageText.Notice(identityStorage) is not { } notice) return;
+        var notice = IdentityStorageText.Notice(identityStorage)
+            ?? (identityStorage == null ? "Your passport details are kept until the game closes; they are not saved." : "Your details, picture, edition, and colours are saved on this PC.");
         ImGui.Dummy(new Vector2(0, 24 * context.Scale));
         UiTypography.Text("PASSPORT", TextRole.Caption, context, UiTheme.MutedInk);
         ImGui.Dummy(new Vector2(0, 10 * context.Scale));
@@ -922,7 +1020,6 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
     // How many stamps the passport holds, whether they are saved, and anything loading them found.
     private void StampOptions(UiContext context)
     {
-        ImGui.Dummy(new Vector2(0, 24 * context.Scale));
         UiTypography.Text("STAMPS", TextRole.Caption, context, UiTheme.MutedInk);
         ImGui.Dummy(new Vector2(0, 10 * context.Scale));
         var waiting = collection.Unplaced.Count();

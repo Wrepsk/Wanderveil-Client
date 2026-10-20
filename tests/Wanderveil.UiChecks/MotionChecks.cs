@@ -464,10 +464,10 @@ internal static class MotionChecks
         while (shell.IsRiffling) Step();
         if (artifacts != null) SoftwarePreview.Save(Path.Combine(artifacts, "passport-motion-settings.png"), host);
 
-        // The printed checkbox saves the setting; it is on the left page under the Back link, so probe up from
-        // the page's foot (the first control met is the checkbox).
-        var options = Layout().LeftPage;
-        for (var y = options.Size.Y - 20; !settings.ReducedMotion && shell.Section == BookSection.Settings && y > 20; y -= 12)
+        // The printed checkbox saves the setting; it heads General's right page, the first control down it.
+        check(shell.Category == SettingsCategory.General, "Settings do not open on General.");
+        var options = Layout().RightPage;
+        for (var y = 20f; !settings.ReducedMotion && shell.Section == BookSection.Settings && y < options.Size.Y; y += 12)
             Click(options.Position + new Vector2(30, y));
         check(settings.ReducedMotion && settings.Saves == 1, "The Reduce motion checkbox does not change and save the setting.");
 

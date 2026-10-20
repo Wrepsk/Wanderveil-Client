@@ -36,7 +36,7 @@ Status: implemented foundations for static Passport and Discover previews, 18 Oc
 | `Infrastructure/Storage/PassportStore.cs`, `PassportPersistence.cs` | Versioned identity file and picture copy per profile; issue on first load, startup load and background saves |
 | `Infrastructure/Storage/SafeFile.cs`, `BackgroundSaver.cs` | Shared atomic save with backup and recovery, profile names, and coalesced background saving |
 | `UI/Components/PlateRecolour.cs` | Recolouring plates through their weight maps, coverage-weighted reduced copies, and a small PNG reader for the plugin's own plates |
-| `UI/BookShellColours.cs` | The Settings colour rows: swatches, the custom picker, and the reset |
+| `UI/BookShellColours.cs` | The Settings colour rows (swatches, custom picker, May adjust boxes, reset) and the How it looks preview |
 | `Infrastructure/Media/PortraitPicture.cs`, `Infrastructure/Game/GameCharacter.cs` | The holder's picture (file picker, background decode and copy, texture swap) and the logged-in character, in game only |
 | `StampArt.cs` | A design as a faint square proof or an issued stamp turned as placed, with the procedural motif as fallback |
 | `PostcardArtwork.cs` | Original geometric scenery; no textures or external art |

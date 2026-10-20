@@ -115,17 +115,21 @@ internal static class EditionChecks
             {
                 book.Open();
                 book.Shell.ShowSettings();
+                for (var frame = 0; frame < 120 && (book.Shell.IsRiffling || book.Shell.TabSwap < 1f); frame++) book.Frame();
+                // The editions are under Customization, the second category tab.
+                book.Click(book.Tab(1));
                 for (var frame = 0; frame < 120 && book.Shell.IsRiffling; frame++) book.Frame();
                 book.Frames(3);
             }
             ToSettings();
-            check(book.Shell.Section == BookSection.Settings && book.Shell.PageOverflow == 0, "The Settings pages overflow with the editions.");
             if (!motion) book.Save(artifacts, "edition-settings.bmp");
-            // The editions head the right page: sweeping rows from the right, the first control is the last cover,
+            check(book.Shell.Section == BookSection.Settings && book.Shell.PageOverflow == 0, $"The Settings pages overflow with the editions ({book.Shell.PageOverflow}).");
+            // The editions are on Customization's left page: sweeping rows from the right, the first control is the last cover,
             // Garlemald. Below the covers, the first control going down is the confirmation's Change link.
-            var page = book.Page(true);
+            var page = book.Page(false);
             var below = 0f;
-            for (var y = 30f; book.Shell.PendingEdition == null && y < page.Size.Y * 0.4f; y += 6)
+            // Below the Back link, which heads the page.
+            for (var y = page.Size.Y * 0.5f; book.Shell.PendingEdition == null && y < page.Size.Y * 0.8f; y += 6)
                 for (var x = page.Size.X - 10; book.Shell.PendingEdition == null && x > 10; x -= 8)
                     if (book.ClickControl(new Vector2(page.Position.X + x, page.Position.Y + y))) below = y;
             // Down past the leftmost cover, so the next control met is beneath the shelf.

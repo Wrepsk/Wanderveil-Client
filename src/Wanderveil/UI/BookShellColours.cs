@@ -126,13 +126,13 @@ internal sealed class BookShellColours(PassportProfile holder)
         var identity = holder.Identity;
         var look = identity.Look;
         var edition = identity.Edition;
-        ImGui.Dummy(new Vector2(0, 24 * context.Scale));
+        ImGui.Dummy(new Vector2(0, 14 * context.Scale));
         UiTypography.Text("HOW IT LOOKS", TextRole.Caption, context, UiTheme.MutedInk);
         ImGui.Dummy(new Vector2(0, 8 * context.Scale));
         var list = ImGui.GetWindowDrawList();
         var origin = ImGui.GetCursorScreenPos();
         var width = UiLayout.ContentWidth;
-        var height = MathF.Round(118 * context.Scale);
+        var height = MathF.Round(100 * context.Scale);
         var cover = new UiRect(origin, new Vector2(height * 0.75f, height));
         var corner = 5 * context.Scale;
         list.AddRectFilled(cover.Position + new Vector2(2, 3) * context.Scale, cover.Max + new Vector2(2, 3) * context.Scale, ImGui.GetColorU32(new Vector4(0, 0, 0, 0.25f)), corner);

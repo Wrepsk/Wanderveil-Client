@@ -6,6 +6,7 @@ using Dalamud.Bindings.ImGui;
 using Wanderveil.Features.Passport;
 using Wanderveil.Features.Stamps;
 using Wanderveil.Infrastructure.Storage;
+using Wanderveil.UI;
 using Wanderveil.UI.Components;
 using Wanderveil.UI.Primitives;
 
@@ -32,6 +33,10 @@ internal static class ColourChecks
         using var book = new CollectChecks.Book(new Vector2(1200, 820), new StampCollection(), identity: profile);
         book.Open();
         book.Shell.ShowSettings();
+        book.Frames(3);
+        // The colours are under Customization, the second category tab.
+        book.Click(book.Tab(1));
+        check(book.Shell.Category == SettingsCategory.Customization, "The second category tab does not open Customization.");
         book.Frames(3);
         check(book.Shell.PageOverflow == 0 && book.Shell.PageOverflowX == 0, "The colour rows overflow the Settings page.");
         book.Save(artifacts, "colour-settings.bmp");
