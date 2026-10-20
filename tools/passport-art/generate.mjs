@@ -71,12 +71,13 @@ async function emit(svg, path, w, h) {
 //   plate(c) = plate(c0) + sum over tokens k of weight_k * (c_k - c0_k),
 // where weight_k is how much of token k reaches each pixel: the difference between the plate rendered with k
 // white and with k black (everything else as the edition prints it). Weights are grey, full size only; the
-// client makes its own reduced copies after recolouring. Cloth (cover), foil, paper, and the paper's guilloche
-// lines are recoloured.
-export const RECOLOURED = ["cover", "foil", "paper", "lines"];
+// client makes its own reduced copies after recolouring. Cloth (cover), foil, paper, the paper's guilloche lines,
+// and the edition's accent are recoloured.
+export const RECOLOURED = ["cover", "foil", "paper", "lines", "accent"];
 const plates = (id, tokens) => ({
   cover: [cover(id, tokens), COVER.w, COVER.h],
-  crest: [crest(id, tokens), CREST, CREST],
+  // The crest's own SVG has only a viewBox: render it at the plate's size, as emit() does.
+  crest: [sized(crest(id, tokens), CREST, CREST), CREST, CREST],
   banner: [banner(id, tokens), 800, 1840],
   "map-overhead": [fill(read("map.svg"), tokens), 1044, 1260],
   "book-open": [fill(read("book-open.svg"), tokens), 1536, 1024],
@@ -87,6 +88,7 @@ async function weights(id, tokens) {
     for (const token of RECOLOURED) {
       const white = await raw(plates(id, { ...tokens, [token]: "#FFFFFF" })[plate][0]);
       const black = await raw(plates(id, { ...tokens, [token]: "#000000" })[plate][0]);
+      if (white.info.width !== w || white.info.height !== h) throw new Error(`${plate} renders at ${white.info.width} x ${white.info.height}, not ${w} x ${h}`);
       const grey = Buffer.alloc(w * h);
       let any = false;
       for (let i = 0; i < w * h; i++) {
@@ -148,7 +150,7 @@ for (const [id, palette] of Object.entries(editions)) {
   await emit(fill(read("book-open.svg"), tokens), `editions/${id}/book-open.png`, 1536, 1024);
   await weights(id, tokens);
   if (process.argv.includes("--verify")) {
-    const { worst, mean } = await verify(id, tokens, { cover: "#5A1424", foil: "#DCE6E8", paper: "#141414", lines: "#FFFFFF" });
+    const { worst, mean } = await verify(id, tokens, { cover: "#5A1424", foil: "#DCE6E8", paper: "#141414", lines: "#FFFFFF", accent: "#2B5568" });
     console.log(`${id}: recoloured through weights within ${worst.toFixed(1)} / 255 of a direct render, ${mean.toFixed(2)} on average`);
     if (worst > 32 || mean > 2) throw new Error(`${id}: recolouring through weights is ${worst} / 255 off`);
   }

@@ -18,6 +18,7 @@ internal sealed class BookShellColours(PassportProfile holder)
     [
         (ColourPart.Cloth, "COVER", [("Forest", 0x1E3A2A), ("Navy", 0x19242E), ("Wine", 0x5A1424), ("Harbour", 0x2B5568), ("Midnight", 0x16213A), ("Plum", 0x3E2440), ("Saddle", 0x6B4226), ("Charcoal", 0x2E2E2E), ("Ivory", 0xEFEBE0)]),
         (ColourPart.Foil, "FOIL", [("Gold", 0xB99662), ("Bright gold", 0xD4A83C), ("Sage", 0xA9C28A), ("Silver", 0xC3CAD6), ("Pearl", 0xDCE6E8), ("Copper", 0xB87333), ("Rose gold", 0xC9967E), ("Black", 0x141414)]),
+        (ColourPart.Accent, "ACCENT", [("Sage", 0x5E8A4A), ("Wine", 0x9C3A4C), ("Brass", 0xB58A3C), ("Steel", 0x7F8FB0), ("Crimson", 0xC0272D), ("Gold", 0xB99662), ("Teal", 0x2B7A78), ("Plum", 0x6B3E6E)]),
         (ColourPart.Ink, "PAGE INK", [("Forest", 0x1E3A2A), ("Navy", 0x2A3B52), ("Wine", 0x7A2232), ("Harbour", 0x1F4A60), ("Royal", 0x2B3F6B), ("Crimson", 0x8E1C22), ("Umber", 0x5A3A22), ("Black", 0x19242E)]),
         (ColourPart.Paper, "PAPER", [("Cream", 0xD8C5A3), ("Ivory", 0xE6DCC6), ("White", 0xECEAE4), ("Aged", 0xCDB38A), ("Grey", 0xD2D0CB), ("Rose", 0xE4D3CA), ("Sage", 0xD5DCC8), ("Sky", 0xD3DCE2), ("Black", 0x141414)]),
         (ColourPart.Text, "TEXT", [("Ink", 0x19242E), ("Black", 0x000000), ("Sepia", 0x4A3426), ("Navy", 0x1F2A44), ("Forest", 0x1E3A2A), ("Wine", 0x5A1424), ("Parchment", 0xEFE8DA), ("White", 0xFFFFFF)]),
@@ -281,6 +282,7 @@ internal sealed class BookShellColours(PassportProfile holder)
         ColourPart.Cloth => edition.Cloth,
         ColourPart.Foil => edition.Foil,
         ColourPart.Ink => edition.Ink,
+        ColourPart.Accent => edition.Accent,
         _ => PassportLook.EditionPaper,
     });
 
@@ -300,6 +302,7 @@ internal sealed class BookShellColours(PassportProfile holder)
         ColourPart.Ink => "Page ink",
         ColourPart.Paper => "Paper",
         ColourPart.Text => "Text",
+        ColourPart.Accent => "Accent",
         _ => "Rings",
     };
 }

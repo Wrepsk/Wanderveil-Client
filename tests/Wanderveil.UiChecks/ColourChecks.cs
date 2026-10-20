@@ -24,6 +24,63 @@ internal static class ColourChecks
         Png(check);
         Drawn(check, artifacts);
         Settings(check, artifacts);
+        Accent(check, artifacts);
+    }
+
+    // The edition's accent: its own until picked, never guarded, saved, recolouring the plates that print it (and
+    // only where they do), and picked from its row in Settings.
+    private static void Accent(Action<bool, string> check, string? artifacts)
+    {
+        var gridania = PassportEdition.Gridania;
+        var look = PassportLook.Of(gridania);
+        check(look.Accent == gridania.Accent && !look.Recoloured(gridania), "The edition's own accent counts as recoloured.");
+        var teal = PassportLook.Of(gridania, new PassportColours(Accent: Rgb.Hex(0x2B7A78)));
+        check(Rgb.Of(teal.Accent) == Rgb.Hex(0x2B7A78) && teal.Recoloured(gridania) && teal.Adjusted.Length == 0 && teal.Cloth == look.Cloth, "A picked accent is not drawn as picked, or moves other colours.");
+        var identity = PassportIdentity.Sample with { Appearance = PassportAppearance.Gridania with { Colours = new PassportColours(Accent: Rgb.Hex(0x2B7A78)) } };
+        var text = PassportStore.Serialize(identity);
+        check(text.Contains("\"accent\": \"#2B7A78\"", StringComparison.Ordinal) && PassportStore.Parse(text) == identity.Normalize(), "The accent is not saved.");
+
+        // Gridania's cover prints its leaves in the accent: a teal accent changes some of the cover, not all of it.
+        var folder = Path.Combine(AppContext.BaseDirectory, "Assets", "Editions", "gridania");
+        Stream? Open(string name) => File.Exists(Path.Combine(folder, name)) ? File.OpenRead(Path.Combine(folder, name)) : null;
+        var printed = new PlateColours(gridania.Cloth.AsVector3(), gridania.Foil.AsVector3(), PassportLook.EditionPaper.AsVector3(), Vector3.Zero, gridania.Accent.AsVector3());
+        var before = EditionRecolour.Levels(Open, "cover", new PlateTint(printed, printed))[0];
+        var after = EditionRecolour.Levels(Open, "cover", new PlateTint(printed, printed with { Accent = Rgb.Hex(0x2B7A78).Vector.AsVector3() }))[0];
+        var changed = 0;
+        for (var index = 0; index < before.Rgba.Length; index += 4) if (Math.Abs(before.Rgba[index] - after.Rgba[index]) + Math.Abs(before.Rgba[index + 2] - after.Rgba[index + 2]) > 6) changed++;
+        check(changed > 2000 && changed < before.Width * before.Height / 10, $"A new accent recolours {changed} cover pixels.");
+        // Every crest follows its colours across the whole plate: Ul'dah's sun takes a new foil, Gridania's leaves a new
+        // accent. (Crest weight maps were once rendered at the crest's 128-unit size and barely recoloured anything.)
+        foreach (var (edition, part) in new[] { ("uldah", "foil"), ("gridania", "accent") })
+        {
+            var crestFolder = Path.Combine(AppContext.BaseDirectory, "Assets", "Editions", edition);
+            Stream? OpenCrest(string name) => File.Exists(Path.Combine(crestFolder, name)) ? File.OpenRead(Path.Combine(crestFolder, name)) : null;
+            var shown = PassportEdition.Find(edition);
+            var crestPrinted = new PlateColours(shown.Cloth.AsVector3(), shown.Foil.AsVector3(), PassportLook.EditionPaper.AsVector3(), Vector3.Zero, shown.Accent.AsVector3());
+            var crestWanted = part == "foil" ? crestPrinted with { Foil = new Vector3(0.86f, 0.9f, 0.91f) } : crestPrinted with { Accent = Rgb.Hex(0x2B7A78).Vector.AsVector3() };
+            var plain = EditionRecolour.Levels(OpenCrest, "crest", new PlateTint(crestPrinted, crestPrinted))[0];
+            var recoloured = EditionRecolour.Levels(OpenCrest, "crest", new PlateTint(crestPrinted, crestWanted))[0];
+            var moved = 0;
+            for (var index = 0; index < plain.Rgba.Length; index += 4) if (Math.Abs(plain.Rgba[index] - recoloured.Rgba[index]) + Math.Abs(plain.Rgba[index + 2] - recoloured.Rgba[index + 2]) > 6) moved++;
+            check(moved > 50000, $"A new {part} recolours only {moved} pixels of {edition}'s crest.");
+        }
+
+        // The Accent row in Settings: its curated swatch 6 is Teal; Customization still fits.
+        var profile = new PassportProfile(PassportIdentity.Sample);
+        using var book = new CollectChecks.Book(new Vector2(1200, 820), new StampCollection(), identity: profile);
+        book.Open();
+        book.Shell.ShowSettings();
+        book.Frames(3);
+        book.Click(book.Tab(1));
+        book.Frames(3);
+        book.Click(book.Shell.ColourSwatch(ColourPart.Accent, 6)!.Value);
+        book.Frames(3);
+        check(profile.Identity.Appearance?.Colours?.Accent == Rgb.Hex(0x2B7A78) && book.Shell.PageOverflow == 0 && book.Shell.PageOverflowX == 0, $"The Accent row does not pick teal, or Customization overflows ({profile.Identity.Appearance?.Colours?.Accent}).");
+        book.Save(artifacts, "colour-settings-accent.bmp");
+        book.Shell.GoBack();
+        for (var frame = 0; frame < 120 && book.Shell.IsRiffling; frame++) book.Frame();
+        book.Save(artifacts, "colour-accent-pages.bmp");
+        Console.WriteLine("PASS colour-accent");
     }
 
     // The colour rows in Settings: they fit beside the editions, and a swatch click recolours at once.

@@ -28,13 +28,15 @@ internal readonly record struct Rgb(byte R, byte G, byte B)
 
 // The parts of the passport the holder can recolour. Cloth: the cover, spine, book edges, and banner. Foil: the
 // cover lettering, crest, decoration, and banner trim. Ink: printed links and controls on the paper. Paper: the
-// pages themselves. Text: the text printed on the pages and its captions. Lines: the paper's guilloche rings.
-internal enum ColourPart { Cloth, Foil, Ink, Paper, Text, Lines }
+// pages themselves. Text: the text printed on the pages and its captions. Lines: the paper's guilloche rings. Accent:
+// the edition's second colour in its art (crest details, cover decoration, the banner's emblem, the map's land).
+internal enum ColourPart { Cloth, Foil, Ink, Paper, Text, Lines, Accent }
 
 // The holder's colours over an edition: each part null keeps the edition's own (for Text, chosen to suit the paper;
 // for Lines, following the text). Free turns the legibility guard off, so every colour is used exactly as picked.
-// With the guard on, Exact names parts (one bit per ColourPart) the guard must still leave as picked.
-internal sealed record PassportColours(Rgb? Cloth = null, Rgb? Foil = null, Rgb? Ink = null, Rgb? Paper = null, Rgb? Text = null, bool Free = false, Rgb? Lines = null, int Exact = 0)
+// With the guard on, Exact names parts (one bit per ColourPart) the guard must still leave as picked. Accent is
+// decoration only, never guarded.
+internal sealed record PassportColours(Rgb? Cloth = null, Rgb? Foil = null, Rgb? Ink = null, Rgb? Paper = null, Rgb? Text = null, bool Free = false, Rgb? Lines = null, int Exact = 0, Rgb? Accent = null)
 {
     internal static readonly PassportColours None = new();
 
@@ -45,7 +47,7 @@ internal sealed record PassportColours(Rgb? Cloth = null, Rgb? Foil = null, Rgb?
     // How far rings must stand from the paper to show: printed at 5%, a 3:1 colour shows as faint texture.
     internal const float RingsContrast = 3f;
 
-    internal bool IsEmpty => Cloth == null && Foil == null && Ink == null && Paper == null && Text == null && Lines == null && !Free && Exact == 0;
+    internal bool IsEmpty => Cloth == null && Foil == null && Ink == null && Paper == null && Text == null && Lines == null && Accent == null && !Free && Exact == 0;
 
     // Whether the guard may move this part.
     internal bool Adjustable(ColourPart part) => !Free && (Exact & (1 << (int)part)) == 0;
@@ -59,7 +61,8 @@ internal sealed record PassportColours(Rgb? Cloth = null, Rgb? Foil = null, Rgb?
         ColourPart.Ink => Ink,
         ColourPart.Paper => Paper,
         ColourPart.Text => Text,
-        _ => Lines,
+        ColourPart.Lines => Lines,
+        _ => Accent,
     };
 
     internal PassportColours With(ColourPart part, Rgb? colour) => part switch
@@ -69,7 +72,8 @@ internal sealed record PassportColours(Rgb? Cloth = null, Rgb? Foil = null, Rgb?
         ColourPart.Ink => this with { Ink = colour },
         ColourPart.Paper => this with { Paper = colour },
         ColourPart.Text => this with { Text = colour },
-        _ => this with { Lines = colour },
+        ColourPart.Lines => this with { Lines = colour },
+        _ => this with { Accent = colour },
     };
 }
 
@@ -78,8 +82,9 @@ internal sealed record PassportColours(Rgb? Cloth = null, Rgb? Foil = null, Rgb?
 // softer shade of it. Foil must read on its cloth (3:1), text and printed controls on the paper (4.5:1). Of two
 // colours that do not, the guard moves one the holder lets it move (foil before cloth; text or ink before paper)
 // toward black or white just far enough, and Adjusted says which picks were moved. With the guard off (Free)
-// nothing is moved. Lines is the paper's guilloche rings: as picked, else following the text.
-internal sealed record PassportLook(Vector4 Cloth, Vector4 Foil, Vector4 Ink, Vector4 Paper, Vector4 Text, Vector4 Caption, Vector4 Lines, bool LightText, ColourPart[] Adjusted)
+// nothing is moved. Lines is the paper's guilloche rings: as picked, else following the text. Accent is as picked, else
+// the edition's.
+internal sealed record PassportLook(Vector4 Cloth, Vector4 Foil, Vector4 Ink, Vector4 Paper, Vector4 Text, Vector4 Caption, Vector4 Lines, bool LightText, ColourPart[] Adjusted, Vector4 Accent)
 {
     // The paper the editions are printed on (tools/passport-art/editions.mjs, shared.paper).
     internal static readonly Vector4 EditionPaper = Rgb.Hex(0xD8C5A3).Vector;
@@ -124,7 +129,7 @@ internal sealed record PassportLook(Vector4 Cloth, Vector4 Foil, Vector4 Ink, Ve
             lines = Moved(lines, paper, PassportColours.RingsContrast);
             adjusted.Add(ColourPart.Lines);
         }
-        return new PassportLook(cloth, foil, ink, paper, text, caption, lines, light, adjusted.ToArray());
+        return new PassportLook(cloth, foil, ink, paper, text, caption, lines, light, adjusted.ToArray(), colours.Accent?.Vector ?? edition.Accent);
 
         // Two colours that must read together: the first moves if the guard may move it, else the second.
         void Pair(ColourPart first, ref Vector4 a, ColourPart second, ref Vector4 b, float ratio)
@@ -146,7 +151,7 @@ internal sealed record PassportLook(Vector4 Cloth, Vector4 Foil, Vector4 Ink, Ve
     }
 
     // How far the holder's colours differ from the edition's on the plates that are recoloured.
-    internal bool Recoloured(PassportEdition edition) => !Near(Cloth, edition.Cloth) || !Near(Foil, edition.Foil) || !Near(Paper, EditionPaper) || !Near(Lines, Black);
+    internal bool Recoloured(PassportEdition edition) => !Near(Cloth, edition.Cloth) || !Near(Foil, edition.Foil) || !Near(Paper, EditionPaper) || !Near(Lines, Black) || !Near(Accent, edition.Accent);
 
     // Hovered foil: a little nearer white, or for dark foil, nearer its ink.
     internal Vector4 FoilBright => Vector4.Lerp(Foil, Luminance(Foil) > 0.2f ? Vector4.One : Ink, 0.35f) with { W = 1f };
@@ -174,7 +179,7 @@ internal sealed record PassportLook(Vector4 Cloth, Vector4 Foil, Vector4 Ink, Ve
     private static bool Near(Vector4 a, Vector4 b) => MathF.Abs(a.X - b.X) + MathF.Abs(a.Y - b.Y) + MathF.Abs(a.Z - b.Z) < 1.5f / 255f;
 
     // Equality by colour (the adjusted list is derived from them).
-    public bool Equals(PassportLook? other) => other != null && Cloth == other.Cloth && Foil == other.Foil && Ink == other.Ink && Paper == other.Paper && Text == other.Text && Caption == other.Caption && Lines == other.Lines;
+    public bool Equals(PassportLook? other) => other != null && Cloth == other.Cloth && Foil == other.Foil && Ink == other.Ink && Paper == other.Paper && Text == other.Text && Caption == other.Caption && Lines == other.Lines && Accent == other.Accent;
 
-    public override int GetHashCode() => HashCode.Combine(Cloth, Foil, Ink, Paper, Text, Caption, Lines);
+    public override int GetHashCode() => HashCode.Combine(Cloth, Foil, Ink, Paper, Text, Caption, Lines, Accent);
 }

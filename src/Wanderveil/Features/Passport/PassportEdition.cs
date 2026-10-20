@@ -38,6 +38,18 @@ internal sealed record PassportEdition(string Id, string Name, string Code, stri
 
     internal static bool IsKnown(string? id) => All.Any(edition => edition.Id == id);
 
+    // The edition's second colour in its art (Gridania's leaves, Ul'dah's wine details, Limsa Lominsa's brass, Garlemald's
+    // red), as tools/passport-art/editions.mjs prints it.
+    internal Vector4 Accent => Rgb(Id switch
+    {
+        "eorzea" => 0xB99662,
+        "gridania" => 0x5E8A4A,
+        "uldah" => 0x9C3A4C,
+        "limsa" => 0xB58A3C,
+        "ishgard" => 0x7F8FB0,
+        _ => 0xC0272D,
+    });
+
     // Where the maker's mark (WANDERVEIL) sits on the cover, in board units: above the chip mark on covers that
     // carry one (tools/passport-art/svg/cover-<edition>.svg draws it at 488-512), at the foot otherwise.
     internal float MarkTop => Id is "eorzea" or "garlemald" ? 470 : 492;
