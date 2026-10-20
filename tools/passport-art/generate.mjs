@@ -162,6 +162,31 @@ await emit(cover("eorzea", neutral), "book-cover.png", COVER.w, COVER.h);
 await emit(fill(read("portrait.svg"), neutral), "demo-portrait.png", 1086, 1448);
 await emit(read("stamp-atlas.svg"), "stamp-atlas.png", 2172, 724);
 await symbols();
+await grain();
+
+// The paper's tooth for the pencil: a fine speckle over a soft mottle, thresholded so some paper always shows through,
+// white with the tooth as alpha. One copy only (the client maps it across a whole page, near one texel a pixel). The
+// same seed always gives the same plate.
+async function grain() {
+  const width = 512;
+  const height = 704;
+  let seed = 0x5eed;
+  const random = () => { seed = (seed + 0x6d2b79f5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  const cell = 8;
+  const columns = width / cell + 1;
+  const rows = height / cell + 1;
+  const coarse = Array.from({ length: columns * rows }, random);
+  const at = (x, y) => coarse[Math.min(y, rows - 1) * columns + Math.min(x, columns - 1)];
+  const pixels = Buffer.alloc(width * height * 4, 255);
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+    const gx = x / cell, gy = y / cell, x0 = Math.floor(gx), y0 = Math.floor(gy), fx = gx - x0, fy = gy - y0;
+    const mottle = at(x0, y0) * (1 - fx) * (1 - fy) + at(x0 + 1, y0) * fx * (1 - fy) + at(x0, y0 + 1) * (1 - fx) * fy + at(x0 + 1, y0 + 1) * fx * fy;
+    const tooth = 0.55 * random() + 0.45 * mottle;
+    pixels[(y * width + x) * 4 + 3] = Math.round(Math.max(0, Math.min(1, (tooth - 0.28) / 0.42)) * 255);
+  }
+  await sharp(pixels, { raw: { width, height, channels: 4 } }).png({ compressionLevel: 9 }).toFile(resolve(out, "grain.png"));
+  results.push("grain");
+}
 
 // The symbols a holder places on the cover and first pages, as white masks the client tints (foil on the cover,
 // page ink on the paper): white prints fully, grey fainter, and black is cut out. The six nations' crests, their

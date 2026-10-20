@@ -40,6 +40,7 @@ internal sealed class PreviewTextures : IBookAssets
         images[BookAsset.NationMap] = Study("map-overhead");
         images[BookAsset.EditionCrest] = Study("crest");
         images[BookAsset.Symbols] = Load(Path.Combine(AppContext.BaseDirectory, "Assets", "symbols.png"), 3000);
+        images[BookAsset.Grain] = Load(Path.Combine(AppContext.BaseDirectory, "Assets", "grain.png"), 3001);
     }
 
     private BookImage Load(string file, ulong id)

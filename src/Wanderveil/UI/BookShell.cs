@@ -5,6 +5,7 @@ using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using Wanderveil.Features;
 using Wanderveil.Features.Discover;
+using Wanderveil.Features.Drawing;
 using Wanderveil.Features.Echoes;
 using Wanderveil.Features.Passport;
 using Wanderveil.Features.Stamps;
@@ -28,7 +29,8 @@ internal enum SettingsCategory { General, Customization, Layout, Saved }
 // identity is the holder's stored identity (profile only seeds one when none is given); portrait, character,
 // and identityStorage are the host's picture, logged-in character, and identity file, each optional.
 internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IReadOnlyList<PassportPage>? pages = null, IBookShellSettings? settings = null, BookShellContent? content = null, StampCollection? stamps = null, ISavedState? storage = null,
-    PassportProfile? identity = null, IPassportPortrait? portrait = null, ICharacterSource? character = null, ISavedState? identityStorage = null)
+    PassportProfile? identity = null, IPassportPortrait? portrait = null, ICharacterSource? character = null, ISavedState? identityStorage = null,
+    PageMarks? marks = null, ISavedState? marksStorage = null)
 {
     internal const ImGuiWindowFlags WindowFlags = ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.NoBackground | ImGuiWindowFlags.NoCollapse |
         ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoMove | ImGuiWindowFlags.NoDocking;
@@ -50,6 +52,8 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
     private readonly IdentityEditor editor = new(identity!, portrait, character);
     private readonly BookShellColours colours = new(identity!);
     private readonly BookShellSymbols symbols = new(identity!, assets);
+    // The holder's drawing and writing on the stamp pages, and Draw mode.
+    private readonly BookShellDrawing drawing = new(marks ?? new PageMarks(), assets);
     // The fixed pages (nation, identity); unlimited blank stamp pages follow them.
     private readonly IReadOnlyList<PassportPage> fixedPages = ValidatePages(pages ?? PassportDocumentView.SamplePages);
     private readonly BookShellStamps desk = new(stamps!, assets);
@@ -90,6 +94,7 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
     internal BookShellStamps Desk => desk;
     // Decorating the cover and first pages with symbols.
     internal BookShellSymbols Symbols => symbols;
+    internal BookShellDrawing Drawing => drawing;
     internal PassportProfile Identity => holder;
     // The colours the plates were drawn in last frame (null before the first frame).
     internal PlateTint? PlateTint => editions.Tint;
@@ -168,11 +173,11 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         try { return DrawBook(bounds, context); }
         finally
         {
-            holding = pressing || dragging || desk.Busy || symbols.Busy || ImGui.IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows) && ImGui.IsAnyItemActive();
+            holding = pressing || dragging || desk.Busy || symbols.Busy || drawing.Busy || ImGui.IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows) && ImGui.IsAnyItemActive();
             // A field being written in keeps Escape for itself; otherwise the book wants it while it is shown and
             // either holds a stamp or info, or has focus.
             wantsEscape = motion.Phase != BookPhase.Hidden && !ImGui.IsAnyItemActive()
-                && (desk.Busy || desk.Info != null || EditingIdentity || symbols.Decorating || ImGui.IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows));
+                && (desk.Busy || desk.Info != null || EditingIdentity || symbols.Decorating || drawing.Drawing || ImGui.IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows));
         }
     }
 
@@ -190,6 +195,7 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
             else if (symbols.Busy) symbols.Cancel();
             else if (symbols.SheetOpen) symbols.CloseSheet();
             else if (symbols.Decorating) symbols.Stop();
+            else if (drawing.Drawing) drawing.Escape();
             else if (desk.Info != null) desk.CloseInfo();
             else if (EditingIdentity) StopEditing();
             else motion.Dismiss();
@@ -207,6 +213,8 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         var identityShown = Section == BookSection.Passport && !turning && !riffle.Active && (IsIdentity(VisiblePage) || layout.IsSpread && IsIdentity(VisiblePage + 1));
         if (EditingIdentity && !identityShown) StopEditing();
         // Decorating lasts while the cover or the first pages (before the stamps) rest open.
+        // Draw mode lasts while stamp pages rest open.
+        if (drawing.Drawing && (Section != BookSection.Passport || !turning && !riffle.Active && VisiblePage < fixedPages.Count)) drawing.Stop();
         if (symbols.Decorating && (holder.Identity.Appearance == null || Section == BookSection.Passport && !turning && !riffle.Active && VisiblePage >= fixedPages.Count)) symbols.Stop();
 
         // Pages, tabs, and controls fade in once the cover has landed.
@@ -266,13 +274,15 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         PassportEdition? issued = null;
         desk.BeginFrame();
         symbols.BeginFrame();
+        drawing.BeginFrame();
         if (riffle.Active) DrawRiffle();
         else if (turning) DrawTurn();
         else DrawSpread(Section, Section == BookSection.Settings ? (int)Category : VisiblePage);
         symbols.DrawHandles(page);
+        drawing.Interact(page, UiTheme.EditionInk);
         symbols.DrawSheet(layout.IsSpread ? layout.RightPage : layout.LeftPage, page, ImGui.GetIO().DeltaTime, ReducedMotion);
 
-        var openSettings = Section != BookSection.Settings && BookControl.Draw("Settings", "Settings", layout.Settings(context), page, BookControlStyle.Ink, hint: "Wanderveil settings");
+        var openSettings = Section != BookSection.Settings && !drawing.Drawing && BookControl.Draw("Settings", "Settings", layout.Settings(context), page, BookControlStyle.Ink, hint: "Wanderveil settings");
         if (BookControl.Draw("Smaller", "-", layout.Tool(0, context), page, BookControlStyle.Ink, hint: "Smaller passport")) PreferredWidth = MathF.Max(420, PreferredWidth / 1.15f);
         if (BookControl.Draw("Larger", "+", layout.Tool(1, context), page, BookControlStyle.Ink, hint: "Larger passport")) PreferredWidth = MathF.Min(1400, PreferredWidth * 1.15f);
         var close = BookControl.Draw("Close", "×", layout.Tool(2, context), page, BookControlStyle.Ink, hint: "Close passport (Escape)");
@@ -282,6 +292,7 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         var nationShown = Section == BookSection.Passport && IsNation(VisiblePage) && (!layout.IsSpread || IsNation(VisiblePage + 1));
         UiRect? lastFooter = null;
         if (resting && symbols.Decorating) DecorateControls();
+        else if (resting && drawing.Drawing) DrawControls();
         else
         {
             if (resting && (!nationShown || desk.Carrying != null || collection.Unplaced.Any())) StampControls(identityShown);
@@ -291,6 +302,14 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
             {
                 StopEditing();
                 symbols.Start();
+            }
+            // The stamp pages take drawing and writing.
+            if (resting && VisiblePage >= fixedPages.Count && desk.Carrying == null
+                && BookControl.Draw("Draw", "Draw", Footer("Draw"), page, BookControlStyle.Ink, hint: "Draw and write on these pages"))
+            {
+                desk.Arrange = false;
+                desk.CloseInfo();
+                drawing.Start();
             }
         }
         ImGui.PopStyleVar();
@@ -318,7 +337,7 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         var turns = Section == BookSection.Passport && !riffle.Active;
         // While a stamp is carried or turned, the mouse belongs to it: the book neither moves nor turns.
         int? click = null;
-        var drag = desk.Busy || desk.TookClick || symbols.Busy || symbols.TookClick ? Vector2.Zero : Gesture(layout.Book, turns, out click);
+        var drag = desk.Busy || desk.TookClick || symbols.Busy || symbols.TookClick || drawing.Busy ? Vector2.Zero : Gesture(layout.Book, turns, out click);
         if (turns)
         {
             if (edgeTurn != 0 && !turn.Active) Turn(edgeTurn, step);
@@ -344,7 +363,7 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
                 if (BookControl.Draw("Identity", edit, Footer(edit), page, BookControlStyle.Ink, hint: EditingIdentity ? "Stop editing (Escape)" : "Write your details, signature, and picture"))
                 {
                     if (EditingIdentity) StopEditing();
-                    else { EditingIdentity = true; editor.Reset(); symbols.Stop(); }
+                    else { EditingIdentity = true; editor.Reset(); symbols.Stop(); drawing.Stop(); }
                 }
                 return;
             }
@@ -356,6 +375,26 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
             if (desk.Carrying != null) desk.Cancel();
             else if (waiting != null) PlaceStamp(waiting, layout.IsSpread);
             else desk.Arrange = !desk.Arrange;
+        }
+
+        // While drawing, the footer is the toolbar, with Done at its end; on a narrow page the toolbar sits just above it.
+        void DrawControls()
+        {
+            var done = Footer("Done");
+            if (BookControl.Draw("Draw", "Done", done, page, BookControlStyle.Ink, hint: "Stop drawing (Escape)")) drawing.Stop();
+            var room = done.Position.X - BookShellLayout.Gap(context) - layout.Footer.Position.X;
+            var bar = room >= BookShellDrawing.ToolbarWidth(layout.ControlHeight)
+                ? new UiRect(layout.Footer.Position, new Vector2(room, layout.ControlHeight))
+                : new UiRect(new Vector2(layout.Footer.Position.X, layout.Footer.Position.Y - layout.ControlHeight - 4 * page.Scale), new Vector2(layout.Footer.Size.X, layout.ControlHeight));
+            // In a window of its own, so it lies above the pages (and what is engraved on them).
+            ImGui.SetCursorScreenPos(bar.Position - new Vector2(6, 4));
+            ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, Vector2.Zero);
+            try
+            {
+                if (ImGui.BeginChild("Drawing toolbar", bar.Size + new Vector2(12, 8), false, ImGuiWindowFlags.NoBackground | ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.NoSavedSettings))
+                    drawing.Toolbar(bar, page, UiTheme.EditionInk, bar.Position.Y < layout.Footer.Position.Y);
+            }
+            finally { ImGui.EndChild(); ImGui.PopStyleVar(); }
         }
 
         // While decorating, the footer offers Done and the symbol sheet.
@@ -444,7 +483,7 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
                             break;
                         default:
                             if (side == Side.Single) ImGui.Dummy(new Vector2(0, 24 * type.Scale));
-                            if (side != Side.Left) { StampOptions(type); IdentityOptions(type); }
+                            if (side != Side.Left) { StampOptions(type); DrawingOptions(type); IdentityOptions(type); }
                             break;
                     }
                     break;
@@ -525,6 +564,7 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
             {
                 passport.Engrave(type);
                 desk.DrawSheet(entry.Sheet, live, rightSide && layout.IsSpread, type);
+                drawing.DrawSheet(entry.Sheet, live, type, UiTheme.EditionInk);
                 return;
             }
             if (holder.Identity.Appearance == null && entry.Kind is PassportPageKind.NationBanner or PassportPageKind.NationMap)
@@ -757,6 +797,7 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
             var label = (index + 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
             var measured = UiTypography.Measure(label, TextRole.Caption, page, 80, false);
             var center = layout.Folio(right);
+            if (drawing.Drawing && Section == BookSection.Passport) return;
             var jumps = live && Section == BookSection.Passport;
             if (jumps && pageEntry == right) { PageEntry(center, measured); return; }
             UiTypography.Draw(ImGui.GetWindowDrawList(), center - measured / 2, label, TextRole.Caption, page, 80, UiTheme.MutedInk, false);
@@ -852,6 +893,7 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         if (turn.Active) { turn.Finish(); VisiblePage = turn.Target; }
         StopEditing();
         symbols.Stop();
+        drawing.Stop();
         desk.Cancel();
         desk.CloseInfo();
         pageEntry = null;
@@ -1316,6 +1358,30 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         }
     }
 
+    // How much drawing and writing the stamp pages hold, whether it is saved, and a retry when saving failed.
+    private void DrawingOptions(UiContext context)
+    {
+        var marks = drawing.Marks;
+        var pages = marks.Strokes.Select(stroke => stroke.Sheet).Concat(marks.Texts.Select(text => text.Sheet)).Distinct().Count();
+        var held = marks.Strokes.Count + marks.Texts.Count == 0 ? "No drawing or writing yet."
+            : $"{marks.Strokes.Count} {(marks.Strokes.Count == 1 ? "stroke" : "strokes")} and {marks.Texts.Count} {(marks.Texts.Count == 1 ? "line" : "lines")} of writing on {pages} {(pages == 1 ? "page" : "pages")}.";
+        var notice = marksStorage?.Loaded switch
+        {
+            LoadOutcome.Recovered => "Your drawing could not be read, so the previous save was restored. The unreadable file was kept beside it.",
+            LoadOutcome.Unreadable => "Your drawing could not be read and no earlier save was usable. Those files were kept.",
+            LoadOutcome.Newer => "Your drawing was saved by a newer Wanderveil. This version shows none of it and will not change it.",
+            LoadOutcome.Inaccessible => "Your drawing could not be opened, so it was left untouched. Drawing done now is not saved.",
+            _ => marksStorage == null ? "It is kept until the game closes; it is not saved." : marksStorage.State == SaveState.Failed ? "Your drawing could not be saved." : "It is saved on this PC.",
+        };
+        ImGui.Dummy(new Vector2(0, 24 * context.Scale));
+        UiTypography.Text("DRAWINGS", TextRole.Caption, context, UiTheme.MutedInk);
+        ImGui.Dummy(new Vector2(0, 10 * context.Scale));
+        UiTypography.Text(held + " " + notice, TextRole.Body, context, UiTheme.Ink);
+        if (marksStorage?.State != SaveState.Failed) return;
+        ImGui.Dummy(new Vector2(0, 6 * context.Scale));
+        if (BookControl.Link("Try saving your drawing again", context)) marksStorage.Retry();
+    }
+
     // Whether the passport's identity is saved, anything loading it found, and a retry when saving it failed.
     private void IdentityOptions(UiContext context)
     {
@@ -1357,6 +1423,7 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         desk.CloseInfo();
         StopEditing();
         symbols.Stop();
+        drawing.Stop();
         pageEntry = null;
         ribbonExtension = 0f;
         pressing = dragging = false;
@@ -1395,8 +1462,9 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
     private void CloseBook()
     {
         motion.CloseToCover();
-        // Decorating carries on onto the cover; a symbol in hand is put back.
+        // Decorating carries on onto the cover; a symbol in hand is put back. Drawing ends.
         symbols.Cancel();
+        drawing.Stop();
         pressing = dragging = false;
     }
 

@@ -138,6 +138,20 @@ Duplicate policy: a passport holds at most one stamp per discovery. Once collect
 - [Arrange mode, with a turning knob and ×, and the engraved number](previews/passport/collect-arrange.png)
 - [Carrying a stamp to a later page](previews/passport/collect-carry.png)
 
+## Drawing and writing
+
+The stamp pages can be drawn and written on (the nation and identity pages cannot; user decision, 20 October 2026). On the stamp pages the footer offers **Draw**, beside the stamp control. Draw mode turns the footer into a toolbar (on a narrow page it lies just above the footer, on its own paper), with **Done** at its end:
+
+- **Pencil**: hold the mouse on a page and draw. The line is a grainy pencil: the paper's tooth shows through it, the same way under every stroke, and it tapers where it starts and ends. The mouse is smoothed and sampled every couple of pixels; moving slowly presses harder (a wider, darker line) than moving fast.
+- **Eraser**: rubs out only what it passes over, so a stroke crossed in the middle becomes two. A line of writing it touches goes whole. A circle shows its size.
+- **Text** (*Aa*): click a page and type a line in the handwriting face; Enter or clicking away keeps it, Escape leaves it as it was. Clicking a line rewrites it; emptying it takes it away.
+- **Palette**: graphite, the passport's page ink, sepia, red, blue, green, and white. **Sizes**: fine, medium, bold (a line's width, the eraser's size, and writing's height).
+- **Undo** (the curved arrow, or Ctrl+Z) takes back the last change, an eraser's whole drag as one; it remembers the session's last 64 changes.
+
+While drawing, the page takes the mouse, so a click never turns the page or moves the book; Page Up and Page Down still turn. **Done**, Escape, turning back to the identity pages, closing the book, or changing section ends Draw mode. Drawing lies above the stamps and never changes them; it turns with the page. Each page holds up to 20,000 pencil samples and 30 lines of writing (120 characters each), the passport 200,000 samples; past that the page says it is full. A page at its limit draws in about 1.9 ms a frame headless (best of three), against 0.02 ms empty. Previews: [drawing](previews/passport/drawing-pages.png), [done](previews/passport/drawing-done.png), [a single page](previews/passport/drawing-narrow.png), [mid-turn](previews/passport/drawing-turn.png). The approach was chosen by [the brush spike](drawing-brush-spike.md).
+
+Drawing is saved in its own file, `marks-local.json` (`wanderveil.passport-marks`, version 1), apart from the stamps and the identity, so a change of edition never touches it. Strokes are kept as vectors (page, colour, width, and their points as one flat list of x, y, pressure in page-width units, to four decimals); writing as its page, text, place, size, and colour. It is saved and recovered like the stamps (`SafeFile`, `BackgroundSaver`), and Settings' **Saved data** says how much there is and whether it is saved, with a retry when saving failed.
+
 ## Saving stamps
 
 Collected stamps are saved on this PC and come back when the plugin reloads or the game restarts. They live in Dalamud's configuration folder for Wanderveil (`pluginConfigs/Wanderveil/` under the XIVLauncher folder) as `stamps-local.json`. There is one local passport for now; files are named by profile so character-scoped passports can follow without a format change. Nothing leaves the PC.

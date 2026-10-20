@@ -10,7 +10,7 @@ copied. These plates are project assets under the repository license.
 
 The symbol plate (`symbols.png`) reuses the crests and emblems as flat masks; its twelve motifs are new for this repository.
 
-Every `editions/<edition>/` folder plus `book-cover.png`, `demo-portrait.png`, `stamp-atlas.png`, and `symbols.png` are embedded
+Every `editions/<edition>/` folder plus `book-cover.png`, `demo-portrait.png`, `stamp-atlas.png`, `symbols.png`, and `grain.png` (generated noise for the pencil) are embedded
 in the plugin, one edition per choosable passport. The map is
 schematic, not validated geography, and the portrait is an anonymous placeholder.
 

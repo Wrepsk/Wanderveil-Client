@@ -2,8 +2,9 @@ using Dalamud.Bindings.ImGui;
 
 namespace Wanderveil.UI.Components;
 
-// Symbols: the holder's symbol set, white masks in a grid (PassportSymbol), tinted where they are drawn.
-internal enum BookAsset { Open, Cover, Portrait, Stamps, EditionCover, NationBanner, NationMap, EditionCrest, Symbols }
+// Symbols: the holder's symbol set, white masks in a grid (PassportSymbol), tinted where they are drawn. Grain: the
+// paper's tooth, white with alpha, which the pencil samples across a page.
+internal enum BookAsset { Open, Cover, Portrait, Stamps, EditionCover, NationBanner, NationMap, EditionCrest, Symbols, Grain }
 
 internal readonly record struct BookImage(ImTextureID Texture, int Width, int Height);
 

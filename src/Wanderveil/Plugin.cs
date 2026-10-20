@@ -34,6 +34,7 @@ public sealed class Plugin : IDalamudPlugin
     private const string Profile = "local";
     private StampPersistence? stamps;
     private PassportPersistence? identity;
+    private MarksPersistence? marks;
     private PortraitPicture? portrait;
     private bool commandRegistered;
     private bool disposed;
@@ -53,9 +54,13 @@ public sealed class Plugin : IDalamudPlugin
                 report: exception => Log.Error(exception, "Could not save the Wanderveil passport."));
             if (identity.Loaded is not (Features.LoadOutcome.New or Features.LoadOutcome.Loaded))
                 Log.Warning("Wanderveil passport loaded as {Outcome}; files kept aside: {Kept}", identity.Loaded, string.Join(", ", identity.Kept.Select(System.IO.Path.GetFileName)));
+            marks = new MarksPersistence(new MarksStore(PluginInterface.GetPluginConfigDirectory()), Profile,
+                report: exception => Log.Error(exception, "Could not save Wanderveil drawing."));
+            if (marks.Loaded is not (Features.LoadOutcome.New or Features.LoadOutcome.Loaded))
+                Log.Warning("Wanderveil drawing loaded as {Outcome}; files kept aside: {Kept}", marks.Loaded, string.Join(", ", marks.Kept.Select(System.IO.Path.GetFileName)));
             portrait = new PortraitPicture(TextureProvider, passportStore, Profile, identity.Profile, exception => Log.Error(exception, "Could not use the Wanderveil portrait."));
             mainWindow = new MainWindow(() => configuration.ReducedMotion, new ConfigurationSettings(configuration, SaveConfiguration), assets, stamps.Collection, stamps,
-                new Features.Passport.PassportServices(identity.Profile, identity, portrait, new GameCharacter(Framework, PlayerState)));
+                new Features.Passport.PassportServices(identity.Profile, identity, portrait, new GameCharacter(Framework, PlayerState)), marks.Marks, marks);
             windowSystem.AddWindow(mainWindow);
 
             commandRegistered = CommandManager.AddHandler(CommandName, new CommandInfo(OnCommand)
@@ -100,6 +105,7 @@ public sealed class Plugin : IDalamudPlugin
         // Waits briefly for a stamp save in progress, so collecting just before unloading is not lost.
         stamps?.Dispose();
         identity?.Dispose();
+        marks?.Dispose();
         portrait?.Dispose();
         assets?.Dispose();
     }

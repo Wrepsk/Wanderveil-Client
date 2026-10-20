@@ -32,6 +32,7 @@ this tool: the PNGs are committed.
 | `svg/book-open.svg` | `editions/<edition>/book-open.png` | 1536 × 1024 |
 | `svg/portrait.svg` | `demo-portrait.png` | 1086 × 1448 |
 | `svg/stamp-atlas.svg` | `stamp-atlas.png` | 2172 × 724, three 724 px cells |
+| (generated noise) | `grain.png` (one copy) | 512 × 704: the paper's tooth for the pencil, white with alpha, from a fixed seed |
 | `svg/crest-*.svg`, `svg/emblem-*.svg`, `svg/symbols.svg` | `symbols.png` (half and quarter copies only) | 1536 × 1024, a 6 × 4 grid of 256 px white masks (grey prints fainter, black is cut out): crests, emblems, then motifs, in `PassportSymbol.All` order |
 
 Templates are ordinary SVG with `{{token}}` slots (`cover`, `foil`, `accent`, `paper`, `ink`).

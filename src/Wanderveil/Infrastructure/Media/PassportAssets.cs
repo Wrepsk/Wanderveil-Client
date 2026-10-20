@@ -26,7 +26,7 @@ internal sealed class PassportAssets : IBookAssets, IDisposable
     // Size copies written by tools/passport-art: full, then .half/.quarter/.eighth where present.
     private static readonly string[] Levels = ["", ".half", ".quarter", ".eighth"];
     // Plates by BookAsset; edition plates are named per edition as <edition>-<plate>.
-    private static readonly string[] TextureNames = ["book-open", "book-cover", "demo-portrait", "stamp-atlas", "cover", "banner", "map-overhead", "crest", "symbols"];
+    private static readonly string[] TextureNames = ["book-open", "book-cover", "demo-portrait", "stamp-atlas", "cover", "banner", "map-overhead", "crest", "symbols", "grain"];
     private const string DefaultEdition = "gridania";
     // Shared plates under "", edition plates under their edition's id.
     private readonly Dictionary<string, (ISharedImmediateTexture Texture, int Width)[][]> textures = new(StringComparer.Ordinal);
