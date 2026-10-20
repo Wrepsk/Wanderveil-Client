@@ -37,12 +37,15 @@ internal interface IBookAssets
 }
 
 // The book's view of its plates: the current edition's own, chosen anew each draw.
-internal sealed class EditionAssets(IBookAssets inner, System.Func<string> edition, System.Func<PlateTint>? tint = null) : IBookAssets
+internal sealed class EditionAssets(IBookAssets inner, System.Func<string> edition) : IBookAssets
 {
+    // The colours the plates are drawn in this frame; the book sets them with the theme, so plates and text agree.
+    internal PlateTint? Tint { get; set; }
+
     // The current edition's plates, recoloured when the holder chose other colours.
     public bool TryGet(BookAsset asset, out BookImage image, float drawWidth = 0f)
     {
-        if (tint?.Invoke() is { Changes: true } colours && IBookAssets.IsEditionPlate(asset)) return inner.TryGet(asset, edition(), colours, out image, drawWidth);
+        if (Tint is { Changes: true } colours && IBookAssets.IsEditionPlate(asset)) return inner.TryGet(asset, edition(), colours, out image, drawWidth);
         return inner.TryGet(asset, edition(), out image, drawWidth);
     }
 

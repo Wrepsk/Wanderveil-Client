@@ -36,7 +36,7 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
     private readonly StampCollection collection = stamps ??= new StampCollection();
     private readonly PassportProfile holder = identity ??= new PassportProfile(profile);
     // Every plate the book draws is its current edition's own.
-    private readonly IBookAssets editions = assets = new EditionAssets(assets, () => identity!.Identity.Edition.Id, () => Tint(identity!.Identity));
+    private readonly EditionAssets editions = (EditionAssets)(assets = new EditionAssets(assets, () => identity!.Identity.Edition.Id));
     // An edition picked in Settings, waiting for the holder to confirm the change.
     private string? pendingEdition;
     // An edition the passport is being exchanged for: the old book slides away, and once it is gone the new
@@ -84,7 +84,9 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
     internal int FixedPageCount => fixedPages.Count;
     internal BookShellStamps Desk => desk;
     internal PassportProfile Identity => holder;
-    // Where a colour swatch was drawn last frame, for checks.
+    // The colours the plates were drawn in last frame (null before the first frame).
+    internal PlateTint? PlateTint => editions.Tint;
+    // Where a colour swatch was drawn last frame, for checks (index -1: the part's May adjust checkbox).
     internal Vector2? ColourSwatch(ColourPart part, int index) => colours.Swatch(part, index);
     // An edition picked in Settings and waiting for confirmation, or null.
     internal string? PendingEdition => pendingEdition;
@@ -143,8 +145,9 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         var edition = holder.Identity.Edition;
         var look = holder.Identity.Look;
         // The Settings pages always stay readable, so colours picked with the guard off can always be put right there.
-        if (Section == BookSection.Settings && holder.Identity.Appearance?.Colours is { Free: true } exact) look = PassportLook.Of(edition, exact with { Free = false });
+        if (Section == BookSection.Settings && holder.Identity.Appearance?.Colours is { } chosen && (chosen.Free || chosen.Exact != 0)) look = PassportLook.Of(edition, chosen with { Free = false, Exact = 0 });
         UiTheme.UseEdition(look.Cloth, look.Foil, look.FoilBright, look.Ink, look.Paper, look.PaperInset, look.Text, look.Caption);
+        editions.Tint = Tint(edition, look);
         try { return DrawBook(bounds, context); }
         finally
         {
@@ -322,7 +325,7 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
             {
                 case BookSection.Settings:
                     // Left: how the book moves and what it holds; right: how it looks.
-                    if (side != Side.Right) { back |= SettingsIntroduction(type); ImGui.Dummy(new Vector2(0, 24 * type.Scale)); SettingsOptions(type); }
+                    if (side != Side.Right) { back |= SettingsIntroduction(type); ImGui.Dummy(new Vector2(0, 24 * type.Scale)); SettingsOptions(type); colours.Preview(type); }
                     if (side == Side.Single) ImGui.Dummy(new Vector2(0, 24 * type.Scale));
                     // While a change of edition waits for its answer the colours step aside: the change would reset them.
                     if (side != Side.Left) { EditionOptions(type); if (pendingEdition == null) colours.Draw(type); }
@@ -771,10 +774,8 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
     private PassportPage PageAt(int index) => index < fixedPages.Count ? fixedPages[index] : PassportPage.StampPage(index - fixedPages.Count);
 
     // The recolouring the passport's plates need: from the edition's printed colours to the holder's.
-    private static PlateTint Tint(PassportIdentity identity)
+    private static PlateTint Tint(PassportEdition edition, PassportLook look)
     {
-        var edition = identity.Edition;
-        var look = identity.Look;
         // The paper's guilloche rings are printed black; they follow the text (light on a dark paper, or its colour).
         return new PlateTint(new PlateColours(Rgb3(edition.Cloth), Rgb3(edition.Foil), Rgb3(PassportLook.EditionPaper), Vector3.Zero),
             new PlateColours(Rgb3(look.Cloth), Rgb3(look.Foil), Rgb3(look.Paper), Rgb3(look.Lines)));

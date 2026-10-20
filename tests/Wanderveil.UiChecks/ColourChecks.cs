@@ -49,6 +49,18 @@ internal static class ColourChecks
         book.Click(book.Shell.ColourSwatch(ColourPart.Text, 6)!.Value);
         check(profile.Identity.Appearance?.Colours?.Text == Rgb.Hex(0x5A1424) && profile.Identity.Look.Adjusted.Contains(ColourPart.Text), $"Wine text on black paper is not picked and guarded ({profile.Identity.Appearance?.Colours?.Text}).");
         book.Frames(2);
+        // Keeping the text exact (its May adjust box) moves the paper instead.
+        book.Click(book.Shell.ColourSwatch(ColourPart.Text, -1)!.Value);
+        check(profile.Identity.Appearance?.Colours?.Adjustable(ColourPart.Text) == false && Rgb.Of(profile.Identity.Look.Text) == Rgb.Hex(0x5A1424) && profile.Identity.Look.Adjusted.Contains(ColourPart.Paper), "Unticking the text's May adjust box does not move the paper instead.");
+        book.Frames(2);
+        // On Settings the page plates are printed on the same readable paper the text is set on.
+        var plates = book.Shell.PlateTint!.Value.Wanted.Paper;
+        check(plates == new Vector3(UiTheme.Paper.X, UiTheme.Paper.Y, UiTheme.Paper.Z) && PassportLook.Contrast(UiTheme.Ink, UiTheme.Paper) >= 4.5, "The Settings pages print their readable text on another paper than their plates.");
+        // The busiest the colour section gets (checkboxes, a note, the reset link) still fits the page.
+        check(book.Shell.PageOverflow == 0, $"The colour section overflows with its checkboxes and note ({book.Shell.PageOverflow}).");
+        book.Save(artifacts, "colour-settings-exact-text.bmp");
+        book.Click(book.Shell.ColourSwatch(ColourPart.Text, -1)!.Value);
+        book.Frames(2);
         var page = book.Page(true);
         var below = book.Shell.ColourSwatch(ColourPart.Text, 0)!.Value;
         for (var y = below.Y + 12; profile.Identity.Appearance?.Colours?.Free != true && y < page.Max.Y; y += 3)
@@ -56,8 +68,8 @@ internal static class ColourChecks
         check(profile.Identity.Appearance?.Colours?.Free == true && profile.Identity.Look.Adjusted.Length == 0 && Rgb.Of(profile.Identity.Look.Text) == Rgb.Hex(0x5A1424), "Unticking Keep colours readable does not keep the text exactly as picked.");
         // The Settings pages themselves stay readable, so the checkbox can always be found again.
         check(PassportLook.Contrast(UiTheme.Ink, UiTheme.Paper) >= 4.5, "With the guard off, the Settings pages become unreadable.");
-        check(book.Shell.PageOverflow == 0, "The colour rows with the checkbox overflow the Settings page.");
         book.Save(artifacts, "colour-settings-free.bmp");
+        check(book.Shell.PageOverflow == 0, $"The colour rows with the checkbox overflow the Settings page ({book.Shell.PageOverflow}).");
         // Elsewhere the book prints the colours exactly.
         book.Shell.GoBack();
         book.Frames(3);
@@ -99,6 +111,17 @@ internal static class ColourChecks
         check(guarded.Adjusted.Contains(ColourPart.Text) && guarded.Adjusted.Contains(ColourPart.Foil) && PassportLook.Contrast(guarded.Text, guarded.Paper) >= 4.5, "An unreadable text or foil pick is kept with the guard on.");
         var free = PassportLook.Of(PassportEdition.Gridania, faint with { Free = true });
         check(free.Adjusted.Length == 0 && Rgb.Of(free.Text) == Rgb.Hex(0xD0BE9C) && Rgb.Of(free.Foil) == Rgb.Hex(0x1E3A2A), "With the guard off a pick is still moved.");
+        // The guard moves what the holder lets it: text kept exact, the paper moves instead; both exact, neither.
+        var wine = new PassportColours(Paper: Rgb.Hex(0x141414), Text: Rgb.Hex(0x5A1424));
+        var paperMoves = PassportLook.Of(PassportEdition.Gridania, wine.WithExact(ColourPart.Text, true));
+        check(Rgb.Of(paperMoves.Text) == Rgb.Hex(0x5A1424) && paperMoves.Adjusted.Contains(ColourPart.Paper) && PassportLook.Contrast(paperMoves.Text, paperMoves.Paper) >= 4.5, "With text kept exact, the paper does not move for it.");
+        var neither = PassportLook.Of(PassportEdition.Gridania, wine.WithExact(ColourPart.Text, true).WithExact(ColourPart.Paper, true));
+        check(!neither.Adjusted.Contains(ColourPart.Text) && !neither.Adjusted.Contains(ColourPart.Paper) && Rgb.Of(neither.Paper) == Rgb.Hex(0x141414) && Rgb.Of(neither.Text) == Rgb.Hex(0x5A1424), "With text and paper both kept exact, one still moves.");
+        var foilExact = PassportLook.Of(PassportEdition.Gridania, new PassportColours(Foil: Rgb.Hex(0x1E3A2A)).WithExact(ColourPart.Foil, true));
+        check(Rgb.Of(foilExact.Foil) == Rgb.Hex(0x1E3A2A) && foilExact.Adjusted.Contains(ColourPart.Cloth) && PassportLook.Contrast(foilExact.Foil, foilExact.Cloth) >= 3, "With foil kept exact, the cloth does not move for it.");
+        // Rings: their own colour when picked, else following the text.
+        var gold = PassportLook.Of(PassportEdition.Gridania, new PassportColours(Lines: Rgb.Hex(0xB99662)));
+        check(Rgb.Of(gold.Lines) == Rgb.Hex(0xB99662) && Rgb.Of(sepia.Lines) == Rgb.Hex(0x4A3426), "Rings do not take their own colour, or stop following the text.");
         Console.WriteLine("PASS colour-model");
     }
 
@@ -138,10 +161,15 @@ internal static class ColourChecks
             check(false, "A readable setting that is not true or false was accepted.");
         }
         catch (FormatException) { check(true, ""); }
+        var parts = PassportIdentity.Sample with { Appearance = new PassportAppearance("gridania", new PassportColours(Lines: Rgb.Hex(0xB99662)).WithExact(ColourPart.Paper, true).WithExact(ColourPart.Text, true)) };
+        var partsText = PassportStore.Serialize(parts);
+        check(PassportStore.Parse(partsText) == parts.Normalize() && partsText.Contains("\"lines\": \"#B99662\"", StringComparison.Ordinal) && partsText.Contains("\"exact\"", StringComparison.Ordinal), "Rings and parts kept exact do not round-trip.");
+        check(PassportStore.Parse("{\"format\":\"wanderveil.passport\",\"version\":2,\"number\":\"EZ 1\",\"appearance\":{\"edition\":\"gridania\",\"colours\":{\"exact\":[\"paper\",\"sparkle\"]}}}").Appearance?.Colours?.Adjustable(ColourPart.Paper) == false, "Parts kept exact are not read, or an unknown one breaks the file.");
         var guard = new PassportProfile(PassportIdentity.Sample);
         check(guard.SetReadable(false) && guard.Identity.Appearance?.Colours?.Free == true && guard.SetColour(ColourPart.Text, Rgb.Hex(0xFFFFFF)), "Turning the guard off is not kept.");
         check(guard.ResetColours() && guard.Identity.Appearance?.Colours == new PassportColours(Free: true), "Using the edition's own colours turns the guard back on or keeps a colour.");
         check(guard.SetReadable(true) && guard.Identity.Appearance?.Colours == null, "Turning the guard back on leaves colours behind.");
+        check(guard.SetAdjustable(ColourPart.Paper, false) && guard.Identity.Appearance?.Colours?.Adjustable(ColourPart.Paper) == false && guard.SetAdjustable(ColourPart.Paper, true) && guard.Identity.Appearance?.Colours == null, "Keeping one part exact is not kept, or not undone.");
         Console.WriteLine("PASS colour-storage");
     }
 

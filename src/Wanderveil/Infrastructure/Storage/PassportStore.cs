@@ -125,6 +125,12 @@ internal sealed class PassportStore(string directory)
             foreach (var part in Enum.GetValues<ColourPart>())
                 if (colours[part] is { } colour) parts[JsonNamingPolicy.CamelCase.ConvertName(part.ToString())] = colour.ToString();
             if (colours.Free) parts["readable"] = false;
+            if (colours.Exact != 0)
+            {
+                var exact = new JsonArray();
+                foreach (var part in PassportColours.Guarded) if ((colours.Exact & (1 << (int)part)) != 0) exact.Add(JsonNamingPolicy.CamelCase.ConvertName(part.ToString()));
+                parts["exact"] = exact;
+            }
             node["colours"] = parts;
         }
         return node;
@@ -148,6 +154,14 @@ internal sealed class PassportStore(string directory)
             }
             if (parts["readable"] is JsonValue readable && readable.TryGetValue<bool>(out var guarded)) colours = colours with { Free = !guarded };
             else if (parts["readable"] != null) throw new FormatException("A passport's readable setting is true or false.");
+            // Parts kept exact even while the guard is on; a name this version does not know is ignored.
+            if (parts["exact"] is JsonArray exact)
+                foreach (var entry in exact)
+                {
+                    var exactName = entry is JsonValue exactValue && exactValue.TryGetValue<string>(out var exactText) ? exactText : throw new FormatException("A passport's exact colours are names.");
+                    foreach (var part in PassportColours.Guarded) if (JsonNamingPolicy.CamelCase.ConvertName(part.ToString()) == exactName) colours = colours.WithExact(part, true);
+                }
+            else if (parts["exact"] != null) throw new FormatException("A passport's exact colours are a list.");
             if (colours.IsEmpty) colours = null;
         }
         else if (appearance["colours"] != null) throw new FormatException("A passport's colours are a JSON object.");

@@ -28,16 +28,26 @@ internal readonly record struct Rgb(byte R, byte G, byte B)
 
 // The parts of the passport the holder can recolour. Cloth: the cover, spine, book edges, and banner. Foil: the
 // cover lettering, crest, decoration, and banner trim. Ink: printed links and controls on the paper. Paper: the
-// pages themselves. Text: the text printed on the pages, its captions, and the paper's guilloche rings.
-internal enum ColourPart { Cloth, Foil, Ink, Paper, Text }
+// pages themselves. Text: the text printed on the pages and its captions. Lines: the paper's guilloche rings.
+internal enum ColourPart { Cloth, Foil, Ink, Paper, Text, Lines }
 
-// The holder's colours over an edition: each part null keeps the edition's own (for Text, chosen automatically to
-// suit the paper). Free turns off the legibility guard, so every colour is used exactly as picked.
-internal sealed record PassportColours(Rgb? Cloth = null, Rgb? Foil = null, Rgb? Ink = null, Rgb? Paper = null, Rgb? Text = null, bool Free = false)
+// The holder's colours over an edition: each part null keeps the edition's own (for Text, chosen to suit the paper;
+// for Lines, following the text). Free turns the legibility guard off, so every colour is used exactly as picked.
+// With the guard on, Exact names parts (one bit per ColourPart) the guard must still leave as picked.
+internal sealed record PassportColours(Rgb? Cloth = null, Rgb? Foil = null, Rgb? Ink = null, Rgb? Paper = null, Rgb? Text = null, bool Free = false, Rgb? Lines = null, int Exact = 0)
 {
     internal static readonly PassportColours None = new();
 
-    internal bool IsEmpty => Cloth == null && Foil == null && Ink == null && Paper == null && Text == null && !Free;
+    // The parts the guard may move, in the order it prefers to move them: of two colours that do not read
+    // together, the first named here moves (foil before cloth, text and ink before paper).
+    internal static readonly ColourPart[] Guarded = [ColourPart.Cloth, ColourPart.Foil, ColourPart.Ink, ColourPart.Paper, ColourPart.Text];
+
+    internal bool IsEmpty => Cloth == null && Foil == null && Ink == null && Paper == null && Text == null && Lines == null && !Free && Exact == 0;
+
+    // Whether the guard may move this part.
+    internal bool Adjustable(ColourPart part) => !Free && (Exact & (1 << (int)part)) == 0;
+
+    internal PassportColours WithExact(ColourPart part, bool exact) => this with { Exact = exact ? Exact | (1 << (int)part) : Exact & ~(1 << (int)part) };
 
     internal Rgb? this[ColourPart part] => part switch
     {
@@ -45,7 +55,8 @@ internal sealed record PassportColours(Rgb? Cloth = null, Rgb? Foil = null, Rgb?
         ColourPart.Foil => Foil,
         ColourPart.Ink => Ink,
         ColourPart.Paper => Paper,
-        _ => Text,
+        ColourPart.Text => Text,
+        _ => Lines,
     };
 
     internal PassportColours With(ColourPart part, Rgb? colour) => part switch
@@ -54,16 +65,17 @@ internal sealed record PassportColours(Rgb? Cloth = null, Rgb? Foil = null, Rgb?
         ColourPart.Foil => this with { Foil = colour },
         ColourPart.Ink => this with { Ink = colour },
         ColourPart.Paper => this with { Paper = colour },
-        _ => this with { Text = colour },
+        ColourPart.Text => this with { Text = colour },
+        _ => this with { Lines = colour },
     };
 }
 
-// The colours the passport is drawn in: the edition's, with the holder's over them, then kept legible. The paper
-// is always as picked. Text left automatic prints dark on a light paper and light on a dark one; picked, it is the
-// holder's, with captions a softer shade of it. Text and captions must read on the paper (4.5:1), foil on its
-// cloth (3:1), and printed controls on the paper (4.5:1); a colour that would not is moved toward black or white
-// just far enough, and Adjusted says which picks were moved. With the guard off (Free) nothing is moved.
-// Lines is the paper's guilloche rings: black or white with automatic text, otherwise the text colour.
+// The colours the passport is drawn in: the edition's, with the holder's over them, then kept legible. Text left
+// automatic prints dark on a light paper and light on a dark one; picked, it is the holder's, with captions a
+// softer shade of it. Foil must read on its cloth (3:1), text and printed controls on the paper (4.5:1). Of two
+// colours that do not, the guard moves one the holder lets it move (foil before cloth; text or ink before paper)
+// toward black or white just far enough, and Adjusted says which picks were moved. With the guard off (Free)
+// nothing is moved. Lines is the paper's guilloche rings: as picked, else following the text.
 internal sealed record PassportLook(Vector4 Cloth, Vector4 Foil, Vector4 Ink, Vector4 Paper, Vector4 Text, Vector4 Caption, Vector4 Lines, bool LightText, ColourPart[] Adjusted)
 {
     // The paper the editions are printed on (tools/passport-art/editions.mjs, shared.paper).
@@ -74,49 +86,58 @@ internal sealed record PassportLook(Vector4 Cloth, Vector4 Foil, Vector4 Ink, Ve
     // Their light counterparts, for dark paper: warm off-white text, a quieter caption.
     private static readonly Vector4 LightTextInk = Rgb.Hex(0xEFE8DA).Vector;
     private static readonly Vector4 LightCaptionInk = Rgb.Hex(0xC2BAA9).Vector;
+    private static readonly Vector4 Black = new(0, 0, 0, 1);
 
     internal static PassportLook Of(PassportEdition edition, PassportColours? colours = null)
     {
         colours ??= PassportColours.None;
         var adjusted = new System.Collections.Generic.List<ColourPart>();
         var cloth = colours.Cloth?.Vector ?? edition.Cloth;
+        var foil = colours.Foil?.Vector ?? edition.Foil;
         var paper = colours.Paper?.Vector ?? EditionPaper;
-        Vector4 text, caption, lines;
-        bool light;
-        if (colours.Text is { } picked)
+        var ink = colours.Ink?.Vector ?? edition.Ink;
+        Pair(ColourPart.Foil, ref foil, ColourPart.Cloth, ref cloth, 3f);
+        Vector4 text;
+        bool automatic = colours.Text == null;
+        if (automatic)
         {
-            text = Keep(ColourPart.Text, picked.Vector, paper, 4.5f);
-            caption = Keep(null, Vector4.Lerp(text, paper, 0.3f) with { W = 1f }, paper, 4.5f);
-            light = Luminance(text) > Luminance(paper);
-            lines = text;
+            // Automatic: text turns light where dark ink would read worse than light; black or white always reaches 4.5:1.
+            text = Contrast(LightTextInk, paper) > Contrast(TextInk, paper) ? LightTextInk : TextInk;
+            if (!colours.Free) text = Moved(text, paper, 4.5f);
         }
         else
         {
-            // Automatic: text turns light where dark ink would read worse than light; black or white always reaches 4.5:1.
-            light = Contrast(LightTextInk, paper) > Contrast(TextInk, paper);
-            text = Keep(null, light ? LightTextInk : TextInk, paper, 4.5f);
-            caption = Keep(null, light ? LightCaptionInk : CaptionInk, paper, 4.5f);
-            lines = light ? Vector4.One : new Vector4(0, 0, 0, 1);
+            text = colours.Text!.Value.Vector;
+            Pair(ColourPart.Text, ref text, ColourPart.Paper, ref paper, 4.5f);
         }
-        var foil = Keep(ColourPart.Foil, colours.Foil?.Vector ?? edition.Foil, cloth, 3f);
-        var ink = Keep(ColourPart.Ink, colours.Ink?.Vector ?? edition.Ink, paper, 4.5f);
+        Pair(ColourPart.Ink, ref ink, ColourPart.Paper, ref paper, 4.5f);
+        var light = Luminance(text) > Luminance(paper);
+        var caption = automatic ? (light ? LightCaptionInk : CaptionInk) : Vector4.Lerp(text, paper, 0.3f) with { W = 1f };
+        if (!colours.Free) caption = Moved(caption, paper, 4.5f);
+        var lines = colours.Lines?.Vector ?? (automatic ? light ? Vector4.One : Black : text);
         return new PassportLook(cloth, foil, ink, paper, text, caption, lines, light, adjusted.ToArray());
 
-        // Moves colour until it reads against other: toward white on a dark background, black on a light one.
-        // With the guard off, every colour stays as picked.
-        Vector4 Keep(ColourPart? part, Vector4 colour, Vector4 other, float ratio)
+        // Two colours that must read together: the first moves if the guard may move it, else the second.
+        void Pair(ColourPart first, ref Vector4 a, ColourPart second, ref Vector4 b, float ratio)
         {
-            if (colours.Free || Contrast(colour, other) >= ratio) return colour;
-            var target = Contrast(Vector4.One, other) > Contrast(new Vector4(0, 0, 0, 1), other) ? Vector4.One : new Vector4(0, 0, 0, 1);
-            var moved = colour;
-            for (var step = 1; step <= 40 && Contrast(moved, other) < ratio; step++) moved = Vector4.Lerp(colour, target, step / 40f) with { W = 1f };
-            if (part is { } adjustedPart) adjusted.Add(adjustedPart);
-            return moved;
+            if (Contrast(a, b) >= ratio) return;
+            if (colours.Adjustable(first)) { a = Moved(a, b, ratio); adjusted.Add(first); }
+            else if (colours.Adjustable(second)) { b = Moved(b, a, ratio); if (!adjusted.Contains(second)) adjusted.Add(second); }
         }
     }
 
+    // A colour moved toward black or white (whichever reads better against other) until it reads against it.
+    private static Vector4 Moved(Vector4 colour, Vector4 other, float ratio)
+    {
+        if (Contrast(colour, other) >= ratio) return colour;
+        var target = Contrast(Vector4.One, other) > Contrast(Black, other) ? Vector4.One : Black;
+        var moved = colour;
+        for (var step = 1; step <= 40 && Contrast(moved, other) < ratio; step++) moved = Vector4.Lerp(colour, target, step / 40f) with { W = 1f };
+        return moved;
+    }
+
     // How far the holder's colours differ from the edition's on the plates that are recoloured.
-    internal bool Recoloured(PassportEdition edition) => !Near(Cloth, edition.Cloth) || !Near(Foil, edition.Foil) || !Near(Paper, EditionPaper) || !Near(Lines, new Vector4(0, 0, 0, 1));
+    internal bool Recoloured(PassportEdition edition) => !Near(Cloth, edition.Cloth) || !Near(Foil, edition.Foil) || !Near(Paper, EditionPaper) || !Near(Lines, Black);
 
     // Hovered foil: a little nearer white, or for dark foil, nearer its ink.
     internal Vector4 FoilBright => Vector4.Lerp(Foil, Luminance(Foil) > 0.2f ? Vector4.One : Ink, 0.35f) with { W = 1f };
