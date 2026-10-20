@@ -266,6 +266,50 @@ internal sealed class OnlineAccount : IDisposable
         if (server != null) _ = Run(generation, token => server.SignOut(session.Token, token));
     }
 
+    // Whether an account deletion is waiting for the server's answer.
+    internal bool Deleting { get; private set; }
+
+    // Deletes this character's online account: the server forgets it and the passport it kept, at once, and this
+    // character is signed out. Everything on this PC stays. Only a definite answer counts: without one, nothing is
+    // deleted and the holder is told.
+    internal void DeleteAccount()
+    {
+        SavedSession? session;
+        WanderveilApi? server;
+        int ticket;
+        lock (gate)
+        {
+            session = Session;
+            server = Refresh();
+            if (session == null || server == null || Deleting) return;
+            Deleting = true;
+            Problem = null;
+            ticket = generation;
+        }
+        _ = Run(ticket, async token =>
+        {
+            var result = await server.DeleteAccount(session.Token, token).ConfigureAwait(false);
+            lock (gate)
+            {
+                Deleting = false;
+                offline = result.Offline;
+                if (result.Ok || result.SignedOut)
+                {
+                    store.Remove(session.ContentId);
+                    if (session.ContentId == contentId)
+                    {
+                        Reset();
+                        Problem = "Your online account for this character was deleted. Everything on this PC is kept; signing in again starts a new account.";
+                    }
+                    return;
+                }
+                Problem = result.Offline
+                    ? "The server could not be reached, so your online account was not deleted. Try again when it can be."
+                    : "Your online account was not deleted: " + Explain(result);
+            }
+        });
+    }
+
     // From any work that met a definite 401: the session is gone, so this character signs in again.
     internal void SessionRefused(SavedSession session)
     {

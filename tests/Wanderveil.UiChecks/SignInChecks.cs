@@ -165,11 +165,28 @@ internal static class SignInChecks
         book.Click(book.Shell.AccountControls["Sign out"]);
         book.Click(book.Shell.AccountControls["Confirm sign out"]);
         check(account.SignedOut, "Confirming sign-out did not sign out.");
+
+        // Deleting the online account asks first, and shows why it did not happen.
+        book.Click(book.Shell.AccountControls["Delete online account"]);
+        check(!account.Deleted && book.Shell.AccountControls.ContainsKey("Confirm delete"), "Deleting the online account did not ask first.");
+        book.Save(artifacts, "settings-account-delete.bmp");
+        book.Click(book.Shell.AccountControls["Keep account"]);
+        check(!account.Deleted && book.Shell.AccountControls.ContainsKey("Delete online account"), "Keeping the account deleted it.");
+        book.Click(book.Shell.AccountControls["Delete online account"]);
+        book.Click(book.Shell.AccountControls["Confirm delete"]);
+        check(account.Deleted, "Confirming did not delete the online account.");
+        account.Problem = "The server could not be reached, so your online account was not deleted. Try again when it can be.";
+        book.Frames(2);
+        book.Save(artifacts, "settings-account-problem.bmp");
     }
 
     private sealed class StubAccount : IBookShellAccount
     {
         internal bool SignedOut { get; private set; }
+        internal bool Deleted { get; private set; }
+        public bool Deleting => false;
+        public string? Problem { get; set; }
+        public void DeleteAccount() => Deleted = true;
         public string Name => "Wander Veil";
         public string World => "Ravana";
         public string VerifiedBy => "lodestone";

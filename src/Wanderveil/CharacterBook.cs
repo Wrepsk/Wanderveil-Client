@@ -99,5 +99,8 @@ internal sealed class CharacterBook : IDisposable
         };
 
         public void SignOut() => account.SignOut();
+        public void DeleteAccount() => account.DeleteAccount();
+        public bool Deleting => account.Deleting;
+        public string? Problem => account.Problem;
     }
 }

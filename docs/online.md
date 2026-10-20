@@ -28,6 +28,8 @@ No public Wanderveil server exists yet, so the sheet asks for an address until o
 
 When a character logs in with a saved session, Wanderveil asks the server whether the session still holds. If there is no answer (no network, an outage), the session is kept and the passport opens offline. A definite refusal (`401`), from this check or any later call, forgets the session. If the passport was open it closes, and the sheet explains that the session has ended. **Sign out**, in the passport's General settings (it asks twice), forgets the session here and ends it on the server when it can be reached. Nothing on this PC is deleted. Preview: [the account in Settings](previews/online/settings-account.png).
 
+**Delete my online account**, beside it (also asked twice), deletes this character's account on the server, with the passport details kept there, at once, and signs the character out here. Everything on this PC stays, and signing in again starts a new account. Only the server's answer counts: if it cannot be reached, nothing is deleted and Settings says so. Preview: [the question](previews/online/settings-account-delete.png). Your data on the server can be read in full while signed in: the account (`GET /v1/session`) and the passport (`GET /v1/passport`).
+
 ## Local passports per character
 
 Each signed-in character has its own local files, named by Lodestone ID: `stamps-lodestone-<id>.json`, `passport-lodestone-<id>.json`, `marks-lodestone-<id>.json`, and `portrait-lodestone-<id>.image`. Switching characters puts one passport away (finishing its saves) and opens the other. Phase 2's single `local` profile is not migrated (the only tester chose this). Its files stay in the folder, unused.

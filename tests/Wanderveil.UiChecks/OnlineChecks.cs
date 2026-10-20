@@ -196,6 +196,18 @@ internal static class OnlineChecks
         account.SignOut();
         check(account.State == AccountState.SignedOut && store.For(Content) == null && Until(() => !server.HasSession(token)), "Signing out did not end the session here and on the server.");
 
+        // Deleting the online account: without an answer nothing is deleted; with one, the account is gone there and
+        // this character is signed out here.
+        SignIn(server, account, 1001);
+        server.Down = true;
+        account.DeleteAccount();
+        check(Until(() => !account.Deleting) && account.State == AccountState.SignedIn && account.Problem?.Contains("not deleted", StringComparison.Ordinal) == true, "An unreachable server deleted the account, or did not say so.");
+        server.Down = false;
+        var accountToken = account.Session!.Token;
+        account.DeleteAccount();
+        check(Until(() => account.State == AccountState.SignedOut) && !server.HasSession(accountToken) && !server.HasAccount(1001) && account.Problem?.Contains("was deleted", StringComparison.Ordinal) == true && store.For(Content) == null,
+            "Deleting the online account did not delete it there and sign out here.");
+
         // A session belongs to the server it signed in to.
         SignIn(server, account, 1001);
         address = "https://elsewhere.example";
@@ -414,6 +426,7 @@ internal static class OnlineChecks
         internal void Introduce(long id, string text) { lock (gate) characters[id] = characters[id] with { Introduction = text }; }
         internal void EndSessions() { lock (gate) sessions.Clear(); }
         internal bool HasSession(string token) { lock (gate) return sessions.ContainsKey(token); }
+        internal bool HasAccount(long id) { lock (gate) return accounts.ContainsKey(id); }
         internal (int Revision, string Document)? Passport(Guid account) { lock (gate) return passports.TryGetValue(account, out var p) ? p : null; }
 
         internal void Edit(Guid account, Func<string, string> change)
@@ -496,6 +509,11 @@ internal static class OnlineChecks
                 case ("GET", "/v1/session"):
                     SessionChecks++;
                     return Json(200, new { account = Account(owner, lodestone), expiresAt = DateTimeOffset.UtcNow.AddDays(30) });
+                case ("DELETE", "/v1/account"):
+                    foreach (var held in sessions.Where(s => s.Value == owner).Select(s => s.Key).ToList()) sessions.Remove(held);
+                    accounts.Remove(lodestone);
+                    passports.Remove(owner);
+                    return new HttpResponseMessage(HttpStatusCode.NoContent);
                 case ("DELETE", "/v1/session"):
                     sessions.Remove(bearer);
                     return new HttpResponseMessage(HttpStatusCode.NoContent);

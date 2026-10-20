@@ -1395,6 +1395,7 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
     // Whose passport this is and how that was proved, whether it is in step with the server, and signing out (asked
     // twice: it closes the book until the character signs in again, though nothing on this PC is lost).
     private bool confirmingSignOut;
+    private bool confirmingDelete;
     // For checks: where the account's links were drawn last, by label.
     internal Dictionary<string, Vector2> AccountControls { get; } = new(StringComparer.Ordinal);
 
@@ -1416,10 +1417,34 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
             UiTypography.Text(notice, TextRole.Body, context, UiTheme.EditionInk);
         }
         ImGui.Dummy(new Vector2(0, 10 * context.Scale));
+        if (account.Problem is { } problem)
+        {
+            UiTypography.Text(problem, TextRole.Body, context, UiTheme.EditionInk);
+            ImGui.Dummy(new Vector2(0, 8 * context.Scale));
+        }
+        if (account.Deleting)
+        {
+            UiTypography.Text("Deleting your online account.", TextRole.Body, context, UiTheme.MutedInk);
+            return;
+        }
+        if (confirmingDelete)
+        {
+            UiTypography.Text("Delete your online account for this character? The server forgets it, and the passport details it keeps, at once. Everything on this PC stays, and signing in again starts a new account.", TextRole.Body, context, UiTheme.Ink);
+            ImGui.Dummy(new Vector2(0, 4 * context.Scale));
+            if (BookControl.Link("Delete it", context)) { confirmingDelete = false; account.DeleteAccount(); }
+            AccountControls["Confirm delete"] = (ImGui.GetItemRectMin() + ImGui.GetItemRectMax()) / 2;
+            ImGui.SameLine(0, 18 * context.Scale);
+            if (BookControl.Link("Keep it", context)) confirmingDelete = false;
+            AccountControls["Keep account"] = (ImGui.GetItemRectMin() + ImGui.GetItemRectMax()) / 2;
+            return;
+        }
         if (!confirmingSignOut)
         {
             if (BookControl.Link("Sign out", context)) confirmingSignOut = true;
             AccountControls["Sign out"] = (ImGui.GetItemRectMin() + ImGui.GetItemRectMax()) / 2;
+            ImGui.SameLine(0, 18 * context.Scale);
+            if (BookControl.Link("Delete my online account", context)) confirmingDelete = true;
+            AccountControls["Delete online account"] = (ImGui.GetItemRectMin() + ImGui.GetItemRectMax()) / 2;
             return;
         }
         UiTypography.Text("Sign out? The passport closes until this character signs in again. Everything stays on this PC.", TextRole.Body, context, UiTheme.Ink);

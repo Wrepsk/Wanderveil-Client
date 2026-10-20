@@ -25,4 +25,9 @@ internal interface IBookShellAccount
     // Something the holder should know about syncing, or null.
     string? Notice { get; }
     void SignOut();
+    // Deletes the online account (asked twice first); the answer arrives later.
+    void DeleteAccount();
+    // Whether a deletion is waiting for the server, and why the last one did not happen, if it did not.
+    bool Deleting { get; }
+    string? Problem { get; }
 }

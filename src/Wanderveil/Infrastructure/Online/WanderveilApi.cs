@@ -90,6 +90,10 @@ internal sealed class WanderveilApi
     internal Task<ApiResult<object>> SignOut(string token, CancellationToken cancellationToken) =>
         Send<object>(HttpMethod.Delete, "v1/session", token, null, cancellationToken);
 
+    // Deletes the signed-in account and everything the server keeps for it.
+    internal Task<ApiResult<object>> DeleteAccount(string token, CancellationToken cancellationToken) =>
+        Send<object>(HttpMethod.Delete, "v1/account", token, null, cancellationToken);
+
     internal Task<ApiResult<PassportRecord>> GetPassport(string token, CancellationToken cancellationToken) =>
         Send<PassportRecord>(HttpMethod.Get, "v1/passport", token, null, cancellationToken);
 
