@@ -12,6 +12,7 @@ Status: Phase 02 complete, 20 October 2026. The passport book holds Passport, Di
 - [Gridania runtime controls, reload instructions, and previews](passport-runtime.md)
 - [Drawing on pages: brush spike](drawing-brush-spike.md)
 - [Optional rendering investigation](rendering.md)
+- [Signing in and the passport online](online.md)
 - [API contract status](api/README.md)
 - [Asset organization](../assets/README.md)
 - [Native UI checks](../tests/README.md)
@@ -21,7 +22,7 @@ Status: Phase 02 complete, 20 October 2026. The passport book holds Passport, Di
 
 1. Review the Gridania cover/colorway, banner/map introduction, portrait/signature versus information identity spread, and stamp collection targets; refine the artwork/material model before broader customization.
 2. Review the connected static runtime prototype, then add closed bottom-center arrival and close-to-cover dismissal motion; separately evaluate a bounded 2.5D page turn. Review previews between milestones; do not introduce CrystalRenderer without a separate decision.
-3. Phase 1 is complete; Phase 2's collect loop, local saving, free stamp placement, and identity/cover preferences work. Edition choice, colours, symbols, structure (page backgrounds, identity layouts, nation pages), and drawing and writing on stamp pages work too. Phase 2 is complete and was reviewed in game. Phase 3 is next: sign-in by character verification and the first online operation; the [v1 contract](api/README.md) is drafted.
+3. Phase 1 is complete; Phase 2's collect loop, local saving, free stamp placement, and identity/cover preferences work. Edition choice, colours, symbols, structure (page backgrounds, identity layouts, nation pages), and drawing and writing on stamp pages work too. Phase 2 is complete and was reviewed in game. Phase 3 is in progress: characters [sign in](online.md) through the Lodestone, each has its own local passport, and the passport identity syncs with the server (checked headless against an in-memory server; the [v1 contract](api/README.md) is drafted).
 
 No account, private repository, production backend, or advanced renderer is needed for those product steps. Online features follow the drafted v1 contract; renderer delivery requires an explicit decision before implementation.
 

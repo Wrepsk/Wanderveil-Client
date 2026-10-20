@@ -30,7 +30,7 @@ internal enum SettingsCategory { General, Customization, Layout, Saved }
 // and identityStorage are the host's picture, logged-in character, and identity file, each optional.
 internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IReadOnlyList<PassportPage>? pages = null, IBookShellSettings? settings = null, BookShellContent? content = null, StampCollection? stamps = null, ISavedState? storage = null,
     PassportProfile? identity = null, IPassportPortrait? portrait = null, ICharacterSource? character = null, ISavedState? identityStorage = null,
-    PageMarks? marks = null, ISavedState? marksStorage = null)
+    PageMarks? marks = null, ISavedState? marksStorage = null, IBookShellAccount? account = null)
 {
     internal const ImGuiWindowFlags WindowFlags = ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.NoBackground | ImGuiWindowFlags.NoCollapse |
         ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoMove | ImGuiWindowFlags.NoDocking;
@@ -487,7 +487,7 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
                     {
                         case SettingsCategory.General:
                             if (side == Side.Single) ImGui.Dummy(new Vector2(0, 24 * type.Scale));
-                            if (side != Side.Left) MotionOptions(type);
+                            if (side != Side.Left) { MotionOptions(type); AccountOptions(type); }
                             break;
                         case SettingsCategory.Customization:
                             // Left: the edition and a preview in the exact colours; right: the colours. While a change of
@@ -1341,7 +1341,7 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         ImGui.Dummy(new Vector2(0, 12 * context.Scale));
         UiTypography.Text(category switch
         {
-            SettingsCategory.General => "How your passport moves. Changes are saved as you make them.",
+            SettingsCategory.General => "How your passport moves, and whose it is. Changes are saved as you make them.",
             SettingsCategory.Customization => "Your passport's edition and colours.",
             SettingsCategory.Layout => "How your pages are laid out: the identity spread, the nation pages, and the paper's background.",
             _ => "What your passport keeps on this PC, and whether it is saved.",
@@ -1390,6 +1390,45 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
                 list.AddLine(centre + new Vector2(-r * 0.28f, r * 0.02f), centre + new Vector2(r * 0.28f, r * 0.02f), colour, line);
                 break;
         }
+    }
+
+    // Whose passport this is and how that was proved, whether it is in step with the server, and signing out (asked
+    // twice: it closes the book until the character signs in again, though nothing on this PC is lost).
+    private bool confirmingSignOut;
+    // For checks: where the account's links were drawn last, by label.
+    internal Dictionary<string, Vector2> AccountControls { get; } = new(StringComparer.Ordinal);
+
+    private void AccountOptions(UiContext context)
+    {
+        if (account == null) return;
+        ImGui.Dummy(new Vector2(0, 26 * context.Scale));
+        UiTypography.Text("ACCOUNT", TextRole.Caption, context, UiTheme.MutedInk);
+        ImGui.Dummy(new Vector2(0, 10 * context.Scale));
+        UiTypography.Text(account.Name + ", " + account.World, TextRole.Heading, context, UiTheme.Ink);
+        ImGui.Dummy(new Vector2(0, 4 * context.Scale));
+        var how = account.VerifiedBy == "xivauth" ? "XIVAuth" : "the Lodestone";
+        UiTypography.Text($"Verified via {how} on {account.VerifiedAt.ToLocalTime().ToString("d MMMM yyyy", System.Globalization.CultureInfo.CurrentCulture)}: you showed you control this character's Lodestone profile. It proves nothing more.", TextRole.Body, context, UiTheme.MutedInk);
+        ImGui.Dummy(new Vector2(0, 8 * context.Scale));
+        UiTypography.Text(account.Sync, TextRole.Body, context, UiTheme.Ink);
+        if (account.Notice is { } notice)
+        {
+            ImGui.Dummy(new Vector2(0, 6 * context.Scale));
+            UiTypography.Text(notice, TextRole.Body, context, UiTheme.EditionInk);
+        }
+        ImGui.Dummy(new Vector2(0, 10 * context.Scale));
+        if (!confirmingSignOut)
+        {
+            if (BookControl.Link("Sign out", context)) confirmingSignOut = true;
+            AccountControls["Sign out"] = (ImGui.GetItemRectMin() + ImGui.GetItemRectMax()) / 2;
+            return;
+        }
+        UiTypography.Text("Sign out? The passport closes until this character signs in again. Everything stays on this PC.", TextRole.Body, context, UiTheme.Ink);
+        ImGui.Dummy(new Vector2(0, 4 * context.Scale));
+        if (BookControl.Link("Sign out", context)) { confirmingSignOut = false; account.SignOut(); }
+        AccountControls["Confirm sign out"] = (ImGui.GetItemRectMin() + ImGui.GetItemRectMax()) / 2;
+        ImGui.SameLine(0, 18 * context.Scale);
+        if (BookControl.Link("Stay signed in", context)) confirmingSignOut = false;
+        AccountControls["Stay signed in"] = (ImGui.GetItemRectMin() + ImGui.GetItemRectMax()) / 2;
     }
 
     private void MotionOptions(UiContext context)

@@ -8,7 +8,8 @@
     <RootNamespace>Wanderveil</RootNamespace>
     <Punchline>Every place has a story. Leave yours.</Punchline>
     <Description>An adventurer's passport and discovery journal for Eorzea.
-Early development build: a Passport whose identity pages you fill in yourself, demo Discover cards/details, a Studio draft preview, an Echoes sample dossier, navigation, and motion settings. Collecting the postcard's demo stamp lets you press it anywhere on your passport's stamp pages; everything is saved on this PC. Sharing and publishing are coming later.</Description>
+Early development build: a Passport for each of your characters, whose identity pages you fill in yourself, demo Discover cards/details, a Studio draft preview, an Echoes sample dossier, navigation, and motion settings. Collecting the postcard's demo stamp lets you press it anywhere on your passport's stamp pages.
+Each character signs in by putting a short code on its Lodestone profile: the plugin sends the character's name and home world to the Wanderveil server you choose, which reads the public Lodestone profile, and keeps your passport details in step with that server. Stamps, drawing, and your picture stay on this PC. No game password is ever asked for. Sharing and publishing are coming later.</Description>
     <RepoUrl>https://github.com/Wrepsk/Wanderveil-Client</RepoUrl>
     <Tags>exploration;passport;discoveries;journal</Tags>
   </PropertyGroup>

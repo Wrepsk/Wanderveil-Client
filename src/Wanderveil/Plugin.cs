@@ -1,15 +1,14 @@
 using System;
-using System.Linq;
+using System.Collections.Generic;
+using System.Net.Http;
 using Dalamud.Game.ClientState.Keys;
 using Dalamud.Game.Command;
 using Dalamud.Interface.Windowing;
 using Dalamud.IoC;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
-using Wanderveil.Features.Settings;
-using Wanderveil.Infrastructure.Game;
 using Wanderveil.Infrastructure.Media;
-using Wanderveil.Infrastructure.Storage;
+using Wanderveil.Infrastructure.Online;
 using Wanderveil.UI;
 
 namespace Wanderveil;
@@ -29,14 +28,17 @@ public sealed class Plugin : IDalamudPlugin
 
     private readonly WindowSystem windowSystem = new("Wanderveil");
     private readonly Configuration configuration;
-    private readonly MainWindow mainWindow;
+    private readonly HttpClient http = new() { Timeout = TimeSpan.FromSeconds(15) };
     private PassportAssets? assets;
-    // One local passport for now; character-scoped passports come with character identity.
-    private const string Profile = "local";
-    private StampPersistence? stamps;
-    private PassportPersistence? identity;
-    private MarksPersistence? marks;
-    private PortraitPicture? portrait;
+    private SessionStore? sessions;
+    private OnlineAccount? account;
+    private SignInWindow? signIn;
+    // The logged-in, signed-in character's passport; none until one is (ADR-0004: sign in first).
+    private CharacterBook? book;
+    // Characters already asked to sign in this session, so the sheet opens by itself only once each.
+    private readonly HashSet<ulong> asked = [];
+    // Opens the passport once the character it is waiting for has one.
+    private bool openWhenReady;
     private bool commandRegistered;
     private bool disposed;
 
@@ -46,24 +48,12 @@ public sealed class Plugin : IDalamudPlugin
         try
         {
             assets = new PassportAssets(TextureProvider, PluginInterface.UiBuilder.FontAtlas);
-            stamps = new StampPersistence(new StampStore(PluginInterface.GetPluginConfigDirectory()), Profile,
-                report: exception => Log.Error(exception, "Could not save Wanderveil stamps."));
-            if (stamps.Loaded is not (Features.LoadOutcome.New or Features.LoadOutcome.Loaded))
-                Log.Warning("Wanderveil stamps loaded as {Outcome}; files kept aside: {Kept}", stamps.Loaded, string.Join(", ", stamps.Kept.Select(System.IO.Path.GetFileName)));
-            var passportStore = new PassportStore(PluginInterface.GetPluginConfigDirectory());
-            identity = new PassportPersistence(passportStore, Profile,
-                report: exception => Log.Error(exception, "Could not save the Wanderveil passport."));
-            if (identity.Loaded is not (Features.LoadOutcome.New or Features.LoadOutcome.Loaded))
-                Log.Warning("Wanderveil passport loaded as {Outcome}; files kept aside: {Kept}", identity.Loaded, string.Join(", ", identity.Kept.Select(System.IO.Path.GetFileName)));
-            marks = new MarksPersistence(new MarksStore(PluginInterface.GetPluginConfigDirectory()), Profile,
-                report: exception => Log.Error(exception, "Could not save Wanderveil drawing."));
-            if (marks.Loaded is not (Features.LoadOutcome.New or Features.LoadOutcome.Loaded))
-                Log.Warning("Wanderveil drawing loaded as {Outcome}; files kept aside: {Kept}", marks.Loaded, string.Join(", ", marks.Kept.Select(System.IO.Path.GetFileName)));
-            portrait = new PortraitPicture(TextureProvider, passportStore, Profile, identity.Profile, exception => Log.Error(exception, "Could not use the Wanderveil portrait."), TextureReadbackProvider);
-            mainWindow = new MainWindow(() => configuration.ReducedMotion, new ConfigurationSettings(configuration, SaveConfiguration), assets, stamps.Collection, stamps,
-                new Features.Passport.PassportServices(identity.Profile, identity, portrait, new GameCharacter(Framework, PlayerState)), marks.Marks, marks);
-            windowSystem.AddWindow(mainWindow);
-            windowSystem.AddWindow(mainWindow.Camera);
+            sessions = new SessionStore(PluginInterface.GetPluginConfigDirectory(), report: exception => Log.Error(exception, "Could not save Wanderveil sessions."));
+            if (sessions.Protection != "dpapi") Log.Warning("Windows data protection is unavailable; Wanderveil session tokens are stored unprotected.");
+            var version = typeof(Plugin).Assembly.GetName().Version?.ToString() ?? "0.0.0.0";
+            account = new OnlineAccount(sessions, http, version, () => configuration.ServerUrl);
+            signIn = new SignInWindow(account, assets, () => configuration.ServerUrl, SaveServer, () => openWhenReady = true);
+            windowSystem.AddWindow(signIn);
 
             commandRegistered = CommandManager.AddHandler(CommandName, new CommandInfo(OnCommand)
             {
@@ -103,50 +93,105 @@ public sealed class Plugin : IDalamudPlugin
             commandRegistered = false;
         }
 
+        // Waits briefly for saves in progress, so collecting just before unloading is not lost.
+        book?.Dispose();
         windowSystem.RemoveAllWindows();
-        // Waits briefly for a stamp save in progress, so collecting just before unloading is not lost.
-        stamps?.Dispose();
-        identity?.Dispose();
-        marks?.Dispose();
-        portrait?.Dispose();
+        account?.Dispose();
+        sessions?.Dispose();
+        http.Dispose();
         assets?.Dispose();
     }
 
-    // A chosen portrait is swapped in before the windows draw; the file picker draws after them, on top.
+    // A chosen portrait and a server passport are taken in before the windows draw; the file picker draws after them.
     private void Draw()
     {
-        portrait?.Poll();
+        book?.Poll();
         // The camera's guide stays visible in group pose (the game's own posing tool) and when the game's UI is hidden,
         // by its Hide UI key or by the game itself, so a picture can be taken without the HUD.
-        var camera = mainWindow.CameraOpen;
+        var camera = book?.Window.CameraOpen ?? false;
         PluginInterface.UiBuilder.DisableGposeUiHide = camera;
         PluginInterface.UiBuilder.DisableUserUiHide = camera;
         PluginInterface.UiBuilder.DisableAutomaticUiHide = camera;
         assets?.BeginFrame();
         windowSystem.Draw();
-        portrait?.DrawDialog();
+        book?.DrawDialog();
     }
 
     private void OnCommand(string command, string arguments)
     {
         if (string.Equals(arguments.Trim(), "settings", StringComparison.OrdinalIgnoreCase))
             OpenSettings();
+        else if (book != null)
+            book.Window.ToggleAnimated();
         else
-            mainWindow.ToggleAnimated();
+            AskToSignIn();
     }
 
-    // When the passport has a use for Escape (putting back a carried stamp, closing stamp info, or closing the
-    // book), it takes the key from the game's key state, so the game does not also open its system menu.
+    // On the framework thread: follows the logged-in character, swaps its passport in or out, and asks a character
+    // without a session to sign in (once). When the passport has a use for Escape, it takes the key from the game.
     private void OnFrameworkUpdate(IFramework framework)
     {
-        if (disposed || !mainWindow.WantsEscape || !KeyState[VirtualKey.ESCAPE]) return;
+        if (disposed || account == null) return;
+        if (PlayerState.IsLoaded)
+            account.SetCharacter(PlayerState.ContentId, PlayerState.CharacterName.ToString(), PlayerState.HomeWorld.Value.Name.ExtractText());
+        else
+            account.SetCharacter(0, "", "");
+        Follow();
+        if (account.State is AccountState.SignedOut or AccountState.NoServer && asked.Add(account.ContentId)) AskToSignIn();
+        if (book != null && openWhenReady) { openWhenReady = false; book.Window.Summon(); }
+
+        if (book == null || !book.Window.WantsEscape || !KeyState[VirtualKey.ESCAPE]) return;
         KeyState[VirtualKey.ESCAPE] = false;
-        mainWindow.RequestEscape();
+        book.Window.RequestEscape();
     }
 
-    private void OpenMain() => mainWindow.Summon();
+    // The passport for the signed-in character, built or put away as that changes. Not from a draw callback: it
+    // loads (and finishes saving) local files.
+    private void Follow()
+    {
+        var session = account!.State == AccountState.SignedIn ? account.Session : null;
+        if (book?.Session.Profile == session?.Profile && book?.Session.ContentId == session?.ContentId) return;
+        var wasOpen = book?.Window.IsOpen == true;
+        book?.Dispose();
+        book = null;
+        if (session == null)
+        {
+            // Signed out while reading (by the holder, or the server ending the session): the sheet says why.
+            if (wasOpen && account.State == AccountState.SignedOut) AskToSignIn();
+            return;
+        }
+        try
+        {
+            book = new CharacterBook(session, account, PluginInterface, TextureProvider, TextureReadbackProvider, Framework, PlayerState, Log, assets!, configuration, SaveConfiguration, windowSystem);
+        }
+        catch (Exception exception)
+        {
+            Log.Error(exception, "Could not open the Wanderveil passport for {Profile}.", session.Profile);
+        }
+    }
 
-    private void OpenSettings() => mainWindow.OpenSettings();
+    private void AskToSignIn()
+    {
+        if (signIn != null) signIn.IsOpen = true;
+    }
+
+    private void OpenMain()
+    {
+        if (book != null) book.Window.Summon();
+        else AskToSignIn();
+    }
+
+    private void OpenSettings()
+    {
+        if (book != null) book.Window.OpenSettings();
+        else AskToSignIn();
+    }
+
+    private void SaveServer(string server)
+    {
+        configuration.ServerUrl = server;
+        SaveConfiguration();
+    }
 
     private bool SaveConfiguration()
     {

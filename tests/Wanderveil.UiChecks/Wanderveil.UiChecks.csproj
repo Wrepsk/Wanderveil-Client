@@ -28,6 +28,7 @@
     <None Include="$(DalamudLibPath)/cimgui.dll" Link="cimgui.dll" CopyToOutputDirectory="PreserveNewest" />
     <Compile Include="../../src/Wanderveil/UI/Primitives/*.cs" Link="UI/Primitives/%(Filename)%(Extension)" />
     <Compile Include="../../src/Wanderveil/UI/BookShell*.cs" Link="UI/%(Filename)%(Extension)" />
+    <Compile Include="../../src/Wanderveil/UI/SignInSheet.cs" Link="UI/SignInSheet.cs" />
     <Compile Include="../../src/Wanderveil/UI/Components/*.cs" Link="UI/Components/%(Filename)%(Extension)" />
     <Compile Include="../../src/Wanderveil/Features/*.cs" Link="Features/%(Filename)%(Extension)" />
     <Compile Include="../../src/Wanderveil/Features/Passport/*.cs" Link="Passport/%(Filename)%(Extension)" />

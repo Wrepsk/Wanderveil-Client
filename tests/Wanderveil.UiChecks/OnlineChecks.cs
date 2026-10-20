@@ -13,7 +13,7 @@ namespace Wanderveil.UiChecks;
 // (docs/api/v1.yaml). No network, no backend: the public client's checks stand alone.
 internal static class OnlineChecks
 {
-    private const ulong Content = 0x0040_0000_1234_5678;
+    internal const ulong Content = 0x0040_0000_1234_5678;
     private const ulong OtherContent = 0x0040_0000_8765_4321;
 
     internal static void Run(Action<bool, string> check)
@@ -296,7 +296,7 @@ internal static class OnlineChecks
         }
     }
 
-    private static void SignIn(FakeServer server, OnlineAccount account, long id)
+    internal static void SignIn(FakeServer server, OnlineAccount account, long id)
     {
         account.Restart();
         account.RequestCode();
@@ -306,7 +306,7 @@ internal static class OnlineChecks
         if (!Until(() => account.State == AccountState.SignedIn)) throw new InvalidOperationException("Not signed in: " + account.Problem);
     }
 
-    private static bool Until(Func<bool> condition, int milliseconds = 5000)
+    internal static bool Until(Func<bool> condition, int milliseconds = 5000)
     {
         var deadline = Environment.TickCount64 + milliseconds;
         while (Environment.TickCount64 < deadline)
@@ -318,7 +318,7 @@ internal static class OnlineChecks
     }
 
     // The contract's endpoints, in memory.
-    private sealed class FakeServer : HttpMessageHandler
+    internal sealed class FakeServer : HttpMessageHandler
     {
         internal const string Address = "https://wanderveil.test";
         private readonly object gate = new();
