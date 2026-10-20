@@ -26,6 +26,6 @@ Curated discovery fixture → collect use case → demo stamp instance → local
 
 The [passport experience](passport-experience.md) now has static closed/open state and ordered nation/identity/demo-stamp pages. Stamps are collected and saved locally; edition selection, palette preferences, signature input, and character-scoped passports remain future work. Keep those data concerns separate from rendering and motion; the current page records are presentation metadata, not a storage contract.
 
-Public API consumers use versioned public contracts, not private project references. Sharing/publication and location transmission are explicit opt-ins. Online authority and unverified character claims are distinguished. The ordinary UI remains complete if the optional renderer is absent or fails.
+Public API consumers use versioned public contracts, not private project references. Sharing/publication and location transmission are explicit opt-ins. Online, every account is one character verified through the Lodestone or XIVAuth (see the [v1 contract draft](api/README.md)); a verification proves control of the character's Lodestone profile at sign-in, not more. The ordinary UI remains complete if the optional renderer is absent or fails.
 
 Feature areas are Discover, Passport, Echoes, Studio, Social, and Settings. Start with only the domain/use cases needed by a bounded phase; Echoes/social remain future work.

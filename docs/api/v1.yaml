@@ -1,0 +1,483 @@
+openapi: 3.1.0
+info:
+  title: Wanderveil API
+  version: 1.0.0-draft.1
+  summary: Sign-in by character verification, sessions, and the holder's private passport.
+  description: |
+    Draft, 20 October 2026. Nothing implements it yet, and it may change without notice until the first client release
+    that uses it. See README.md beside this file for the rules every endpoint follows.
+
+    Every account is one FFXIV character verified through the Lodestone or XIVAuth. A verification proves control of
+    that character's Lodestone profile at sign-in time, nothing more.
+
+    Every request sends a `Wanderveil-Client` header with the plugin's version; a version the server no longer
+    accepts answers `426` with `client_outdated`.
+  license:
+    name: GNU Affero General Public License 3.0 (the client repository's LICENSE.md)
+servers:
+  - url: https://{host}
+    description: No hosted server exists yet.
+    variables:
+      host:
+        default: api.example.invalid
+security:
+  - session: []
+tags:
+  - name: Sign-in
+  - name: Session
+  - name: Passport
+paths:
+  /v1/auth/lodestone/challenges:
+    post:
+      tags: [Sign-in]
+      operationId: startLodestoneChallenge
+      summary: Find a character on the Lodestone and issue a code for its profile.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CharacterRequest' }
+      responses:
+        '201':
+          description: The code to place in the character's Lodestone profile.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LodestoneChallenge' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '404': { $ref: '#/components/responses/CharacterNotFound' }
+        '426': { $ref: '#/components/responses/ClientOutdated' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/LodestoneUnavailable' }
+  /v1/auth/lodestone/challenges/{challengeId}/verify:
+    post:
+      tags: [Sign-in]
+      operationId: verifyLodestoneChallenge
+      summary: Read the character's Lodestone profile and sign in when the code is there.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/ChallengeId'
+      responses:
+        '200':
+          description: Signed in.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SessionGrant' }
+        '404':
+          description: '`challenge_not_found`: unknown, or already used.'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '410':
+          description: '`challenge_expired`.'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '422':
+          description: '`code_not_found`: the profile does not show the code yet. The challenge stays valid; try again.'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '426': { $ref: '#/components/responses/ClientOutdated' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/LodestoneUnavailable' }
+  /v1/auth/xivauth/flows:
+    post:
+      tags: [Sign-in]
+      operationId: startXivAuthFlow
+      summary: Start an XIVAuth device flow for a character.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CharacterRequest' }
+      responses:
+        '201':
+          description: The code and page the player approves in the browser.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/XivAuthFlow' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '426': { $ref: '#/components/responses/ClientOutdated' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503':
+          description: '`xivauth_unavailable`: XIVAuth cannot be reached, or XIVAuth sign-in is switched off.'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+  /v1/auth/xivauth/flows/{flowId}/poll:
+    post:
+      tags: [Sign-in]
+      operationId: pollXivAuthFlow
+      summary: Ask whether the player has approved; signs in once they have.
+      description: Poll no faster than the flow's `interval`. A `429` (XIVAuth's `slow_down`) adds to it.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/FlowId'
+      responses:
+        '200':
+          description: Still waiting, or signed in.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/XivAuthPoll' }
+        '403':
+          description: '`access_denied`: the player declined in XIVAuth.'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '404':
+          description: '`flow_not_found`: unknown, or already used.'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '410':
+          description: '`flow_expired`.'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '422':
+          description: '`xivauth_character_not_verified`: the approved XIVAuth account did not share a verified character with this name and world.'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '426': { $ref: '#/components/responses/ClientOutdated' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503':
+          description: '`xivauth_unavailable`.'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+  /v1/session:
+    get:
+      tags: [Session]
+      operationId: getSession
+      summary: The signed-in account and when the session expires.
+      responses:
+        '200':
+          description: The current session.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Session' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '426': { $ref: '#/components/responses/ClientOutdated' }
+    delete:
+      tags: [Session]
+      operationId: signOut
+      summary: Sign out; the token stops working at once.
+      responses:
+        '204': { description: Signed out. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /v1/account:
+    delete:
+      tags: [Session]
+      operationId: deleteAccount
+      summary: Delete the account, its passport record, and every session, at once.
+      responses:
+        '204': { description: Deleted. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '426': { $ref: '#/components/responses/ClientOutdated' }
+  /v1/passport:
+    get:
+      tags: [Passport]
+      operationId: getPassport
+      summary: The signed-in holder's private passport record.
+      responses:
+        '200':
+          description: The record. `ETag` carries its revision.
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PassportRecord' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404':
+          description: '`passport_not_found`: this account has never saved one.'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '426': { $ref: '#/components/responses/ClientOutdated' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+    put:
+      tags: [Passport]
+      operationId: putPassport
+      summary: Save the holder's passport record.
+      description: |
+        Needs `If-None-Match: *` for the first save, or `If-Match` with the revision last read or saved. Another save
+        in between answers `412` and changes nothing; the client reads the record again and settles it. A save that
+        repeats the stored document exactly succeeds without a new revision, so a retried save is harmless.
+      parameters:
+        - name: If-Match
+          in: header
+          schema: { type: string, example: '"7"' }
+        - name: If-None-Match
+          in: header
+          schema: { type: string, const: '*' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PassportSave' }
+      responses:
+        '200':
+          description: Saved (or already this). `ETag` carries the new revision.
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PassportRecord' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '412':
+          description: '`revision_conflict`: the record changed since that revision, or one exists already for `If-None-Match: *`.'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '413':
+          description: '`document_too_large`: over 262,144 bytes.'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '422':
+          description: '`document_invalid`: not a passport document, or a version this server does not accept.'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '426': { $ref: '#/components/responses/ClientOutdated' }
+        '428':
+          description: '`precondition_required`: neither `If-Match` nor `If-None-Match: *` was sent.'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+components:
+  securitySchemes:
+    session:
+      type: http
+      scheme: bearer
+      description: An opaque session token from a sign-in. Never logged.
+  parameters:
+    ChallengeId:
+      name: challengeId
+      in: path
+      required: true
+      description: The secret from the challenge's creation; the code alone cannot verify.
+      schema: { $ref: '#/components/schemas/Secret' }
+    FlowId:
+      name: flowId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Secret' }
+  headers:
+    ETag:
+      description: The record's revision as a strong entity tag, such as `"7"`.
+      schema: { type: string }
+    RetryAfter:
+      description: Seconds to wait before trying again.
+      schema: { type: integer, minimum: 1 }
+  responses:
+    InvalidRequest:
+      description: '`invalid_request`: a malformed body or parameter; `errors` names the fields.'
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Unauthorized:
+      description: '`session_invalid`: the session expired, was signed out, or is unknown. Sign in again; never retry.'
+      headers:
+        WWW-Authenticate:
+          schema: { type: string, example: Bearer }
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    CharacterNotFound:
+      description: '`character_not_found`: no character with exactly this name on this world on the Lodestone.'
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    LodestoneUnavailable:
+      description: '`lodestone_unavailable`: the Lodestone did not answer, or answered in a way the server cannot read. No verdict was reached.'
+      headers:
+        Retry-After: { $ref: '#/components/headers/RetryAfter' }
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    RateLimited:
+      description: '`rate_limited`.'
+      headers:
+        Retry-After: { $ref: '#/components/headers/RetryAfter' }
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    ClientOutdated:
+      description: '`client_outdated`: this client version is no longer accepted; update the plugin.'
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+  schemas:
+    Secret:
+      type: string
+      description: 128 random bits, base64url without padding.
+      pattern: '^[A-Za-z0-9_-]{22}$'
+    CharacterRequest:
+      type: object
+      required: [name, world]
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          description: The character's full name, as the game shows it.
+          minLength: 3
+          maxLength: 21
+          examples: ['Wander Veil']
+        world:
+          type: string
+          description: The character's home world.
+          minLength: 2
+          maxLength: 16
+          examples: ['Ravana']
+    Character:
+      type: object
+      required: [lodestoneId, name, world, dataCenter]
+      properties:
+        lodestoneId:
+          type: string
+          pattern: '^[0-9]{1,12}$'
+          examples: ['12345678']
+        name: { type: string }
+        world: { type: string }
+        dataCenter: { type: string, examples: ['Materia'] }
+    LodestoneChallenge:
+      type: object
+      required: [challengeId, code, character, expiresAt, profileUrl]
+      properties:
+        challengeId: { $ref: '#/components/schemas/Secret' }
+        code:
+          type: string
+          description: Placed anywhere in the profile's self-introduction.
+          pattern: '^WV-[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{8}$'
+          examples: ['WV-7KQ2M9XA']
+        character: { $ref: '#/components/schemas/Character' }
+        expiresAt: { type: string, format: date-time }
+        profileUrl:
+          type: string
+          format: uri
+          description: Where the player edits their Lodestone profile.
+    XivAuthFlow:
+      type: object
+      required: [flowId, userCode, verificationUri, interval, expiresAt]
+      properties:
+        flowId: { $ref: '#/components/schemas/Secret' }
+        userCode: { type: string, description: XIVAuth's code, shown to the player. }
+        verificationUri: { type: string, format: uri }
+        verificationUriComplete:
+          type: string
+          format: uri
+          description: The approval page with the code filled in, when XIVAuth gives one.
+        interval: { type: integer, minimum: 1, description: Seconds between polls. }
+        expiresAt: { type: string, format: date-time }
+    XivAuthPoll:
+      oneOf:
+        - type: object
+          required: [status]
+          properties:
+            status: { const: pending }
+        - type: object
+          required: [status, session]
+          properties:
+            status: { const: approved }
+            session: { $ref: '#/components/schemas/SessionGrant' }
+      discriminator:
+        propertyName: status
+    Account:
+      type: object
+      required: [accountId, character, verifiedBy, verifiedAt]
+      properties:
+        accountId: { type: string, format: uuid }
+        character: { $ref: '#/components/schemas/Character' }
+        verifiedBy:
+          type: string
+          enum: [lodestone, xivauth]
+          description: How the latest sign-in proved control of the character's Lodestone profile.
+        verifiedAt: { type: string, format: date-time }
+    Session:
+      type: object
+      required: [account, expiresAt]
+      properties:
+        account: { $ref: '#/components/schemas/Account' }
+        expiresAt:
+          type: string
+          format: date-time
+          description: When the session ends if unused; each request moves it later, up to 180 days after sign-in.
+    SessionGrant:
+      allOf:
+        - $ref: '#/components/schemas/Session'
+        - type: object
+          required: [token]
+          properties:
+            token:
+              type: string
+              description: The bearer token. Shown once; store it protected and never log it.
+              pattern: '^[A-Za-z0-9_-]{43}$'
+    PassportDocument:
+      type: object
+      description: |
+        The client's local passport file, format `wanderveil.passport`, as written by the client (see
+        docs/passport-runtime.md). The server checks the format, the version, and the size, and otherwise keeps it
+        as it is. It holds no picture; the picture stays local.
+      required: [format, version]
+      properties:
+        format: { const: wanderveil.passport }
+        version: { type: integer, minimum: 1, maximum: 3 }
+      additionalProperties: true
+    PassportSave:
+      type: object
+      required: [document]
+      additionalProperties: false
+      properties:
+        document: { $ref: '#/components/schemas/PassportDocument' }
+    PassportRecord:
+      type: object
+      required: [revision, updatedAt, document]
+      properties:
+        revision: { type: integer, minimum: 1 }
+        updatedAt: { type: string, format: date-time }
+        document: { $ref: '#/components/schemas/PassportDocument' }
+    Problem:
+      type: object
+      description: RFC 9457 problem details with a stable `code`.
+      required: [type, title, status, code]
+      properties:
+        type: { type: string, format: uri-reference, examples: ['about:blank'] }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        code:
+          type: string
+          description: Stable and machine-readable; clients branch on this, never on `title` or `detail`.
+          enum:
+            - invalid_request
+            - session_invalid
+            - client_outdated
+            - rate_limited
+            - character_not_found
+            - lodestone_unavailable
+            - challenge_not_found
+            - challenge_expired
+            - code_not_found
+            - xivauth_unavailable
+            - access_denied
+            - flow_not_found
+            - flow_expired
+            - xivauth_character_not_verified
+            - passport_not_found
+            - revision_conflict
+            - document_too_large
+            - document_invalid
+            - precondition_required
+        traceId: { type: string, description: Quote this when reporting a problem. }
+        errors:
+          type: object
+          description: For `invalid_request`, the messages for each field.
+          additionalProperties:
+            type: array
+            items: { type: string }
