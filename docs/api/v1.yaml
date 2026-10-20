@@ -64,7 +64,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/SessionGrant' }
         '404':
-          description: '`challenge_not_found`: unknown, or already used.'
+          description: '`challenge_not_found`: unknown, or already used; or `character_not_found`: the Lodestone no longer has the character.'
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
@@ -474,6 +474,7 @@ components:
             - document_too_large
             - document_invalid
             - precondition_required
+            - internal_error
         traceId: { type: string, description: Quote this when reporting a problem. }
         errors:
           type: object
