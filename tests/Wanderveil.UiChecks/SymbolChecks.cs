@@ -19,6 +19,7 @@ internal static class SymbolChecks
         Pages(check, artifacts);
         Cover(check, artifacts);
         Narrow(check, artifacts);
+        Clear(check, artifacts);
         Console.WriteLine("PASS symbols");
     }
 
@@ -197,6 +198,52 @@ internal static class SymbolChecks
         // Opening the cover afterwards still works.
         book.Open();
         check(book.Shell.IsBookOpen, "The cover does not open after decorating.");
+    }
+
+    // Remove all symbols, under the colours in Customization: it asks first; Keep them keeps them, Remove them clears them.
+    private static void Clear(Action<bool, string> check, string? artifacts)
+    {
+        var profile = new PassportProfile(PassportIdentity.Sample);
+        profile.AddSymbol(On("cover", "moon"));
+        profile.AddSymbol(On("portrait", "heart"));
+        profile.AddSymbol(On("nation-map", "sun"));
+        using var book = new CollectChecks.Book(new Vector2(1200, 820), new StampCollection(), identity: profile);
+        book.Open();
+        book.Shell.ShowSettings();
+        book.Frames(3);
+        book.Click(book.Tab(1));
+        book.Frames(3);
+        var page = book.Page(true);
+        // The last control on the right page, found from the bottom up.
+        Vector2? Last()
+        {
+            for (var y = page.Size.Y - 10; y > 0; y -= 4)
+            {
+                var point = new Vector2(page.Position.X + 30, page.Position.Y + y);
+                book.Move(point);
+                if (ImGui.IsAnyItemHovered()) return point;
+            }
+            return null;
+        }
+        var remove = Last();
+        check(remove is { } at && book.ClickControl(at) && book.Shell.ConfirmingClearSymbols && profile.Identity.Appearance?.Placed.Items.Length == 3, "Remove all symbols does not ask first.");
+        check(book.Shell.PageOverflow == 0 && book.Shell.PageOverflowX == 0, "Customization overflows with the symbols' confirmation.");
+        book.Save(artifacts, "symbols-clear-confirm.bmp");
+        // Keep them sits right of Remove them on the same line.
+        var row = Last()!.Value;
+        var kept = false;
+        for (var x = row.X + 110; x < page.Max.X && !kept; x += 6)
+        {
+            book.Move(new Vector2(x, row.Y));
+            if (!ImGui.IsAnyItemHovered()) continue;
+            book.Click(new Vector2(x, row.Y));
+            kept = !book.Shell.ConfirmingClearSymbols;
+        }
+        check(kept && profile.Identity.Appearance?.Placed.Items.Length == 3, "Keep them does not keep the symbols.");
+        book.ClickControl(Last()!.Value);
+        book.ClickControl(Last()!.Value);
+        check(profile.Identity.Appearance?.Symbols == null && !book.Shell.ConfirmingClearSymbols && book.Shell.PageOverflow == 0, "Remove them does not clear every symbol.");
+        book.Save(artifacts, "symbols-cleared.bmp");
     }
 
     // On a single page the footer's two decorating controls and the sheet still fit.

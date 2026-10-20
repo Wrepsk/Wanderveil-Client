@@ -226,6 +226,9 @@ internal sealed class PassportProfile(PassportIdentity identity)
 
     internal bool RemoveSymbol(int index) => SetSymbols(Appearance().Placed.Remove(index));
 
+    // Takes every symbol off the cover and pages.
+    internal bool ClearSymbols() => Identity.Appearance is { Symbols: not null } && SetSymbols(SymbolLayer.Empty);
+
     private PassportAppearance Appearance() => Identity.Appearance ?? new PassportAppearance(Identity.Edition.Id);
 
     private bool SetSymbols(SymbolLayer symbols) => Update(Identity with { Appearance = Appearance() with { Symbols = symbols.IsEmpty ? null : symbols } });

@@ -41,6 +41,8 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
     private readonly EditionAssets editions = (EditionAssets)(assets = new EditionAssets(assets, () => identity!.Identity.Edition.Id));
     // An edition picked in Settings, waiting for the holder to confirm the change.
     private string? pendingEdition;
+    // Remove all symbols, picked in Settings and waiting for the holder to confirm it.
+    private bool confirmClearSymbols;
     // An edition the passport is being exchanged for: the old book slides away, and once it is gone the new
     // edition's book is summoned in its place.
     private string? swapTo;
@@ -95,6 +97,8 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
     internal Vector2? ColourSwatch(ColourPart part, int index) => colours.Swatch(part, index);
     // An edition picked in Settings and waiting for confirmation, or null.
     internal string? PendingEdition => pendingEdition;
+    // Whether Remove all symbols is waiting for its answer.
+    internal bool ConfirmingClearSymbols => confirmClearSymbols;
     // Whether the identity pages are being written on (the footer's Edit / Done).
     internal bool EditingIdentity { get; private set; }
     // How far a page's printed contents are shrunk to fit its paper (1 when they fit as set).
@@ -297,6 +301,7 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
             riffle.Start(next > Category ? 1 : -1, BookShellRiffle.LeavesFor(1), BookSection.Settings, (int)Category, ReducedMotion);
             Category = next;
             pendingEdition = null;
+            confirmClearSymbols = false;
         }
         if (chosen is { } tab) Navigate(tab);
         else if (explore) Navigate(BookSection.Discover);
@@ -425,7 +430,7 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
                             // edition waits for its answer the colours and preview step aside: the change would reset them.
                             if (side != Side.Right) { ImGui.Dummy(new Vector2(0, 16 * type.Scale)); EditionOptions(type); if (pendingEdition == null) colours.Preview(type); }
                             if (side == Side.Single) ImGui.Dummy(new Vector2(0, 24 * type.Scale));
-                            if (side != Side.Left && pendingEdition == null) colours.Draw(type);
+                            if (side != Side.Left && pendingEdition == null) { colours.Draw(type); SymbolOptions(type); }
                             break;
                         default:
                             if (side == Side.Single) ImGui.Dummy(new Vector2(0, 24 * type.Scale));
@@ -838,6 +843,7 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         desk.CloseInfo();
         pageEntry = null;
         pendingEdition = null;
+        confirmClearSymbols = false;
         var distance = (int)to - (int)Section;
         riffle.Start(Math.Sign(distance), BookShellRiffle.LeavesFor(distance), Section, Section == BookSection.Settings ? (int)Category : VisiblePage, ReducedMotion);
         Section = to;
@@ -952,7 +958,7 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         if (pendingEdition is { } id)
         {
             var next = PassportEdition.Find(id);
-            UiTypography.Text($"Change to {next.Name}? Its cover, crest, colours, and opening pages replace {current.Name}'s. Your details, picture, cover line, and stamps stay as they are. You can change back.", TextRole.Body, context, UiTheme.Ink);
+            UiTypography.Text($"Change to {next.Name}? Its cover, crest, colours, and opening pages replace {current.Name}'s, and your symbols come off. Your details, picture, cover line, and stamps stay as they are. You can change back.", TextRole.Body, context, UiTheme.Ink);
             ImGui.Dummy(new Vector2(0, 8 * context.Scale));
             if (BookControl.Link("Change to " + next.Name, context)) { Exchange(id); pendingEdition = null; }
             ImGui.SameLine(0, 18 * context.Scale);
@@ -964,6 +970,35 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         UiTypography.Text($"Your previous edition was {before.Name}.", TextRole.Body, context, UiTheme.MutedInk);
         ImGui.Dummy(new Vector2(0, 6 * context.Scale));
         if (BookControl.Link("Change back to " + before.Name, context)) Exchange(before.Id);
+    }
+
+    // The symbols placed on the cover and first pages: how many, and Remove all symbols, which asks first (it cannot
+    // be undone).
+    private void SymbolOptions(UiContext context)
+    {
+        var count = holder.Identity.Appearance?.Placed.Items.Length ?? 0;
+        if (count == 0) confirmClearSymbols = false;
+        ImGui.Dummy(new Vector2(0, 20 * context.Scale));
+        UiTypography.Text("SYMBOLS", TextRole.Caption, context, UiTheme.MutedInk);
+        ImGui.Dummy(new Vector2(0, 6 * context.Scale));
+        var placed = count == 1 ? "1 symbol" : $"{count} symbols";
+        if (count == 0)
+        {
+            UiTypography.Text("None placed. Decorate the cover or the first pages from their own Decorate mark.", TextRole.Body, context, UiTheme.MutedInk);
+            return;
+        }
+        if (confirmClearSymbols)
+        {
+            UiTypography.Text($"Remove all {placed} from the cover and pages? This cannot be undone.", TextRole.Body, context, UiTheme.Ink);
+            ImGui.Dummy(new Vector2(0, 6 * context.Scale));
+            if (BookControl.Link("Remove them", context)) { holder.ClearSymbols(); symbols.Stop(); confirmClearSymbols = false; }
+            ImGui.SameLine(0, 18 * context.Scale);
+            if (BookControl.Link("Keep them", context)) confirmClearSymbols = false;
+            return;
+        }
+        UiTypography.Text($"{placed} placed on the cover and first pages.", TextRole.Body, context, UiTheme.Ink);
+        ImGui.Dummy(new Vector2(0, 6 * context.Scale));
+        if (BookControl.Link("Remove all symbols", context)) confirmClearSymbols = true;
     }
 
     // Changes edition by exchanging the book itself: the old passport is put away (its dismissal) and the new
