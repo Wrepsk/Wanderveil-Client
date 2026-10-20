@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace Wanderveil.UI;
 
@@ -30,4 +31,38 @@ internal interface IBookShellAccount
     // Whether a deletion is waiting for the server, and why the last one did not happen, if it did not.
     bool Deleting { get; }
     string? Problem { get; }
+}
+
+// A player on the sharing page: who they are (a verified character) and since when (approved or blocked).
+internal sealed record SharingPerson(Guid AccountId, string Name, string World, string VerifiedBy, DateTimeOffset Since);
+
+// A request to view a passport: incoming ones name their verified sender; outgoing ones name the character asked for,
+// pending until approved (a decline looks the same to its sender).
+internal sealed record SharingRequest(Guid Id, Guid? From, string Name, string World, bool Approved, DateTimeOffset ExpiresAt);
+
+// The holder's sharing, as the Settings pages show and change it (ADR-0005). Reads are the latest known state; every
+// action is carried out in the background, after which the state is read again.
+internal interface IBookShellSharing
+{
+    bool Loaded { get; }
+    bool Busy { get; }
+    string? Problem { get; }
+    string? Message { get; }
+    bool Anyone { get; }
+    IReadOnlyList<SharingRequest> Incoming { get; }
+    IReadOnlyList<SharingRequest> Outgoing { get; }
+    IReadOnlyList<SharingPerson> Viewers { get; }
+    IReadOnlyList<SharingPerson> Blocked { get; }
+    // The player the holder has targeted in game, if any.
+    (string Name, string World)? Target { get; }
+    // Called while the page shows: reads again when what it shows is old.
+    void Refresh();
+    void SetAnyone(bool anyone);
+    void Approve(Guid request);
+    void Decline(Guid request);
+    void Withdraw(Guid request);
+    void RemoveViewer(Guid player);
+    void Block(Guid player);
+    void Unblock(Guid player);
+    void Ask(string name, string world);
 }

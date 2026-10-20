@@ -528,6 +528,12 @@ internal static class OnlineChecks
         // Every document part by account and part name, and pictures by account.
         private readonly Dictionary<(Guid, string), (int Revision, string Document)> parts = [];
         private readonly Dictionary<Guid, (int Revision, byte[] Bytes)> pictures = [];
+        // Sharing, as the contract describes it: settings, requests, viewers, blocks, reports.
+        private readonly HashSet<Guid> anyone = [];
+        private readonly List<(Guid Id, Guid From, string Name, string World, Guid? To, bool Silent, string State, DateTimeOffset Expires)> requests = [];
+        private readonly HashSet<(Guid Owner, Guid Viewer)> viewers = [];
+        private readonly HashSet<(Guid Blocker, Guid Blocked)> blocks = [];
+        internal List<(Guid Reporter, Guid Owner, string Part, string Reason)> Reports { get; } = [];
         internal int PartWrites { get; private set; }
         internal bool LastPutCompressed { get; private set; }
         // The paths that arrived gzip-compressed.
@@ -690,6 +696,7 @@ internal static class OnlineChecks
                     pictures.Remove(owner);
                     return new HttpResponseMessage(HttpStatusCode.NoContent);
             }
+            if (Sharing(request, path, body, owner) is { } shared) return shared;
             if (path is "/v1/passport" or "/v1/passport/stamps" or "/v1/passport/marks")
             {
                 var part = path == "/v1/passport" ? "passport" : path["/v1/passport/".Length..];
@@ -714,6 +721,118 @@ internal static class OnlineChecks
                 }
             }
             return Problem(404, "not_found");
+        }
+
+        private bool Visible(Guid viewer, Guid owner) =>
+            viewer == owner || !blocks.Contains((owner, viewer)) && !blocks.Contains((viewer, owner)) && (anyone.Contains(owner) || viewers.Contains((owner, viewer)));
+
+        private Guid? AccountNamed(string name, string world) =>
+            accounts.Where(a => string.Equals(characters[a.Key].Name, name, StringComparison.OrdinalIgnoreCase) && string.Equals(characters[a.Key].World, world, StringComparison.OrdinalIgnoreCase)).Select(a => (Guid?)a.Value).FirstOrDefault();
+
+        private object Player(Guid account)
+        {
+            var id = accounts.Single(a => a.Value == account).Key;
+            return new { accountId = account, character = Character(id), verifiedBy = "lodestone" };
+        }
+
+        private HttpResponseMessage? Sharing(HttpRequestMessage request, string path, string body, Guid me)
+        {
+            var method = request.Method.Method;
+            var query = request.RequestUri!.Query;
+            if (path == "/v1/sharing")
+            {
+                if (method == "PUT") { var visibility = (string?)JsonNode.Parse(body)!["visibility"]; if (visibility == "anyone") anyone.Add(me); else anyone.Remove(me); }
+                return Json(200, new { visibility = anyone.Contains(me) ? "anyone" : "approved" });
+            }
+            if (path == "/v1/view-requests" && method == "POST")
+            {
+                var asked = JsonNode.Parse(body)!;
+                var (name, world) = ((string)asked["name"]!, (string)asked["world"]!);
+                var target = AccountNamed(name, world);
+                var silent = target == null || target == me || viewers.Contains((target.Value, me)) || blocks.Contains((target.Value, me)) || blocks.Contains((me, target.Value));
+                if (!requests.Any(r => r.From == me && r.Name == name && r.World == world && r.State == "pending"))
+                    requests.Add((Guid.NewGuid(), me, name, world, target, silent, "pending", DateTimeOffset.UtcNow.AddDays(14)));
+                return new HttpResponseMessage(HttpStatusCode.Accepted);
+            }
+            if (path == "/v1/view-requests" && method == "GET")
+            {
+                if (query.Contains("incoming", StringComparison.Ordinal))
+                    return Json(200, requests.Where(r => r.To == me && !r.Silent && r.State == "pending").Select(r => new { requestId = r.Id, state = "pending", from = Player(r.From), createdAt = DateTimeOffset.UtcNow, expiresAt = r.Expires }).ToList());
+                return Json(200, requests.Where(r => r.From == me && r.State is "pending" or "approved" or "declined")
+                    .Select(r => new { requestId = r.Id, state = r.State == "approved" ? "approved" : "pending", to = new { name = r.Name, world = r.World }, createdAt = DateTimeOffset.UtcNow, expiresAt = r.Expires }).ToList());
+            }
+            if (path.StartsWith("/v1/view-requests/", StringComparison.Ordinal))
+            {
+                var parts = path.Split('/');
+                var id = Guid.Parse(parts[3]);
+                var index = requests.FindIndex(r => r.Id == id);
+                if (index < 0) return Problem(404, "request_not_found");
+                var found = requests[index];
+                if (parts.Length == 5 && method == "POST" && found.To == me && !found.Silent && found.State == "pending")
+                {
+                    if (parts[4] == "approve") { requests[index] = found with { State = "approved" }; viewers.Add((me, found.From)); }
+                    else requests[index] = found with { State = "declined" };
+                    return new HttpResponseMessage(HttpStatusCode.NoContent);
+                }
+                if (parts.Length == 4 && method == "DELETE" && found.From == me && found.State != "approved")
+                {
+                    requests[index] = found with { State = "withdrawn" };
+                    return new HttpResponseMessage(HttpStatusCode.NoContent);
+                }
+                return Problem(404, "request_not_found");
+            }
+            if (path == "/v1/viewers")
+                return Json(200, viewers.Where(v => v.Owner == me).Select(v => new { accountId = v.Viewer, character = Character(accounts.Single(a => a.Value == v.Viewer).Key), verifiedBy = "lodestone", since = DateTimeOffset.UtcNow }).ToList());
+            if (path.StartsWith("/v1/viewers/", StringComparison.Ordinal) && method == "DELETE")
+                return viewers.Remove((me, Guid.Parse(path[12..]))) ? new HttpResponseMessage(HttpStatusCode.NoContent) : Problem(404, "viewer_not_found");
+            if (path == "/v1/blocks")
+                return Json(200, blocks.Where(b => b.Blocker == me).Select(b => new { accountId = b.Blocked, character = Character(accounts.Single(a => a.Value == b.Blocked).Key), verifiedBy = "lodestone", since = DateTimeOffset.UtcNow }).ToList());
+            if (path.StartsWith("/v1/blocks/", StringComparison.Ordinal))
+            {
+                var other = Guid.Parse(path[11..]);
+                if (method == "PUT")
+                {
+                    blocks.Add((me, other));
+                    viewers.Remove((me, other));
+                    viewers.Remove((other, me));
+                    for (var index = 0; index < requests.Count; index++)
+                        if (requests[index].State == "pending" && (requests[index].From == other && requests[index].To == me || requests[index].From == me && requests[index].To == other))
+                            requests[index] = requests[index] with { State = requests[index].From == me ? "withdrawn" : "declined" };
+                }
+                else blocks.Remove((me, other));
+                return new HttpResponseMessage(HttpStatusCode.NoContent);
+            }
+            if (path == "/v1/visits")
+            {
+                var values = System.Web.HttpUtility.ParseQueryString(query);
+                var found = AccountNamed(values["name"] ?? "", values["world"] ?? "");
+                if (found is not { } owner || !Visible(me, owner)) return Problem(404, "passport_not_visible");
+                var revisions = parts.Where(k => k.Key.Item1 == owner).ToDictionary(k => k.Key.Item2, k => k.Value.Revision);
+                if (pictures.TryGetValue(owner, out var shown)) revisions["picture"] = shown.Revision;
+                return Json(200, new { owner = Player(owner), revisions });
+            }
+            if (path.StartsWith("/v1/visits/", StringComparison.Ordinal))
+            {
+                var segments = path.Split('/');
+                var owner = Guid.Parse(segments[3]);
+                if (!Visible(me, owner)) return Problem(404, "passport_not_visible");
+                if (segments[4] == "picture")
+                {
+                    if (!pictures.TryGetValue(owner, out var shown)) return Problem(404, "part_not_found");
+                    var image = new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(shown.Bytes) };
+                    image.Content.Headers.ContentType = new("image/png");
+                    image.Headers.ETag = new($"\"{shown.Revision}\"");
+                    return image;
+                }
+                return parts.TryGetValue((owner, segments[4]), out var stored) ? Record(stored) : Problem(404, "part_not_found");
+            }
+            if (path == "/v1/reports")
+            {
+                var report = JsonNode.Parse(body)!;
+                Reports.Add((me, Guid.Parse((string)report["accountId"]!), (string)report["part"]!, (string)report["reason"]!));
+                return new HttpResponseMessage(HttpStatusCode.Accepted);
+            }
+            return null;
         }
 
         private object Character(long id) => new { lodestoneId = id.ToString(), name = characters[id].Name, world = characters[id].World, dataCenter = "Materia" };

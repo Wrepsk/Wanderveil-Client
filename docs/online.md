@@ -55,6 +55,19 @@ The whole passport is kept in step with the holder's private record on the serve
 
 A change is sent two seconds after the last edit. With no answer, it waits and tries again after 30 seconds, doubling the wait up to 5 minutes. Another save in between (`412`) leads to a fresh comparison. All network and disk work runs off the draw path. The server's copy is taken in on the UI thread before the windows draw. General settings show whether the passport is saved online, being compared or saved, or waiting for the server.
 
+## Sharing
+
+**Sharing** is the fifth Settings category (an eye), beside General, Customization, Layout, and Saved data; the category tabs are icons and all five sit in one row. It follows ADR-0005:
+
+- **Asking to see a passport** (left page): type a character's name and home world, or use your target in game, and choose **Ask to see it**. The answer never says whether that character uses Wanderveil, so the page says what is true: if they do, they see your request, which waits up to 14 days.
+- **Who may open yours** (right page): **Only people I approve** (the default) or **Anyone signed in**. Visitors see your whole passport and can take screenshots, and a block always keeps someone out.
+- **Asking to see yours:** each request with **Approve**, **Decline** (the sender is not told), and **Block**.
+- **Who can open yours:** your viewers, each with **Remove** and **Block**.
+- **You asked to see:** your requests, *waiting* or *approved*, with **Withdraw** while waiting. A decline looks like waiting until the request expires.
+- **Blocked:** with **Unblock**. Unblocking does not restore an approval the block removed.
+
+Each list shows its first five and how many more, with each entry's actions on its line. The page reads everything again when it opens and every half minute while it shows, and after each action. Reading and changing run in the background. Without the server, the page says so and keeps what it last read. Opening a passport you may see comes next. Previews: [the page](previews/online/settings-sharing.png), [after asking](previews/online/settings-sharing-asked.png).
+
 ## What is not covered yet
 
 There is no sharing yet. XIVAuth works live: on 21 October 2026, with Wanderveil's XIVAuth application registered (scope `character`, device code flow, confidential client) and configured on a local server, the user signed in from the game through XIVAuth. The passport saved earlier through the Lodestone sign-in loaded correctly, because both sign-ins identify the character by its Lodestone ID. The live test ran on Windows against a local server. Not yet observed: a hosted server over HTTPS, DPAPI under Wine, and other players' characters.

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin;
@@ -26,7 +27,7 @@ internal sealed class CharacterBook : IDisposable
     private readonly PortraitPicture portrait;
 
     internal CharacterBook(SavedSession session, OnlineAccount account, IDalamudPluginInterface plugin, ITextureProvider textures, ITextureReadbackProvider readback,
-        IFramework framework, IPlayerState player, IPluginLog log, PassportAssets assets, Configuration configuration, Func<bool> saveConfiguration, WindowSystem windows)
+        IFramework framework, IPlayerState player, IPluginLog log, PassportAssets assets, Configuration configuration, Func<bool> saveConfiguration, WindowSystem windows, Func<(string Name, string World)?> target)
     {
         this.windows = windows;
         Session = session;
@@ -49,8 +50,9 @@ internal sealed class CharacterBook : IDisposable
             new MarksPart(marks.Marks, marks.Loaded == LoadOutcome.New),
             new PicturePart(portrait, identity.Loaded == LoadOutcome.New),
         ], directory);
+        Sharing = new SharingCenter(account, session);
         Window = new MainWindow(() => configuration.ReducedMotion, new ConfigurationSettings(configuration, saveConfiguration), assets, stamps.Collection, stamps,
-            new PassportServices(identity.Profile, identity, portrait, new GameCharacter(framework, player)), marks.Marks, marks, new BookAccount(account, session, Sync));
+            new PassportServices(identity.Profile, identity, portrait, new GameCharacter(framework, player)), marks.Marks, marks, new BookAccount(account, session, Sync), new BookSharing(Sharing, target));
         windows.AddWindow(Window);
         windows.AddWindow(Window.Camera);
         Sync.Start();
@@ -59,6 +61,7 @@ internal sealed class CharacterBook : IDisposable
     internal SavedSession Session { get; }
     internal MainWindow Window { get; }
     internal PassportSync Sync { get; }
+    internal SharingCenter Sharing { get; }
 
     // Each frame, before the windows draw.
     internal void Poll()
@@ -74,6 +77,7 @@ internal sealed class CharacterBook : IDisposable
         windows.RemoveWindow(Window.Camera);
         windows.RemoveWindow(Window);
         Sync.Dispose();
+        Sharing.Dispose();
         stamps.Dispose();
         identity.Dispose();
         marks.Dispose();
@@ -84,6 +88,32 @@ internal sealed class CharacterBook : IDisposable
     {
         if (outcome is not (LoadOutcome.New or LoadOutcome.Loaded))
             log.Warning("Wanderveil {Part} loaded as {Outcome}; files kept aside: {Kept}", part, outcome, string.Join(", ", kept.Select(System.IO.Path.GetFileName)));
+    }
+
+    // Sharing, as the passport's Settings pages show it.
+    private sealed class BookSharing(SharingCenter center, Func<(string Name, string World)?> target) : IBookShellSharing
+    {
+        public bool Loaded => center.Loaded;
+        public bool Busy => center.Busy;
+        public string? Problem => center.Problem;
+        public string? Message => center.Message;
+        public bool Anyone => center.Snapshot.Anyone;
+        public IReadOnlyList<SharingRequest> Incoming => center.Snapshot.Incoming.Select(r => new SharingRequest(r.RequestId, r.From?.AccountId, r.From?.Character.Name ?? "", r.From?.Character.World ?? "", false, r.ExpiresAt)).ToList();
+        public IReadOnlyList<SharingRequest> Outgoing => center.Snapshot.Outgoing.Select(r => new SharingRequest(r.RequestId, null, r.To?.Name ?? "", r.To?.World ?? "", r.State == "approved", r.ExpiresAt)).ToList();
+        public IReadOnlyList<SharingPerson> Viewers => center.Snapshot.Viewers.Select(Person).ToList();
+        public IReadOnlyList<SharingPerson> Blocked => center.Snapshot.Blocks.Select(Person).ToList();
+        public (string Name, string World)? Target => target();
+        public void Refresh() => center.RefreshIfStale();
+        public void SetAnyone(bool anyone) => center.SetAnyone(anyone);
+        public void Approve(Guid request) => center.Approve(request);
+        public void Decline(Guid request) => center.Decline(request);
+        public void Withdraw(Guid request) => center.Withdraw(request);
+        public void RemoveViewer(Guid player) => center.RemoveViewer(player);
+        public void Block(Guid player) => center.Block(player);
+        public void Unblock(Guid player) => center.Unblock(player);
+        public void Ask(string name, string world) => center.Ask(name, world);
+
+        private static SharingPerson Person(ListedPlayer player) => new(player.AccountId, player.Character.Name, player.Character.World, player.VerifiedBy, player.Since);
     }
 
     // The account, as the passport's Settings pages show it.

@@ -133,6 +133,7 @@ CollectChecks.Run(Check, artifacts);
 StorageChecks.Run(Check);
 OnlineChecks.Run(Check);
 SignInChecks.Run(Check, artifacts);
+SharingChecks.Run(Check, artifacts);
 IdentityChecks.Run(Check, artifacts);
 EditionChecks.Run(Check, artifacts);
 ColourChecks.Run(Check, artifacts);

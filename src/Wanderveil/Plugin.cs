@@ -23,6 +23,7 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] private static IFramework Framework { get; set; } = null!;
     [PluginService] private static IKeyState KeyState { get; set; } = null!;
     [PluginService] private static IPlayerState PlayerState { get; set; } = null!;
+    [PluginService] private static ITargetManager TargetManager { get; set; } = null!;
 
     private const string CommandName = "/wanderveil";
 
@@ -39,6 +40,8 @@ public sealed class Plugin : IDalamudPlugin
     private readonly HashSet<ulong> asked = [];
     // Opens the passport once the character it is waiting for has one.
     private bool openWhenReady;
+    // The player targeted in game, read on the framework thread each frame, for asking to see their passport.
+    private volatile Tuple<string, string>? target;
     private bool commandRegistered;
     private bool disposed;
 
@@ -136,6 +139,9 @@ public sealed class Plugin : IDalamudPlugin
             account.SetCharacter(PlayerState.ContentId, PlayerState.CharacterName.ToString(), PlayerState.HomeWorld.Value.Name.ExtractText());
         else
             account.SetCharacter(0, "", "");
+        target = TargetManager.Target is Dalamud.Game.ClientState.Objects.SubKinds.IPlayerCharacter player
+            ? Tuple.Create(player.Name.TextValue, player.HomeWorld.Value.Name.ExtractText())
+            : null;
         Follow();
         if (account.State is AccountState.SignedOut or AccountState.NoServer && asked.Add(account.ContentId)) AskToSignIn();
         if (book != null && openWhenReady) { openWhenReady = false; book.Window.Summon(); }
@@ -162,7 +168,8 @@ public sealed class Plugin : IDalamudPlugin
         }
         try
         {
-            book = new CharacterBook(session, account, PluginInterface, TextureProvider, TextureReadbackProvider, Framework, PlayerState, Log, assets!, configuration, SaveConfiguration, windowSystem);
+            book = new CharacterBook(session, account, PluginInterface, TextureProvider, TextureReadbackProvider, Framework, PlayerState, Log, assets!, configuration, SaveConfiguration, windowSystem,
+                () => target is { } held ? (held.Item1, held.Item2) : null);
         }
         catch (Exception exception)
         {

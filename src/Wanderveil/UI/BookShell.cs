@@ -19,7 +19,7 @@ namespace Wanderveil.UI;
 internal enum BookSection { Passport, Discover, Echoes, Studio, Settings }
 internal readonly record struct BookShellIntent(bool Close, Vector2 Drag);
 // The Settings pages' categories, chosen by icon tabs that take the section tabs' place while Settings are open.
-internal enum SettingsCategory { General, Customization, Layout, Saved }
+internal enum SettingsCategory { General, Customization, Layout, Saved, Sharing }
 
 // The book itself is the control surface: press-and-drag anywhere moves it, a click on its right side
 // opens it or turns forward, and a click on its left side turns back (from the first page, to the cover).
@@ -30,7 +30,7 @@ internal enum SettingsCategory { General, Customization, Layout, Saved }
 // and identityStorage are the host's picture, logged-in character, and identity file, each optional.
 internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IReadOnlyList<PassportPage>? pages = null, IBookShellSettings? settings = null, BookShellContent? content = null, StampCollection? stamps = null, ISavedState? storage = null,
     PassportProfile? identity = null, IPassportPortrait? portrait = null, ICharacterSource? character = null, ISavedState? identityStorage = null,
-    PageMarks? marks = null, ISavedState? marksStorage = null, IBookShellAccount? account = null)
+    PageMarks? marks = null, ISavedState? marksStorage = null, IBookShellAccount? account = null, IBookShellSharing? sharing = null)
 {
     internal const ImGuiWindowFlags WindowFlags = ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.NoBackground | ImGuiWindowFlags.NoCollapse |
         ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoMove | ImGuiWindowFlags.NoDocking;
@@ -153,7 +153,7 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
     // rise in their place; leaving Settings reverses it.
     internal SettingsCategory Category { get; private set; }
     internal float TabSwap { get; private set; }
-    private static readonly string[] CategoryNames = ["General", "Customization", "Layout", "Saved data"];
+    private static readonly string[] CategoryNames = ["General", "Customization", "Layout", "Saved data", "Sharing"];
 
     // Advances motion; the host calls it before sizing the window so size and drawing agree each frame.
     internal void Advance(float seconds)
@@ -257,7 +257,7 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
             ImGui.BeginDisabled(TabSwap < 1f);
             for (var index = 0; index < CategoryNames.Length; index++)
             {
-                var mark = layout.Bookmark(index);
+                var mark = layout.Category(index, CategoryNames.Length);
                 var shown = mark with { Position = mark.Position + drop };
                 var selected = (int)Category == index;
                 if (focusSection && selected) ImGui.SetKeyboardFocusHere();
@@ -501,6 +501,12 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
                             if (side != Side.Right) { ImGui.Dummy(new Vector2(0, 24 * type.Scale)); IdentityLayoutOptions(type); }
                             if (side == Side.Single) ImGui.Dummy(new Vector2(0, 24 * type.Scale));
                             if (side != Side.Left) { BackgroundOptions(type); NationOptions(type); }
+                            break;
+                        case SettingsCategory.Sharing:
+                            // Left: who may open the passport, and asking to see another; right: the lists.
+                            if (side != Side.Right) SharingOptions(type);
+                            if (side == Side.Single) ImGui.Dummy(new Vector2(0, 24 * type.Scale));
+                            if (side != Side.Left) SharingLists(type);
                             break;
                         default:
                             if (side == Side.Single) ImGui.Dummy(new Vector2(0, 24 * type.Scale));
@@ -1344,6 +1350,7 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
             SettingsCategory.General => "How your passport moves, and whose it is. Changes are saved as you make them.",
             SettingsCategory.Customization => "Your passport's edition and colours.",
             SettingsCategory.Layout => "How your pages are laid out: the identity spread, the nation pages, and the paper's background.",
+            SettingsCategory.Sharing => "Who may open your passport, and asking to see someone else's.",
             _ => "What your passport keeps on this PC, and whether it is saved.",
         }, TextRole.Body, context, UiTheme.Ink);
         ImGui.Dummy(new Vector2(0, 20 * context.Scale));
@@ -1381,6 +1388,14 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
                 list.AddRectFilled(sheet.Position + new Vector2(r * 0.28f, r * 0.3f), sheet.Position + new Vector2(r * 0.72f, r * 0.82f), colour);
                 foreach (var y in new[] { 0.42f, 0.66f, 1.1f, 1.34f })
                     list.AddLine(sheet.Position + new Vector2(y < 1f ? r * 0.88f : r * 0.28f, r * y), sheet.Position + new Vector2(r * 1.12f, r * y), colour, line);
+                break;
+            case SettingsCategory.Sharing:
+                // An open eye.
+                list.PathArcTo(centre + new Vector2(0, r * 0.75f), r * 1.1f, MathF.PI * 1.22f, MathF.PI * 1.78f, 16);
+                list.PathStroke(colour, ImDrawFlags.None, line);
+                list.PathArcTo(centre - new Vector2(0, r * 0.75f), r * 1.1f, MathF.PI * 0.22f, MathF.PI * 0.78f, 16);
+                list.PathStroke(colour, ImDrawFlags.None, line);
+                list.AddCircleFilled(centre, r * 0.3f, colour, 16);
                 break;
             default:
                 var lid = new UiRect(centre + new Vector2(-r * 0.92f, -r * 0.72f), new Vector2(r * 1.84f, r * 0.42f));
@@ -1454,6 +1469,130 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         ImGui.SameLine(0, 18 * context.Scale);
         if (BookControl.Link("Stay signed in", context)) confirmingSignOut = false;
         AccountControls["Stay signed in"] = (ImGui.GetItemRectMin() + ImGui.GetItemRectMax()) / 2;
+    }
+
+    // The sharing page (ADR-0005). The left side: who may open the passport, and asking to see another's.
+    private string askName = "";
+    private string askWorld = "";
+    // For checks: where the sharing page's controls were drawn last, by a stable key.
+    internal Dictionary<string, Vector2> SharingControls { get; } = new(StringComparer.Ordinal);
+
+    private void SharingOptions(UiContext context)
+    {
+        ImGui.Dummy(new Vector2(0, 16 * context.Scale));
+        if (sharing == null)
+        {
+            UiTypography.Text("Sharing needs a signed-in account.", TextRole.Body, context, UiTheme.MutedInk);
+            return;
+        }
+        sharing.Refresh();
+        UiTypography.Text("ASK TO SEE A PASSPORT", TextRole.Caption, context, UiTheme.MutedInk);
+        ImGui.Dummy(new Vector2(0, 6 * context.Scale));
+        BookControl.Field("Sharing name", "Character name", "Their full name", ref askName, 21, context);
+        SharingControls["Ask name"] = (ImGui.GetItemRectMin() + ImGui.GetItemRectMax()) / 2;
+        BookControl.Field("Sharing world", "Home world", "Their world", ref askWorld, 16, context);
+        SharingControls["Ask world"] = (ImGui.GetItemRectMin() + ImGui.GetItemRectMax()) / 2;
+        ImGui.Dummy(new Vector2(0, 6 * context.Scale));
+        if (sharing.Target is { } target)
+        {
+            if (BookControl.Link($"Use my target: {target.Name}, {target.World}", context)) { askName = target.Name; askWorld = target.World; }
+            SharingControls["Use target"] = (ImGui.GetItemRectMin() + ImGui.GetItemRectMax()) / 2;
+        }
+        var ready = askName.Trim().Contains(' ') && askWorld.Trim().Length >= 3;
+        ImGui.BeginDisabled(!ready || sharing.Busy);
+        if (BookControl.Link("Ask to see it", context)) sharing.Ask(askName, askWorld);
+        SharingControls["Ask"] = (ImGui.GetItemRectMin() + ImGui.GetItemRectMax()) / 2;
+        ImGui.EndDisabled();
+        if (sharing.Problem is { } problem)
+        {
+            ImGui.Dummy(new Vector2(0, 8 * context.Scale));
+            UiTypography.Text(problem, TextRole.Body, context, UiTheme.EditionInk);
+        }
+        else if (sharing.Message is { } message)
+        {
+            ImGui.Dummy(new Vector2(0, 8 * context.Scale));
+            UiTypography.Text(message, TextRole.Body, context, UiTheme.Ink);
+        }
+    }
+
+    // The right side: who may open this passport, then requests to see it, its viewers, the holder's own requests, and
+    // blocks. Each list shows its first few, with how many more there are.
+    private void SharingLists(UiContext context)
+    {
+        if (sharing == null) return;
+        ImGui.Dummy(new Vector2(0, 16 * context.Scale));
+        UiTypography.Text("WHO MAY OPEN YOUR PASSPORT", TextRole.Caption, context, UiTheme.MutedInk);
+        ImGui.Dummy(new Vector2(0, 6 * context.Scale));
+        if (BookControl.Toggle("Only people I approve", !sharing.Anyone, context) && sharing.Anyone) sharing.SetAnyone(false);
+        SharingControls["Approved only"] = (ImGui.GetItemRectMin() + ImGui.GetItemRectMax()) / 2;
+        if (BookControl.Toggle("Anyone signed in", sharing.Anyone, context) && !sharing.Anyone) sharing.SetAnyone(true);
+        SharingControls["Anyone"] = (ImGui.GetItemRectMin() + ImGui.GetItemRectMax()) / 2;
+        ImGui.Dummy(new Vector2(0, 4 * context.Scale));
+        UiTypography.Text("Visitors see your whole passport and can take screenshots. A block always keeps someone out.", TextRole.Body, context, UiTheme.MutedInk);
+        ImGui.Dummy(new Vector2(0, 14 * context.Scale));
+        if (!sharing.Loaded)
+        {
+            ImGui.Dummy(new Vector2(0, 12 * context.Scale));
+            UiTypography.Text(sharing.Busy || sharing.Problem == null ? "Reading your sharing from the server." : sharing.Problem, TextRole.Body, context, UiTheme.MutedInk);
+            return;
+        }
+        const int Shown = 5;
+        // Each entry on one line, its name and then its actions; the actions drop below a name too long to share it.
+        void List<T>(string heading, string empty, IReadOnlyList<T> items, Func<T, Guid> key, Func<T, string> label, Func<T, string[]> links, Action<T> actions)
+        {
+            UiTypography.Text(heading, TextRole.Caption, context, UiTheme.MutedInk);
+            ImGui.Dummy(new Vector2(0, 4 * context.Scale));
+            if (items.Count == 0) UiTypography.Text(empty, TextRole.Body, context, UiTheme.MutedInk);
+            foreach (var item in items.Take(Shown))
+            {
+                ImGui.PushID(key(item).ToString());
+                var start = ImGui.GetCursorScreenPos();
+                var width = UiLayout.ContentWidth;
+                var text = label(item);
+                var name = UiTypography.Measure(text, TextRole.Body, context, width, false);
+                var gap = 14 * context.Scale;
+                var needed = links(item).Sum(link => UiTypography.Measure(link, TextRole.Body, context, width, false).X + gap + 4 * context.Scale);
+                var inline = name.X + needed <= width;
+                if (inline)
+                {
+                    UiTypography.Draw(ImGui.GetWindowDrawList(), start + new Vector2(0, 2 * context.Scale), text, TextRole.Body, context, width, UiTheme.Ink, false);
+                    ImGui.SetCursorScreenPos(start + new Vector2(name.X + gap, 0));
+                }
+                else
+                {
+                    UiTypography.Text(text, TextRole.Body, context, UiTheme.Ink);
+                    ImGui.SetCursorScreenPos(ImGui.GetCursorScreenPos() + new Vector2(12 * context.Scale, 0));
+                }
+                if (links(item).Length > 0) actions(item);
+                else ImGui.Dummy(new Vector2(0, name.Y + 6 * context.Scale));
+                ImGui.PopID();
+                ImGui.Dummy(new Vector2(0, 2 * context.Scale));
+            }
+            if (items.Count > Shown) UiTypography.Text($"and {items.Count - Shown} more", TextRole.Caption, context, UiTheme.MutedInk);
+            ImGui.Dummy(new Vector2(0, 10 * context.Scale));
+        }
+        void Actions(string key, params (string Label, Action Act)[] links)
+        {
+            ImGui.BeginDisabled(sharing.Busy);
+            for (var index = 0; index < links.Length; index++)
+            {
+                if (index > 0) ImGui.SameLine(0, 14 * context.Scale);
+                if (BookControl.Link(links[index].Label, context)) links[index].Act();
+                SharingControls[key + " " + links[index].Label] = (ImGui.GetItemRectMin() + ImGui.GetItemRectMax()) / 2;
+            }
+            ImGui.EndDisabled();
+        }
+        List("ASKING TO SEE YOURS", "No one is asking.", sharing.Incoming, request => request.Id, request => $"{request.Name}, {request.World}", _ => ["Approve", "Decline", "Block"],
+            request => Actions(request.Name, ("Approve", () => sharing.Approve(request.Id)), ("Decline", () => sharing.Decline(request.Id)),
+                ("Block", () => { if (request.From is { } from) sharing.Block(from); }
+            )));
+        List("WHO CAN OPEN YOURS", sharing.Anyone ? "Anyone signed in, and no one approved by name." : "No one yet.", sharing.Viewers, person => person.AccountId, person => $"{person.Name}, {person.World}", _ => ["Remove", "Block"],
+            person => Actions(person.Name, ("Remove", () => sharing.RemoveViewer(person.AccountId)), ("Block", () => sharing.Block(person.AccountId))));
+        List("YOU ASKED TO SEE", "You have not asked anyone.", sharing.Outgoing, request => request.Id,
+            request => $"{request.Name}, {request.World}: " + (request.Approved ? "approved" : "waiting"), request => request.Approved ? [] : ["Withdraw"],
+            request => { if (!request.Approved) Actions(request.Name, ("Withdraw", () => sharing.Withdraw(request.Id))); });
+        List("BLOCKED", "No one.", sharing.Blocked, person => person.AccountId, person => $"{person.Name}, {person.World}", _ => ["Unblock"],
+            person => Actions(person.Name, ("Unblock", () => sharing.Unblock(person.AccountId))));
     }
 
     private void MotionOptions(UiContext context)

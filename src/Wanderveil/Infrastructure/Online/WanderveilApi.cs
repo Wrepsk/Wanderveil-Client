@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.IO.Compression;
@@ -23,6 +24,14 @@ internal sealed record PassportRecord(int Revision, DateTimeOffset UpdatedAt, Js
 // A picture as saved online: its revision (from the ETag) and its bytes.
 internal sealed record PictureFile(int Revision, byte[] Bytes, string ContentType);
 internal sealed record PictureInfo(int Revision, DateTimeOffset UpdatedAt, string ContentType, int Width, int Height, int Bytes);
+
+// Sharing (ADR-0005; contract 1.1.0).
+internal sealed record SharingSetting(string Visibility);
+internal sealed record Player(Guid AccountId, CharacterInfo Character, string VerifiedBy);
+internal sealed record CharacterName(string Name, string World);
+internal sealed record ViewRequest(Guid RequestId, string State, Player? From, CharacterName? To, DateTimeOffset CreatedAt, DateTimeOffset ExpiresAt);
+internal sealed record ListedPlayer(Guid AccountId, CharacterInfo Character, string VerifiedBy, DateTimeOffset Since);
+internal sealed record Visit(Player Owner, Dictionary<string, int> Revisions);
 internal sealed record XivAuthFlow(string FlowId, string UserCode, Uri VerificationUri, Uri? VerificationUriComplete, int Interval, DateTimeOffset ExpiresAt)
 {
     // The page to open: with the code filled in where XIVAuth gives one.
@@ -144,6 +153,61 @@ internal sealed class WanderveilApi
 
     internal Task<ApiResult<object>> DeletePicture(string token, int over, CancellationToken cancellationToken) =>
         Send<object>(HttpMethod.Delete, "v1/passport/picture", token, null, cancellationToken, request => Over(request, over));
+
+    internal Task<ApiResult<SharingSetting>> GetSharing(string token, CancellationToken cancellationToken) =>
+        Send<SharingSetting>(HttpMethod.Get, "v1/sharing", token, null, cancellationToken);
+
+    internal Task<ApiResult<SharingSetting>> PutSharing(string token, string visibility, CancellationToken cancellationToken) =>
+        Send<SharingSetting>(HttpMethod.Put, "v1/sharing", token, Body(new { visibility }), cancellationToken);
+
+    // Always 202 for a valid name and world: the answer never says whether anyone received it.
+    internal Task<ApiResult<object>> AskToView(string token, string name, string world, CancellationToken cancellationToken) =>
+        Send<object>(HttpMethod.Post, "v1/view-requests", token, Body(new { name, world }), cancellationToken);
+
+    internal Task<ApiResult<ViewRequest[]>> ViewRequests(string token, bool incoming, CancellationToken cancellationToken) =>
+        Send<ViewRequest[]>(HttpMethod.Get, "v1/view-requests?direction=" + (incoming ? "incoming" : "outgoing"), token, null, cancellationToken);
+
+    internal Task<ApiResult<object>> Approve(string token, Guid request, CancellationToken cancellationToken) =>
+        Send<object>(HttpMethod.Post, $"v1/view-requests/{request}/approve", token, null, cancellationToken);
+
+    internal Task<ApiResult<object>> Decline(string token, Guid request, CancellationToken cancellationToken) =>
+        Send<object>(HttpMethod.Post, $"v1/view-requests/{request}/decline", token, null, cancellationToken);
+
+    internal Task<ApiResult<object>> Withdraw(string token, Guid request, CancellationToken cancellationToken) =>
+        Send<object>(HttpMethod.Delete, $"v1/view-requests/{request}", token, null, cancellationToken);
+
+    internal Task<ApiResult<ListedPlayer[]>> Viewers(string token, CancellationToken cancellationToken) =>
+        Send<ListedPlayer[]>(HttpMethod.Get, "v1/viewers", token, null, cancellationToken);
+
+    internal Task<ApiResult<object>> RemoveViewer(string token, Guid account, CancellationToken cancellationToken) =>
+        Send<object>(HttpMethod.Delete, $"v1/viewers/{account}", token, null, cancellationToken);
+
+    internal Task<ApiResult<ListedPlayer[]>> Blocks(string token, CancellationToken cancellationToken) =>
+        Send<ListedPlayer[]>(HttpMethod.Get, "v1/blocks", token, null, cancellationToken);
+
+    internal Task<ApiResult<object>> Block(string token, Guid account, CancellationToken cancellationToken) =>
+        Send<object>(HttpMethod.Put, $"v1/blocks/{account}", token, null, cancellationToken);
+
+    internal Task<ApiResult<object>> Unblock(string token, Guid account, CancellationToken cancellationToken) =>
+        Send<object>(HttpMethod.Delete, $"v1/blocks/{account}", token, null, cancellationToken);
+
+    internal Task<ApiResult<Visit>> LookUp(string token, string name, string world, CancellationToken cancellationToken) =>
+        Send<Visit>(HttpMethod.Get, $"v1/visits?name={Uri.EscapeDataString(name)}&world={Uri.EscapeDataString(world)}", token, null, cancellationToken);
+
+    // One part of a visible passport (passport, stamps, marks): JSON as the owner's own record.
+    internal Task<ApiResult<PassportRecord>> VisitDocument(string token, Guid owner, string part, CancellationToken cancellationToken) =>
+        Send<PassportRecord>(HttpMethod.Get, $"v1/visits/{owner}/{part}", token, null, cancellationToken, request => request.Headers.AcceptEncoding.Add(new StringWithQualityHeaderValue("gzip")));
+
+    internal async Task<ApiResult<PictureFile>> VisitPicture(string token, Guid owner, CancellationToken cancellationToken)
+    {
+        var answer = await Exchange(HttpMethod.Get, $"v1/visits/{owner}/picture", token, null, cancellationToken).ConfigureAwait(false);
+        if (!answer.Result.Ok) return new(null, answer.Result.Status, answer.Result.Code, answer.Result.Detail, answer.Result.RetryAfter);
+        if (answer.Revision is not { } revision || answer.Body.Length == 0) return ApiResult<PictureFile>.NoAnswer("The Wanderveil server's picture could not be read.");
+        return new(new PictureFile(revision, answer.Body, answer.ContentType ?? "application/octet-stream"), answer.Result.Status);
+    }
+
+    internal Task<ApiResult<object>> Report(string token, Guid owner, string part, string reason, string? note, CancellationToken cancellationToken) =>
+        Send<object>(HttpMethod.Post, "v1/reports", token, Body(new { accountId = owner, part, reason, note }), cancellationToken);
 
     private static void Over(HttpRequestMessage request, int? over)
     {

@@ -60,6 +60,15 @@ internal readonly record struct BookShellLayout(UiRect Book, bool IsSpread, floa
         return new UiRect(new Vector2(Book.Position.X + Book.Size.X * 0.08f + index % columns * (width + 4), top + index / columns * ControlHeight), new Vector2(width, ControlHeight));
     }
 
+    // The Settings category tabs: icons only, so all of them sit in one row where the section tabs are, however many
+    // rows those need.
+    internal UiRect Category(int index, int count)
+    {
+        var width = TabWidth(Book.Size.X, count);
+        var top = Book.Position.Y + Book.Size.Y * BoardTop - NavigationHeight;
+        return new UiRect(new Vector2(Book.Position.X + Book.Size.X * 0.08f + index * (width + 4), top), new Vector2(width, ControlHeight));
+    }
+
     // Printed controls: Settings at the lower-left margin, then smaller / larger / close at the lower right.
     internal UiRect Settings(UiContext context) => new(Footer.Position, new Vector2(SettingsWidth(context), ControlHeight));
 
