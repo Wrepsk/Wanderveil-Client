@@ -39,6 +39,9 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
     private readonly IBookAssets editions = assets = new EditionAssets(assets, () => identity!.Identity.Edition.Id);
     // An edition picked in Settings, waiting for the holder to confirm the change.
     private string? pendingEdition;
+    // An edition the passport is being exchanged for: the old book slides away, and once it is gone the new
+    // edition's book is summoned in its place.
+    private string? swapTo;
     private readonly PassportDocumentView passport = new(assets, identity!, portrait);
     private readonly IdentityEditor editor = new(identity!, portrait, character);
     // The fixed pages (nation, identity); unlimited blank stamp pages follow them.
@@ -121,6 +124,7 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
     internal void Advance(float seconds)
     {
         motion.Update(seconds);
+        if (swapTo != null && motion.Phase == BookPhase.Hidden) { holder.ChangeEdition(swapTo); swapTo = null; motion.Summon(); }
         turn.Update(seconds, ReducedMotion);
         riffle.Update(seconds, ReducedMotion);
     }
@@ -209,17 +213,15 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         if (BookControl.Draw("Larger", "+", layout.Tool(1, context), page, BookControlStyle.Ink, hint: "Larger passport")) PreferredWidth = MathF.Min(1400, PreferredWidth * 1.15f);
         var close = BookControl.Draw("Close", "×", layout.Tool(2, context), page, BookControlStyle.Ink, hint: "Close passport (Escape)");
         var resting = Section == BookSection.Passport && !riffle.Active && !turning;
-        // A passport still choosing its edition has nothing to arrange on its first spread.
-        if (resting && !(holder.Identity.Appearance == null && VisiblePage < 2)) StampControls(identityShown);
+        // The nation pages hold no stamps to arrange, so there the footer only offers placing a waiting stamp (on the
+        // identity pages it offers Edit; on the stamp pages, the whole stamp control).
+        var nationShown = Section == BookSection.Passport && IsNation(VisiblePage) && (!layout.IsSpread || IsNation(VisiblePage + 1));
+        if (resting && (!nationShown || desk.Carrying != null || collection.Unplaced.Any())) StampControls(identityShown);
         ImGui.PopStyleVar();
         var edgeTurn = desk.Update(bounds, layout.Book, layout.LeftPage.Size.X, page, ImGui.GetIO().DeltaTime);
 
         var placeStamp = discover.TakePassportRequest();
-        if (issued != null)
-        {
-            holder.ChangeEdition(issued.Id);
-            CloseBook();
-        }
+        if (issued != null) Exchange(issued.Id);
         if (chosen is { } tab) Navigate(tab);
         else if (explore) Navigate(BookSection.Discover);
         else if (placeStamp != null && collection.PlacementOf(placeStamp) is { } placed) { Navigate(BookSection.Passport); ShowPage(fixedPages.Count + placed.Sheet, layout.IsSpread); }
@@ -760,6 +762,8 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
 
     private PassportPage PageAt(int index) => index < fixedPages.Count ? fixedPages[index] : PassportPage.StampPage(index - fixedPages.Count);
 
+    private bool IsNation(int index) => index < fixedPages.Count && fixedPages[index].Kind is PassportPageKind.NationBanner or PassportPageKind.NationMap;
+
     private bool IsIdentity(int index) => index < fixedPages.Count && fixedPages[index].Kind is PassportPageKind.Portrait or PassportPageKind.Information;
 
     private void StopEditing()
@@ -819,7 +823,7 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
             var next = PassportEdition.Find(id);
             UiTypography.Text($"Change to {next.Name}? Its cover, crest, colours, and opening pages replace {current.Name}'s. Your details, picture, cover line, and stamps stay as they are. You can change back.", TextRole.Body, context, UiTheme.Ink);
             ImGui.Dummy(new Vector2(0, 8 * context.Scale));
-            if (BookControl.Link("Change to " + next.Name, context)) { holder.ChangeEdition(id); pendingEdition = null; }
+            if (BookControl.Link("Change to " + next.Name, context)) { Exchange(id); pendingEdition = null; }
             ImGui.SameLine(0, 18 * context.Scale);
             if (BookControl.Link("Keep " + current.Name, context)) pendingEdition = null;
             return;
@@ -828,8 +832,21 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         var before = PassportEdition.Find(previous.Edition);
         UiTypography.Text($"Your previous edition was {before.Name}.", TextRole.Body, context, UiTheme.MutedInk);
         ImGui.Dummy(new Vector2(0, 6 * context.Scale));
-        if (BookControl.Link("Change back to " + before.Name, context)) holder.RestorePrevious();
+        if (BookControl.Link("Change back to " + before.Name, context)) Exchange(before.Id);
     }
+
+    // Changes edition by exchanging the book itself: the old passport is put away (its dismissal) and the new
+    // one is summoned closed, showing its cover. With reduced motion it simply appears.
+    private void Exchange(string edition)
+    {
+        if (edition == holder.Identity.Appearance?.Edition) return;
+        if (swapTo != null) return;
+        swapTo = edition;
+        motion.Dismiss();
+    }
+
+    // Whether the passport is being exchanged for another edition.
+    internal bool Exchanging => swapTo != null;
 
     private bool SettingsIntroduction(UiContext context)
     {
@@ -916,7 +933,12 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
     }
 
     // Summons again (reversing a slide away in progress) or starts the full dismissal sequence.
-    internal void Summon() => motion.Summon();
+    // Summoning while an exchange is under way keeps the new edition: it is applied at once.
+    internal void Summon()
+    {
+        if (swapTo != null) { holder.ChangeEdition(swapTo); swapTo = null; }
+        motion.Summon();
+    }
     internal void RequestDismiss() => motion.Dismiss();
 
     // The open size is used from the moment opening is requested until the cover has fully closed.
@@ -1061,7 +1083,7 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         var side = mouse.X >= surface.Position.X + surface.Size.X / 2 ? 1 : -1;
         if (!pressing)
         {
-            if (free && clickable && (!opensOnly || side > 0)) Hint(surface, side);
+            if (free && clickable && (!opensOnly || side > 0)) Hint(surface, side, opensOnly);
             return Vector2.Zero;
         }
         if (ImGui.IsMouseDragging(ImGuiMouseButton.Left)) dragging = true;
@@ -1077,16 +1099,18 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
     }
 
     // A soft shadow along the outer edge shows which way a click will go.
-    private static void Hint(UiRect surface, int side)
+    // On the open book it runs along the pages' edge; on the closed cover, down the board's whole edge.
+    private static void Hint(UiRect surface, int side, bool cover = false)
     {
         ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
         var width = surface.Size.X * 0.06f;
-        var top = surface.Position.Y + surface.Size.Y * 0.08f;
-        var bottom = surface.Position.Y + surface.Size.Y * 0.90f;
+        var top = surface.Position.Y + surface.Size.Y * (cover ? 0.012f : 0.08f);
+        var bottom = surface.Position.Y + surface.Size.Y * (cover ? 0.988f : 0.90f);
         var dark = ImGui.GetColorU32(new Vector4(0, 0, 0, 0.10f));
         var clear = ImGui.GetColorU32(Vector4.Zero);
         var list = ImGui.GetWindowDrawList();
-        if (side > 0) list.AddRectFilledMultiColor(new Vector2(surface.Max.X - width, top), new Vector2(surface.Max.X - surface.Size.X * 0.025f, bottom), clear, dark, dark, clear);
+        var edge = surface.Size.X * (cover ? 0.006f : 0.025f);
+        if (side > 0) list.AddRectFilledMultiColor(new Vector2(surface.Max.X - width, top), new Vector2(surface.Max.X - edge, bottom), clear, dark, dark, clear);
         else list.AddRectFilledMultiColor(new Vector2(surface.Position.X + surface.Size.X * 0.025f, top), new Vector2(surface.Position.X + width, bottom), dark, clear, clear, dark);
     }
 

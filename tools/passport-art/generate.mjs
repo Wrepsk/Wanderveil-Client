@@ -43,9 +43,11 @@ function cover(id, tokens) {
 
 const crest = (id, tokens) => fill(read(`crest-${id}.svg`), tokens);
 
+// The pennant, with its edition's emblem centred at (100, 340) in its 60 x 60 box.
 function banner(id, tokens) {
-  return fill(read("banner.svg"), tokens).replace(/<!-- include:crest x=(\S+) y=(\S+) w=(\S+) h=(\S+) -->/,
-    (_, x, y, w, h) => nest(crest(id, tokens), x, y, w, h));
+  return fill(read("banner.svg"), tokens)
+    .replace("<!-- include:emblem -->", nest(fill(read(`emblem-${id}.svg`), tokens), 70, 310, 60, 60))
+    .replace(/<!-- include:crest x=(\S+) y=(\S+) w=(\S+) h=(\S+) -->/, (_, x, y, w, h) => nest(crest(id, tokens), x, y, w, h));
 }
 
 // The game samples textures without mipmaps, so shrinking a plate more than about 2x skips pixels

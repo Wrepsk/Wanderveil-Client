@@ -20,6 +20,7 @@ internal static class EditionChecks
         Change(check);
         Issue(check, artifacts);
         Settings(check, artifacts);
+        Footer(check);
         Gallery(check, artifacts);
     }
 
@@ -95,40 +96,83 @@ internal static class EditionChecks
                 if (book.ClickControl(page.Position + new Vector2(page.Size.X * 0.15f, y))) break;
             check(profile.Identity.Edition.Id == "limsa", $"Clicking the lower row's first cover chose {profile.Identity.Edition.Name}.");
             check(profile.Identity.Appearance != null, "Clicking the editions did not choose one.");
-            check(!book.Shell.IsBookOpen && profile.Identity.PreviousAppearance == null, "Choosing the first edition does not close the book on its cover, or keeps a previous one.");
+            check(!book.Shell.IsBookOpen && book.Shell.Phase == BookPhase.Closed && profile.Identity.PreviousAppearance == null, "Choosing the first edition does not bring the new passport, closed, or keeps a previous one.");
             book.Frames(3);
             book.Save(artifacts, name + "-chosen.bmp");
         }
         Console.WriteLine("PASS edition-issue");
     }
 
+    // Picking an edition in Settings asks first; confirming exchanges the book (the old one is put away, the new
+    // one summoned closed, showing its cover); change back exchanges it again. With motion and without.
     private static void Settings(Action<bool, string> check, string? artifacts)
     {
-        var profile = new PassportProfile(PassportIdentity.Sample with { CoverLine = "Ari Vale" });
+        foreach (var motion in new[] { false, true })
+        {
+            var profile = new PassportProfile(PassportIdentity.Sample with { CoverLine = "Ari Vale" });
+            using var book = new CollectChecks.Book(new Vector2(1200, 820), new StampCollection(), identity: profile, motion: motion);
+            void ToSettings()
+            {
+                book.Open();
+                book.Shell.ShowSettings();
+                for (var frame = 0; frame < 120 && book.Shell.IsRiffling; frame++) book.Frame();
+                book.Frames(3);
+            }
+            ToSettings();
+            check(book.Shell.Section == BookSection.Settings && book.Shell.PageOverflow == 0, "The Settings pages overflow with the editions.");
+            if (!motion) book.Save(artifacts, "edition-settings.bmp");
+            // Sweeping rows from the right below the Back link, the first control is the last cover, Garlemald.
+            var page = book.Page(false);
+            for (var y = page.Size.Y * 0.42f; book.Shell.PendingEdition == null && y < page.Size.Y * 0.8f; y += 8)
+                for (var x = page.Size.X - 10; book.Shell.PendingEdition == null && x > 10; x -= 8)
+                    book.ClickControl(new Vector2(page.Position.X + x, page.Position.Y + y));
+            check(book.Shell.PendingEdition == "garlemald" && profile.Identity.Appearance == PassportAppearance.Gridania, $"Picking an edition in Settings changed it at once or picked {book.Shell.PendingEdition}.");
+            check(book.Shell.PageOverflow == 0, "The edition confirmation overflows the Settings page.");
+            if (!motion) book.Save(artifacts, "edition-settings-confirm.bmp");
+            // The confirmation's first link, Change to Garlemald, starts the line beneath its question.
+            for (var y = page.Size.Y - 20; !book.Shell.Exchanging && profile.Identity.Appearance == PassportAppearance.Gridania && y > 40; y -= 4)
+                book.ClickControl(new Vector2(page.Position.X + 30, page.Position.Y + y));
+            if (motion)
+            {
+                // The old passport leaves first, unchanged; the new one arrives once it is gone.
+                check(book.Shell.Exchanging && profile.Identity.Appearance == PassportAppearance.Gridania && book.Shell.Phase is BookPhase.Closing or BookPhase.Exiting, $"Confirming does not put the old passport away first ({book.Shell.Phase}).");
+                var sawHidden = false;
+                var entered = false;
+                var saved = false;
+                for (var frame = 0; frame < 600 && book.Shell.Phase != BookPhase.Closed; frame++)
+                {
+                    book.Frame();
+                    if (book.Shell.Phase == BookPhase.Exiting && book.Shell.Lift < 0.05f) sawHidden = true;
+                    if (book.Shell.Phase == BookPhase.Entering) { entered = true; check(profile.Identity.Appearance?.Edition == "garlemald", "The passport arriving is not the new edition."); }
+                    if (entered && !saved && artifacts != null && book.Shell.Lift > 0.5f) { saved = true; book.Save(artifacts, "edition-exchange-arriving.bmp", keepMouse: true); }
+                }
+                check(sawHidden && entered && !book.Shell.Exchanging, "The exchange does not slide the old passport away and bring the new one up.");
+            }
+            check(profile.Identity.Appearance?.Edition == "garlemald" && profile.Identity.PreviousAppearance == PassportAppearance.Gridania && profile.Identity.CoverLine == "Ari Vale", "Confirming did not change the edition, keep the previous one, or keep the cover line.");
+            check(book.Shell.Phase == BookPhase.Closed && !book.Shell.IsBookOpen, "The new passport does not arrive closed, showing its cover.");
+            if (!motion) book.Save(artifacts, "edition-settings-changed-cover.bmp");
+            // Opened again, the book is still at Settings, where Change back exchanges it once more.
+            ToSettings();
+            check(book.Shell.Section == BookSection.Settings, "The new passport does not open where the change was made.");
+            if (!motion) book.Save(artifacts, "edition-settings-changed.bmp");
+            for (var y = page.Size.Y - 20; !book.Shell.Exchanging && profile.Identity.Appearance?.Edition == "garlemald" && y > 40; y -= 4) book.ClickControl(new Vector2(page.Position.X + 30, page.Position.Y + y));
+            for (var frame = 0; frame < 600 && book.Shell.Exchanging; frame++) book.Frame();
+            check(profile.Identity.Appearance == PassportAppearance.Gridania, "Change back did not restore the previous edition.");
+        }
+        Console.WriteLine("PASS edition-settings");
+    }
+
+    // With no stamp waiting, the nation pages offer nothing in the footer (no Arrange); the identity pages offer Edit.
+    private static void Footer(Action<bool, string> check)
+    {
+        var profile = new PassportProfile(PassportIdentity.Sample);
         using var book = new CollectChecks.Book(new Vector2(1200, 820), new StampCollection(), identity: profile);
         book.Open();
-        book.Shell.ShowSettings();
-        book.Frames(3);
-        check(book.Shell.Section == BookSection.Settings && book.Shell.PageOverflow == 0, "The Settings pages overflow with the editions.");
-        // Sweeping rows from the right below the Back link, the first control is the last cover, Garlemald;
-        // picking it asks first.
-        book.Save(artifacts, "edition-settings.bmp");
-        var page = book.Page(false);
-        for (var y = page.Size.Y * 0.42f; book.Shell.PendingEdition == null && y < page.Size.Y * 0.8f; y += 8)
-            for (var x = page.Size.X - 10; book.Shell.PendingEdition == null && x > 10; x -= 8)
-                book.ClickControl(new Vector2(page.Position.X + x, page.Position.Y + y));
-        check(book.Shell.PendingEdition == "garlemald" && profile.Identity.Appearance == PassportAppearance.Gridania, $"Picking an edition in Settings changed it at once or picked {book.Shell.PendingEdition}.");
-        book.Save(artifacts, "edition-settings-confirm.bmp");
-        check(book.Shell.PageOverflow == 0, "The edition confirmation overflows the Settings page.");
-        // The confirmation's first link, Change to Garlemald, starts the line beneath its question.
-        for (var y = page.Size.Y - 20; profile.Identity.Appearance == PassportAppearance.Gridania && book.Shell.PendingEdition != null && y > 40; y -= 4)
-            book.ClickControl(new Vector2(page.Position.X + 30, page.Position.Y + y));
-        check(profile.Identity.Appearance?.Edition == "garlemald" && profile.Identity.PreviousAppearance == PassportAppearance.Gridania && profile.Identity.CoverLine == "Ari Vale", "Confirming did not change the edition, keep the previous one, or keep the cover line.");
-        book.Frames(2);
-        book.Save(artifacts, "edition-settings-changed.bmp");
-        for (var y = page.Size.Y - 20; profile.Identity.Appearance?.Edition == "garlemald" && y > 40; y -= 4) book.Click(new Vector2(page.Position.X + 30, page.Position.Y + y));
-        check(profile.Identity.Appearance == PassportAppearance.Gridania, "Change back did not restore the previous edition.");
-        Console.WriteLine("PASS edition-settings");
+        check(!book.ClickControl(book.StampControl()) && !book.Shell.Desk.Arrange, "The nation pages' footer offers a control.");
+        book.Key(ImGuiKey.PageDown);
+        book.Click(book.StampControl());
+        check(book.Shell.EditingIdentity, "The identity pages' footer does not offer Edit.");
+        Console.WriteLine("PASS edition-footer");
     }
 
     // Every edition's closed cover and opening spread, for review.
@@ -139,6 +183,10 @@ internal static class EditionChecks
             var profile = new PassportProfile(PassportIdentity.Sample with { Appearance = new PassportAppearance(edition.Id) });
             using var book = new CollectChecks.Book(new Vector2(1200, 820), new StampCollection(), identity: profile);
             book.Save(artifacts, $"edition-{edition.Id}-cover.bmp");
+            // The open hint: a soft shadow down the cover's whole right edge.
+            book.HoverCover();
+            book.Save(artifacts, $"edition-{edition.Id}-cover-hint.bmp", keepMouse: true);
+            ImGui.GetIO().AddMousePosEvent(-100, -100);
             book.Open();
             check(book.Shell.PageOverflow == 0 && book.Shell.PageOverflowX == 0, $"{edition.Name}'s opening spread overflows.");
             book.Save(artifacts, $"edition-{edition.Id}-open.bmp");

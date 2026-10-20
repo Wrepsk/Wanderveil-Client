@@ -27,14 +27,14 @@ this tool: the PNGs are committed.
 | --- | --- | --- |
 | `svg/cover-base.svg` + `svg/cover-<edition>.svg` | `editions/<edition>/cover.png`, `book-cover.png` (Eorzea) | 1024 × 1536, board at 42,141 940 × 1253 |
 | `svg/crest-<edition>.svg` | `editions/<edition>/crest.png` | 1254 × 1254 |
-| `svg/banner.svg` | `editions/<edition>/banner.png` | 800 × 1840 (crest and lettering are live) |
+| `svg/banner.svg` + `svg/emblem-<edition>.svg` | `editions/<edition>/banner.png` | 800 × 1840 (crest and lettering are live; the emblem sits at the foot, a 60 × 60 box centred at 100, 340) |
 | `svg/map.svg` | `editions/<edition>/map-overhead.png` | 1044 × 1260 |
 | `svg/book-open.svg` | `editions/<edition>/book-open.png` | 1536 × 1024 |
 | `svg/portrait.svg` | `demo-portrait.png` | 1086 × 1448 |
 | `svg/stamp-atlas.svg` | `stamp-atlas.png` | 2172 × 724, three 724 px cells |
 
 Templates are ordinary SVG with `{{token}}` slots (`cover`, `foil`, `accent`, `paper`, `ink`).
-Palettes live in `editions.mjs`. `<!-- include:decor -->` and `<!-- include:crest ... -->` mark
+Palettes live in `editions.mjs`. `<!-- include:decor -->`, `<!-- include:emblem -->`, and `<!-- include:crest ... -->` mark
 where the script nests another template.
 
 ## Size copies

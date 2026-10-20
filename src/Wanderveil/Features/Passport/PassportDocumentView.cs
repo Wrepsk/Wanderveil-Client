@@ -59,7 +59,7 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportProfile h
         CoverText(shown.Region, 396, 14, 6);
         // The holder's own line, if any, embossed in the same foil between the nation and the maker's mark.
         if (edition == null && holder.Identity.CoverLine is { Length: > 0 } line) CoverText(line, 440, 15, 4, fit: 280);
-        CoverText("WANDERVEIL", 492, 10, 5, 0.7f);
+        CoverText("WANDERVEIL", shown.MarkTop, 10, 5, 0.7f);
 
         void CoverText(string text, float top, float size, float tracking, float alpha = 1, float fit = 360)
         {

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-30 -30 60 60">
+  <!-- Limsa Lominsa: a ship's anchor. -->
+  <g fill="none" stroke="{{foil}}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+    <circle cy="-22" r="4"/>
+    <path d="M0 -18V25M-10 -9H10"/>
+    <path d="M-20 8Q-18 25 0 25Q18 25 20 8"/>
+  </g>
+  <g fill="{{accent}}" stroke="{{foil}}" stroke-width=".7" stroke-linejoin="round">
+    <path d="M-20 4L-24.5 12L-16 11Z"/><path d="M20 4L24.5 12L16 11Z"/><circle cy="-9" r="2.2"/>
+  </g>
+</svg>

@@ -594,6 +594,9 @@ internal static class CollectChecks
 
         internal Vector2 Tab(int index) => Layout.Bookmark(index).Position + Layout.Bookmark(index).Size / 2;
 
+        // Rests the mouse where a click would open the closed cover.
+        internal void HoverCover() => Move(BookShellLayout.OpenPoint(root));
+
         // Opens the cover; with motion, waits for the book to arrive first and for the cover to land after.
         internal void Open()
         {

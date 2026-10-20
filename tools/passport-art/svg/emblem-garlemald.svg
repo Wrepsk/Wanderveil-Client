@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-30 -30 60 60">
+  <!-- Garlemald: a magitek cog. -->
+  <g fill="{{accent}}" stroke="{{foil}}" stroke-width=".8" stroke-linejoin="round">
+    <rect x="-3.6" y="-23" width="7.2" height="9" transform="rotate(0)"/><rect x="-3.6" y="-23" width="7.2" height="9" transform="rotate(45)"/>
+    <rect x="-3.6" y="-23" width="7.2" height="9" transform="rotate(90)"/><rect x="-3.6" y="-23" width="7.2" height="9" transform="rotate(135)"/>
+    <rect x="-3.6" y="-23" width="7.2" height="9" transform="rotate(180)"/><rect x="-3.6" y="-23" width="7.2" height="9" transform="rotate(225)"/>
+    <rect x="-3.6" y="-23" width="7.2" height="9" transform="rotate(270)"/><rect x="-3.6" y="-23" width="7.2" height="9" transform="rotate(315)"/>
+    <circle r="16"/>
+  </g>
+  <circle r="6.5" fill="{{cover}}" stroke="{{foil}}" stroke-width="1"/>
+</svg>

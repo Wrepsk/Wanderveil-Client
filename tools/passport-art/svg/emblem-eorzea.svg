@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-30 -30 60 60">
+  <!-- Eorzea: an aether crystal with two shards beside it. -->
+  <path d="M0 -27L11 -8L0 27L-11 -8Z" fill="{{accent}}" fill-opacity=".85" stroke="{{foil}}" stroke-width=".8" stroke-linejoin="round"/>
+  <path d="M0 -27L-3.5 -8L0 27M0 -27L3.5 -8L0 27M-11 -8H11" fill="none" stroke="{{foil}}" stroke-width=".5" opacity=".75"/>
+  <g fill="{{accent}}" fill-opacity=".85" stroke="{{foil}}" stroke-width=".6" stroke-linejoin="round">
+    <path d="M-19 -2L-15.5 4L-19 15L-22.5 4Z"/><path d="M19 -2L22.5 4L19 15L15.5 4Z"/>
+  </g>
+</svg>

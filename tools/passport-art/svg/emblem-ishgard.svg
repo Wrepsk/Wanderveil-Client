@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-30 -30 60 60">
+  <!-- Ishgard: a dragoon's lance with a pennant. -->
+  <path d="M0 -6V28" stroke="{{foil}}" stroke-width="1.6" stroke-linecap="round"/>
+  <path d="M-8 -6H8" stroke="{{foil}}" stroke-width="1.3" stroke-linecap="round"/>
+  <g fill="{{accent}}" stroke="{{foil}}" stroke-width=".7" stroke-linejoin="round">
+    <path d="M0 -28C5.5 -20 5.5 -12 0 -6C-5.5 -12 -5.5 -20 0 -28Z"/>
+    <path d="M0.8 1L14 5L0.8 10Z"/>
+  </g>
+  <path d="M0 -24V-10" stroke="{{foil}}" stroke-width=".5"/>
+</svg>

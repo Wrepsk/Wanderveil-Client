@@ -38,6 +38,10 @@ internal sealed record PassportEdition(string Id, string Name, string Code, stri
 
     internal static bool IsKnown(string? id) => All.Any(edition => edition.Id == id);
 
+    // Where the maker's mark (WANDERVEIL) sits on the cover, in board units: above the chip mark on covers that
+    // carry one (tools/passport-art/svg/cover-<edition>.svg draws it at 488-512), at the foot otherwise.
+    internal float MarkTop => Id is "eorzea" or "garlemald" ? 470 : 492;
+
     // Hovered foil: a little nearer white, or for dark foil on a pale cover, nearer its ink.
     internal Vector4 FoilBright => Vector4.Lerp(Foil, Luminance(Foil) > 0.2f ? Vector4.One : Ink, 0.35f) with { W = 1f };
 

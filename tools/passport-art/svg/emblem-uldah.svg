@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-30 -30 60 60">
+  <!-- Ul'dah: the merchant's balance, beam level. -->
+  <g fill="none" stroke="{{foil}}" stroke-width="1.2" stroke-linecap="round">
+    <path d="M0 -22V22M-13 24H13M-21 -15H21"/>
+    <path d="M-21 -15L-27 3M-21 -15L-15 3M21 -15L15 3M21 -15L27 3" stroke-width=".7"/>
+  </g>
+  <g fill="{{accent}}" stroke="{{foil}}" stroke-width=".7">
+    <path d="M-28 3A7 5 0 0 0 -14 3Z"/><path d="M14 3A7 5 0 0 0 28 3Z"/>
+    <circle cy="-24" r="2.6"/><path d="M-6 24L0 17L6 24Z"/>
+  </g>
+</svg>

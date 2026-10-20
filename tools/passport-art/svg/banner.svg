@@ -16,13 +16,6 @@
   <path d="M14 14H186V434L100 393L14 434Z" fill="none" stroke="{{foil}}" stroke-width="1.2" opacity=".85"/>
   <path d="M19 19H181V426L100 387L19 426Z" fill="none" stroke="{{foil}}" stroke-width=".5" stroke-dasharray="1.5 2.5" opacity=".6"/>
   <rect x="4" y="0" width="192" height="6" fill="{{foil}}" opacity=".9"/>
-  <!-- a sprig beneath the lettering -->
-  <g transform="translate(100 340)">
-    <path d="M0 26V-26" stroke="{{foil}}" stroke-width="1.2" fill="none"/>
-    <g fill="{{accent}}" stroke="{{foil}}" stroke-width=".5">
-      <ellipse rx="3.2" ry="7.5" transform="translate(-6 -14) rotate(-40)"/><ellipse rx="3.2" ry="7.5" transform="translate(6 -14) rotate(40)"/>
-      <ellipse rx="3.2" ry="7.5" transform="translate(-6 2) rotate(-40)"/><ellipse rx="3.2" ry="7.5" transform="translate(6 2) rotate(40)"/>
-      <ellipse rx="3.2" ry="7.5" transform="translate(-6 18) rotate(-40)"/><ellipse rx="3.2" ry="7.5" transform="translate(6 18) rotate(40)"/>
-    </g>
-  </g>
+  <!-- the edition's emblem beneath the lettering (svg/emblem-<edition>.svg) -->
+  <!-- include:emblem -->
 </svg>
