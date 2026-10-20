@@ -39,10 +39,11 @@ internal static class InkArt
                 list.AddLine(OnPage(page, points[index - 1].X, points[index - 1].Y), OnPage(page, points[index].X, points[index].Y), core, MathF.Max(1f, half * 2 * points[index].Pressure));
             return;
         }
-        // The grain spans the page's width and the same distance down (texture coordinates stay within 0 to 1 on the
-        // page, so nothing relies on how the game wraps them).
+        // The grain spans everything a mark may reach (the page and its margins), so texture coordinates stay within 0 to
+        // 1 and nothing relies on how the game wraps them.
         var depth = grain.Height / (float)grain.Width;
-        Vector2 Uv(Vector2 unit) => new(Math.Clamp(unit.X, 0f, 1f), Math.Clamp(unit.Y / depth, 0f, 1f));
+        var span = 1f + 2 * PageMarks.Margin;
+        Vector2 Uv(Vector2 unit) => new(Math.Clamp((unit.X + PageMarks.Margin) / span, 0f, 1f), Math.Clamp((unit.Y + PageMarks.Margin) / (span * depth), 0f, 1f));
         foreach (var (scale, tint) in new[] { (1.7f, halo), (1f, core) })
         {
             var previous = Edge(0, scale);

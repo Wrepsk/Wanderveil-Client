@@ -35,8 +35,8 @@ internal static class DrawingChecks
         check(!marks.AddStroke(new InkStroke(0, Graphite, 0.006f, [new InkPoint(0.5f, 0.5f, 1f)])) && !marks.AddStroke(Line(-1, Vector2.Zero, Vector2.One)), "A one-point stroke or one off the pages is kept.");
         check(marks.AddStroke(Line(0, new Vector2(0.1f, 0.5f), new Vector2(0.9f, 0.5f))) && changes == 1 && marks.Strokes.Count == 1, "Adding a stroke is not one change.");
         var wild = marks.AddStroke(new InkStroke(0, Graphite, 9f, [new InkPoint(-3f, 5f, 2f), new InkPoint(0.5f, float.NaN, 0.5f), new InkPoint(2f, -1f, -1f)]));
-        check(wild && marks.Strokes[1].Points.Length == 2 && marks.Strokes[1].Width == 0.05f && marks.Strokes[1].Points.All(point => point.X is >= 0 and <= 1 && point.Y is >= 0 and <= PageMarks.Depth && point.Pressure is >= 0 and <= 1),
-            "A stroke is not kept on its page, at a sensible width.");
+        check(wild && marks.Strokes[1].Points.Length == 2 && marks.Strokes[1].Width == 0.05f && marks.Strokes[1].Points.All(point => point.X >= -PageMarks.Margin && point.X <= 1 + PageMarks.Margin && point.Y >= -PageMarks.Margin && point.Y <= PageMarks.Depth && point.Pressure is >= 0 and <= 1),
+            "A stroke is not kept on its page and margins, at a sensible width.");
         marks.Undo();
         // Rubbing out the middle of a line leaves two; missing it changes nothing.
         check(!marks.Erase(0, new Vector2(0.5f, 0.9f), 0.02f) && marks.Erase(0, new Vector2(0.5f, 0.5f), 0.05f), "The eraser changes a stroke it misses, or not one it crosses.");
@@ -67,6 +67,9 @@ internal static class DrawingChecks
         check(busy.SamplesOn(5) <= PageMarks.MaximumSamplesPerPage && busy.SamplesOn(5) > PageMarks.MaximumSamplesPerPage - PageMarks.MaximumStrokeSamples && busy.AddStroke(Line(6, Vector2.Zero, Vector2.One)), "A page holds more than its limit, or the limit spills onto the next page.");
         check(Line(0, Vector2.Zero, Vector2.One, 9000) is { } long_ && new PageMarks([long_]).Strokes[0].Points.Length == PageMarks.MaximumStrokeSamples, "A stroke is not cut to its limit.");
     }
+
+    // Where a stroke's point lies on screen, on the page box it is measured from.
+    private static Vector2 InkPointOnScreen(Wanderveil.UI.Primitives.UiRect page, InkPoint point) => page.Position + new Vector2(point.X, point.Y) * page.Size.X;
 
     private static void Storage(Action<bool, string> check)
     {
@@ -157,10 +160,28 @@ internal static class DrawingChecks
             book.Click(drawing.Controls["Pencil"]);
             book.Drag(right.Position + right.Size * new Vector2(0.2f, 0.6f), right.Position + right.Size * new Vector2(0.7f, 0.75f));
             check(book.Shell.PageOverflow == 0 && book.Shell.PageOverflowX == 0, "Drawing makes a page scroll.");
+            // The paper's left, right, and top margins can be drawn on too (only the foot keeps its margin).
+            var margin = new Vector2(page.Position.X - page.Size.X * 0.06f, page.Position.Y - page.Size.X * 0.04f);
+            book.Drag(margin, margin + new Vector2(page.Size.X * 0.3f, 0));
+            var reached = marks.Strokes[^1];
+            check(reached.Sheet == 0 && reached.Points.Min(point => point.X) < 0 && reached.Points.Min(point => point.Y) < 0, "The pencil does not reach the paper's margins.");
+            // A custom colour, then the eyedropper taking up the red line's colour again.
+            book.Click(drawing.Controls["Custom colour"]);
+            book.Frames(2);
+            check(drawing.Colour == BookShellDrawing.Palette.Length, "The custom swatch does not choose the custom colour.");
+            book.Key(ImGuiKey.Escape);
+            book.Click(drawing.Controls["Eyedropper"]);
+            var red = marks.Strokes.First(stroke => stroke.Colour == Rgb.Hex(0xA3302A));
+            var onRed = InkPointOnScreen(red.Sheet == 0 ? page : right, red.Points[red.Points.Length / 2]);
+            book.Click(onRed);
+            check(drawing.Colour == 3 && drawing.Tool == DrawingTool.Pencil, $"The eyedropper does not take up a line's colour and hand back the pencil (colour {drawing.Colour}, {drawing.Tool}).");
+            book.Click(drawing.Controls["Eyedropper"]);
+            book.Click(InkPointOnScreen(page, reached.Points[reached.Points.Length / 2]));
+            check(drawing.Colour == BookShellDrawing.Palette.Length && drawing.Custom == reached.Colour || drawing.Colour < BookShellDrawing.Palette.Length, "The eyedropper does not take up any line's colour.");
             book.Save(artifacts, "drawing-pages.bmp");
             // Escape ends Draw mode; the marks stay, drawn above the paper.
             book.Key(ImGuiKey.Escape);
-            check(!drawing.Drawing && marks.Strokes.Count == 2, "Escape does not end drawing, or loses marks.");
+            check(!drawing.Drawing && marks.Strokes.Count == 3, "Escape does not end drawing, or loses marks.");
             book.Save(artifacts, "drawing-done.bmp");
             // Turning back to the identity pages ends it too.
             drawing.Start();

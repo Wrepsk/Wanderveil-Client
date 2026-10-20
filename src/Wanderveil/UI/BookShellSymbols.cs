@@ -21,7 +21,11 @@ internal sealed class BookShellSymbols(PassportProfile holder, IBookAssets asset
     private const float HandleReach = 0.62f;
 
     private readonly List<Area> areas = [];
-    private (int Index, float Rotation, float Size)? adjusting;
+    // The symbol being turned, resized, or recoloured, as it shows until the change is kept.
+    private (int Index, PlacedSymbol Symbol)? adjusting;
+    // The symbol whose colour popup is open, and the custom colour being picked for it.
+    private int colourTarget = -1;
+    private Vector3 picked;
     private bool startedOnSymbol;
     private bool draggedOnSymbol;
     private float sheetLift;
@@ -42,12 +46,16 @@ internal sealed class BookShellSymbols(PassportProfile holder, IBookAssets asset
     internal bool TookClick { get; private set; }
     // The placed symbol in hand, left out where it was.
     internal int Hidden => Carrying?.From ?? -1;
+    // A placed symbol being changed, drawn as it is changing (its knob dragged, or its colour being picked).
+    internal (int Index, PlacedSymbol Symbol)? Changing => adjusting;
     // Where the sheet lay last frame, while it showed.
     internal UiRect? Sheet { get; private set; }
 
     // For checks: where each sheet symbol, and each placed symbol's body, knob, and ×, were last drawn.
     internal Dictionary<string, Vector2> SheetCells { get; } = new(StringComparer.Ordinal);
-    internal Dictionary<int, (Vector2 Body, Vector2 Knob, Vector2 Remove)> Handles { get; } = [];
+    internal Dictionary<int, (Vector2 Body, Vector2 Knob, Vector2 Remove, Vector2 Colour)> Handles { get; } = [];
+    // For checks: where each swatch of the open colour popup was drawn (0 the passport's colour, then the inks).
+    internal Dictionary<int, Vector2> ColourSwatches { get; } = [];
 
     internal void Start()
     {
@@ -60,6 +68,7 @@ internal sealed class BookShellSymbols(PassportProfile holder, IBookAssets asset
         Decorating = SheetOpen = false;
         Carrying = null;
         adjusting = null;
+        colourTarget = -1;
         sheetLift = 0f;
     }
 
@@ -80,6 +89,7 @@ internal sealed class BookShellSymbols(PassportProfile holder, IBookAssets asset
     {
         areas.Clear();
         Handles.Clear();
+        ColourSwatches.Clear();
         SheetCells.Clear();
         Sheet = null;
     }
@@ -107,6 +117,7 @@ internal sealed class BookShellSymbols(PassportProfile holder, IBookAssets asset
                 // Top first, so the symbol drawn on top is the one a click reaches.
                 for (var index = layer.Items.Length - 1; index >= 0; index--)
                     if (layer.Items[index].Surface == area.Surface) Symbol(index, layer.Items[index], area, context);
+                if ((uint)colourTarget < (uint)layer.Items.Length && layer.Items[colourTarget].Surface == area.Surface) ColourPopup(layer.Items[colourTarget], area, context);
             }
             finally { ImGui.EndChild(); ImGui.PopStyleVar(); }
         }
@@ -114,7 +125,7 @@ internal sealed class BookShellSymbols(PassportProfile holder, IBookAssets asset
 
     private void Symbol(int index, PlacedSymbol placed, Area area, UiContext context)
     {
-        var shown = adjusting is { } held && held.Index == index ? placed with { Rotation = held.Rotation, Size = held.Size } : placed;
+        var shown = adjusting is { } held && held.Index == index ? held.Symbol : placed;
         var (center, size) = SymbolArt.Place(shown, area.Bounds);
         var list = ImGui.GetWindowDrawList();
         var radius = MathF.Max(5f, 7f * context.Scale);
@@ -136,11 +147,11 @@ internal sealed class BookShellSymbols(PassportProfile holder, IBookAssets asset
             {
                 var toward = ImGui.GetIO().MousePos - center;
                 if (toward.LengthSquared() > 1f)
-                    adjusting = (index, MathF.Atan2(toward.X, -toward.Y), Math.Clamp(toward.Length() / HandleReach / area.Bounds.Size.X, PlacedSymbol.MinimumSize, PlacedSymbol.MaximumSize));
+                    adjusting = (index, placed with { Rotation = MathF.Atan2(toward.X, -toward.Y), Size = Math.Clamp(toward.Length() / HandleReach / area.Bounds.Size.X, PlacedSymbol.MinimumSize, PlacedSymbol.MaximumSize) });
             }
             if (ImGui.IsItemDeactivated() && adjusting is { } done && done.Index == index)
             {
-                holder.ReplaceSymbol(index, placed with { Rotation = done.Rotation, Size = done.Size });
+                holder.ReplaceSymbol(index, done.Symbol);
                 adjusting = null;
             }
 
@@ -159,6 +170,17 @@ internal sealed class BookShellSymbols(PassportProfile holder, IBookAssets asset
             if (hovered) { ImGui.SetMouseCursor(ImGuiMouseCursor.Hand); ImGui.SetTooltip("Take this symbol off"); }
             var removed = ImGui.IsItemClicked();
 
+            // The colour dot, a quarter turn the other way from the ×: opens the symbol's colours.
+            (sin, cos) = MathF.SinCos(shown.Rotation - MathF.PI / 2);
+            var dot = Inside(center + new Vector2(sin, -cos) * MathF.Max(size * HandleReach, radius * 3), radius, area.Bounds);
+            ImGui.SetCursorScreenPos(dot - new Vector2(radius * 1.6f));
+            ImGui.InvisibleButton("Colour", new Vector2(radius * 3.2f));
+            var dotHovered = ImGui.IsItemHovered();
+            list.AddCircleFilled(dot, radius, ImGui.GetColorU32(shown.Colour?.Vector ?? (area.Surface == SymbolSurface.Cover ? UiTheme.Foil : UiTheme.EditionInk)));
+            list.AddCircle(dot, radius, ImGui.GetColorU32(dotHovered ? UiTheme.Action : UiTheme.Ink), 24, stroke);
+            if (dotHovered) { ImGui.SetMouseCursor(ImGuiMouseCursor.Hand); ImGui.SetTooltip("This symbol's colour"); }
+            var recolour = ImGui.IsItemClicked();
+
             // The symbol itself: a click picks it up, a drag carries it.
             var body = new Vector2(MathF.Max(size * 0.8f, radius * 2));
             ImGui.SetCursorScreenPos(center - body / 2);
@@ -176,10 +198,60 @@ internal sealed class BookShellSymbols(PassportProfile holder, IBookAssets asset
                 startedOnSymbol = false;
                 if (!draggedOnSymbol) PickUp(index, placed, false);
             }
-            Handles[index] = (center, knob, mark);
+            Handles[index] = (center, knob, mark, dot);
             if (removed) holder.RemoveSymbol(index);
+            if (recolour)
+            {
+                colourTarget = index;
+                var now = placed.Colour?.Vector ?? (area.Surface == SymbolSurface.Cover ? UiTheme.Foil : UiTheme.EditionInk);
+                picked = new Vector3(now.X, now.Y, now.Z);
+                // Opened from the surface's own window (outside this symbol's id), where ColourPopup looks for it.
+                ImGui.PopID();
+                ImGui.OpenPopup("Symbol colour");
+                ImGui.PushID(index);
+            }
         }
         finally { ImGui.PopID(); }
+    }
+
+    // A symbol's colours: the passport's (it then follows the foil or page ink), the inks, and any colour; a custom
+    // colour previews on the symbol while dragged and is kept when the picker lets go.
+    private void ColourPopup(PlacedSymbol placed, Area area, UiContext context)
+    {
+        if (!PaperColours.Begin("Symbol colour", context))
+        {
+            if (adjusting is { } open && open.Index == colourTarget) adjusting = null;
+            colourTarget = -1;
+            return;
+        }
+        try
+        {
+            ImGui.TextUnformatted("Symbol colour");
+            var size = MathF.Round(18 * context.Scale);
+            var gap = MathF.Round(6 * context.Scale);
+            var start = ImGui.GetCursorScreenPos() + new Vector2(size / 2 + 3, size / 2 + 3);
+            var passport = area.Surface == SymbolSurface.Cover ? UiTheme.Foil : UiTheme.EditionInk;
+            var inks = BookShellDrawing.Palette.Where(entry => entry.Hex >= 0).ToArray();
+            for (var index = 0; index <= inks.Length; index++)
+            {
+                var center = start + new Vector2(index * (size + gap), 0);
+                Rgb? value = index == 0 ? null : Rgb.Hex(inks[index - 1].Hex);
+                var name = index == 0 ? area.Surface == SymbolSurface.Cover ? "The passport's foil" : "The passport's page ink" : inks[index - 1].Name;
+                if (PaperColours.Swatch("Symbol swatch " + index, center, size, value?.Vector ?? passport, placed.Colour == value, name, context)) Keep(value);
+                ColourSwatches[index] = center;
+            }
+            ImGui.SetCursorScreenPos(start - new Vector2(size / 2 + 3, size / 2 + 3) + new Vector2(0, size + gap + 6));
+            if (PaperColours.Picker(ref picked, context)) Keep(Rgb.Of(new Vector4(picked, 1)));
+            else if (ImGui.IsItemActive()) adjusting = (colourTarget, placed with { Colour = Rgb.Of(new Vector4(picked, 1)) });
+        }
+        finally { PaperColours.End(); }
+
+        void Keep(Rgb? colour)
+        {
+            adjusting = null;
+            // Changing a symbol brings it to the top; the popup follows it there.
+            if (holder.ReplaceSymbol(colourTarget, placed with { Colour = colour }) && holder.Identity.Appearance is { } appearance) colourTarget = appearance.Placed.Items.Length - 1;
+        }
     }
 
     private void PickUp(int index, PlacedSymbol placed, bool held)

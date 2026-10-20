@@ -29,8 +29,10 @@ internal sealed class PageMarks
     internal const int MaximumStrokeSamples = 4_000;
     internal const int MaximumTextsPerPage = 30;
     internal const int TextLimit = 120;
-    // How far down a page a mark may go, in page-width units (pages are taller than wide).
+    // How far down a page a mark may go, in page-width units (pages are taller than wide), and how far past the
+    // page's box it may reach on the paper's left, right, and top margins.
     internal const float Depth = 2f;
+    internal const float Margin = 0.25f;
     private const int UndoDepth = 64;
 
     private ImmutableList<InkStroke> strokes;
@@ -162,7 +164,7 @@ internal sealed class PageMarks
         if (stroke.Sheet < 0 || stroke.Points.IsDefaultOrEmpty || !float.IsFinite(stroke.Width)) return null;
         var points = stroke.Points.Where(point => float.IsFinite(point.X) && float.IsFinite(point.Y) && float.IsFinite(point.Pressure))
             .Take(MaximumStrokeSamples)
-            .Select(point => new InkPoint(Math.Clamp(point.X, 0f, 1f), Math.Clamp(point.Y, 0f, Depth), Math.Clamp(point.Pressure, 0f, 1f)))
+            .Select(point => new InkPoint(Math.Clamp(point.X, -Margin, 1f + Margin), Math.Clamp(point.Y, -Margin, Depth), Math.Clamp(point.Pressure, 0f, 1f)))
             .ToImmutableArray();
         return points.Length < 2 ? null : stroke with { Width = Math.Clamp(stroke.Width, 0.001f, 0.05f), Points = points };
     }
@@ -171,6 +173,6 @@ internal sealed class PageMarks
     {
         var clean = PassportIdentity.Clean(text.Text, TextLimit);
         if (text.Sheet < 0 || clean.Length == 0 || !float.IsFinite(text.X) || !float.IsFinite(text.Y) || !float.IsFinite(text.Size)) return null;
-        return text with { Text = clean, X = Math.Clamp(text.X, 0f, 1f), Y = Math.Clamp(text.Y, 0f, Depth), Size = Math.Clamp(text.Size, 0.02f, 0.15f) };
+        return text with { Text = clean, X = Math.Clamp(text.X, -Margin, 1f), Y = Math.Clamp(text.Y, -Margin, Depth), Size = Math.Clamp(text.Size, 0.02f, 0.15f) };
     }
 }

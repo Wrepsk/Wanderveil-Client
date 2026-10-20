@@ -11,7 +11,7 @@ using Wanderveil.UI.Primitives;
 
 namespace Wanderveil.UI;
 
-internal enum DrawingTool { Pencil, Eraser, Text }
+internal enum DrawingTool { Pencil, Eraser, Text, Eyedropper }
 
 // Drawing and writing on the stamp pages. In Draw mode a toolbar takes the footer: Pencil, Eraser, and Text, a small
 // palette, three sizes, and Undo (also Ctrl+Z). The pencil draws while the mouse is held on a page (smoothed, a point
@@ -41,11 +41,19 @@ internal sealed class BookShellDrawing(PageMarks marks, IBookAssets assets)
     private bool focusWriting;
     private bool full;
 
-    private readonly record struct Area(int Sheet, UiRect Bounds);
+    // Frame: the page's box, which marks are measured from; Surface: where they may be drawn (the paper, in from its
+    // edges, down to the page's foot).
+    private readonly record struct Area(int Sheet, UiRect Frame, UiRect Surface);
+    // The custom colour (the swatch after the palette), and the tool the eyedropper hands back to.
+    private Rgb custom = Rgb.Hex(0x7A4B9A);
+    private Vector3 customPicked;
+    private DrawingTool before = DrawingTool.Pencil;
 
     internal bool Drawing { get; private set; }
     internal DrawingTool Tool { get; set; } = DrawingTool.Pencil;
+    // A palette index, or Palette.Length for the custom colour.
     internal int Colour { get; set; }
+    internal Rgb Custom => custom;
     internal int Size { get; set; } = 1;
     // True while a stroke or eraser drag is in progress: the book takes no mouse input then.
     internal bool Busy => live.Count > 0 || erasing;
@@ -77,16 +85,20 @@ internal sealed class BookShellDrawing(PageMarks marks, IBookAssets assets)
         Controls.Clear();
     }
 
-    // A stamp page whose marks are drawn this frame; live pages take the drawing while in Draw mode.
-    internal void DrawSheet(int sheet, bool live, UiContext context, Vector4 pageInk)
+    // A stamp page whose marks are drawn this frame, measured from the current window (the page's box) and shown as
+    // far as surface reaches; live pages take the drawing while in Draw mode.
+    internal void DrawSheet(int sheet, bool live, UiContext context, Vector4 pageInk, UiRect? surface = null)
     {
         var page = new UiRect(ImGui.GetWindowPos(), ImGui.GetWindowSize());
+        var paper = surface ?? page;
         var list = ImGui.GetWindowDrawList();
+        list.PushClipRect(paper.Position, paper.Max, false);
         foreach (var stroke in marks.StrokesOn(sheet)) InkArt.Stroke(list, assets, page, stroke);
         foreach (var (index, text) in marks.TextsOn(sheet))
             if (writing is not { Index: { } editing } || editing != index || writing.Value.Sheet != sheet) InkArt.Text(list, page, text, context);
-        if (live && Drawing) areas.Add(new Area(sheet, page));
+        if (live && Drawing) areas.Add(new Area(sheet, page, paper));
         if (this.live.Count > 1 && liveSheet == sheet) InkArt.Stroke(list, assets, page, this.live, StrokeWidths[Size], Ink(pageInk).Vector);
+        list.PopClipRect();
     }
 
     // After the pages: each live page in a window of its own above its stamps, taking the mouse for the tool in hand.
@@ -97,16 +109,16 @@ internal sealed class BookShellDrawing(PageMarks marks, IBookAssets assets)
         var mouse = ImGui.GetIO().MousePos;
         foreach (var area in areas)
         {
-            ImGui.SetCursorScreenPos(area.Bounds.Position);
+            ImGui.SetCursorScreenPos(area.Surface.Position);
             ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, Vector2.Zero);
             try
             {
-                if (!ImGui.BeginChild("Drawing " + area.Sheet, area.Bounds.Size, false, ImGuiWindowFlags.NoBackground | ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.NoSavedSettings)) continue;
+                if (!ImGui.BeginChild("Drawing " + area.Sheet, area.Surface.Size, false, ImGuiWindowFlags.NoBackground | ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.NoSavedSettings)) continue;
                 var list = ImGui.GetWindowDrawList();
-                var page = area.Bounds;
-                if (writing is { } line && line.Sheet == area.Sheet) Write(page, line, context);
-                ImGui.SetCursorScreenPos(page.Position);
-                ImGui.InvisibleButton("Page", page.Size);
+                var page = area.Frame;
+                if (writing is { } line && line.Sheet == area.Sheet) Write(page, area.Surface, line, context);
+                ImGui.SetCursorScreenPos(area.Surface.Position);
+                ImGui.InvisibleButton("Page", area.Surface.Size);
                 var hovered = ImGui.IsItemHovered();
                 var at = InkArt.FromPage(page, mouse);
                 switch (Tool)
@@ -124,6 +136,23 @@ internal sealed class BookShellDrawing(PageMarks marks, IBookAssets assets)
                         if (ImGui.IsItemActivated()) { marks.BeginChange(); erasing = true; }
                         if (ImGui.IsItemActive()) marks.Erase(area.Sheet, at, EraserRadii[Size], text => InkArt.Box(page, text, context));
                         if (ImGui.IsItemDeactivated() && erasing) { marks.EndChange(); erasing = false; }
+                        break;
+                    case DrawingTool.Eyedropper:
+                        // Shows the colour of the mark under it; a click takes that colour and hands back the tool.
+                        var found = ColourAt(area.Sheet, at, page, context);
+                        if (hovered)
+                        {
+                            ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
+                            var swatch = mouse + new Vector2(14, -14) * MathF.Max(1f, context.Scale);
+                            if (found is { } under) list.AddCircleFilled(swatch, 7 * MathF.Max(1f, context.Scale), ImGui.GetColorU32(under.Vector), 16);
+                            list.AddCircle(swatch, 7 * MathF.Max(1f, context.Scale), ImGui.GetColorU32(UiTheme.Ink), 16, 1f);
+                            if (found == null) ImGui.SetTooltip("Pick up the colour of a drawn line or writing");
+                        }
+                        if (ImGui.IsItemClicked() && found is { } taken)
+                        {
+                            Choose(taken, pageInk);
+                            Tool = before;
+                        }
                         break;
                     default:
                         if (hovered) ImGui.SetMouseCursor(ImGuiMouseCursor.TextInput);
@@ -160,6 +189,34 @@ internal sealed class BookShellDrawing(PageMarks marks, IBookAssets assets)
         if (writing == null && io.KeyCtrl && ImGui.IsKeyPressed(ImGuiKey.Z, false) && !Busy) marks.Undo();
     }
 
+    // The colour of the mark nearest under a page point: a line within a short reach, or writing it lies on.
+    private Rgb? ColourAt(int sheet, Vector2 at, UiRect page, UiContext context)
+    {
+        Rgb? nearest = null;
+        var best = 0.015f * 0.015f;
+        foreach (var stroke in marks.StrokesOn(sheet))
+            foreach (var point in stroke.Points)
+            {
+                var distance = Vector2.DistanceSquared(new Vector2(point.X, point.Y), at);
+                if (distance <= best + stroke.Width * stroke.Width / 4) { best = distance; nearest = stroke.Colour; }
+            }
+        foreach (var (_, text) in marks.TextsOn(sheet))
+        {
+            var (min, max) = InkArt.Box(page, text, context);
+            if (at.X >= min.X && at.Y >= min.Y && at.X <= max.X && at.Y <= max.Y) nearest = text.Colour;
+        }
+        return nearest;
+    }
+
+    // Makes a colour the pencil's: its palette swatch when it is one, else the custom colour.
+    private void Choose(Rgb colour, Vector4 pageInk)
+    {
+        for (var index = 0; index < Palette.Length; index++)
+            if ((Palette[index].Hex < 0 ? Rgb.Of(pageInk) : Rgb.Hex(Palette[index].Hex)) == colour) { Colour = index; return; }
+        custom = colour;
+        Colour = Palette.Length;
+    }
+
     // Adds the mouse to the stroke: smoothed, a point every couple of pixels, pressed harder when moving slowly.
     private void Follow(Vector2 at, UiRect page)
     {
@@ -187,7 +244,7 @@ internal sealed class BookShellDrawing(PageMarks marks, IBookAssets assets)
     }
 
     // The line being written: an input over the page in the handwriting face, kept on Enter or leaving it.
-    private void Write(UiRect page, (int Sheet, int? Index, Vector2 At, float Size, Rgb Colour) line, UiContext context)
+    private void Write(UiRect page, UiRect surface, (int Sheet, int? Index, Vector2 At, float Size, Rgb Colour) line, UiContext context)
     {
         var type = InkArt.Type(page, line.Size, context);
         var font = UiTypography.ResolveFont(typed.Length > 0 ? typed : "Aa", TextRole.Heading, type);
@@ -202,7 +259,7 @@ internal sealed class BookShellDrawing(PageMarks marks, IBookAssets assets)
         {
             var at = InkArt.OnPage(page, line.At.X, line.At.Y);
             ImGui.SetCursorScreenPos(at);
-            ImGui.SetNextItemWidth(MathF.Max(40f, page.Max.X - at.X - 4f));
+            ImGui.SetNextItemWidth(MathF.Max(40f, surface.Max.X - at.X - 4f));
             if (focusWriting) { ImGui.SetKeyboardFocusHere(); focusWriting = false; }
             var entered = ImGui.InputText("##Writing", ref typed, PageMarks.TextLimit * 4, ImGuiInputTextFlags.EnterReturnsTrue);
             // Escape leaves the line as it was; Enter, or clicking away, keeps it.
@@ -227,10 +284,10 @@ internal sealed class BookShellDrawing(PageMarks marks, IBookAssets assets)
         typed = "";
     }
 
-    private Rgb Ink(Vector4 pageInk) => Palette[Colour].Hex < 0 ? Rgb.Of(pageInk) : Rgb.Hex(Palette[Colour].Hex);
+    private Rgb Ink(Vector4 pageInk) => Colour >= Palette.Length ? custom : Palette[Colour].Hex < 0 ? Rgb.Of(pageInk) : Rgb.Hex(Palette[Colour].Hex);
 
     // How wide the toolbar is at this height: tools, palette, sizes, and Undo, with a gap between each group.
-    internal static float ToolbarWidth(float height) => height * (3 * 1.2f + Palette.Length * 0.72f + 3 * 0.9f + 1.2f + 3 * 0.4f);
+    internal static float ToolbarWidth(float height) => height * (4 * 1.2f + (Palette.Length + 1) * 0.72f + 3 * 0.9f + 1.2f + 3 * 0.4f);
 
     // The toolbar across the footer, from left to right of bar: the three tools, the palette, the sizes, and Undo.
     // raised: the toolbar lies over the page (a narrow page), so it gets a paper backing of its own.
@@ -253,9 +310,16 @@ internal sealed class BookShellDrawing(PageMarks marks, IBookAssets assets)
         {
             var cell = new UiRect(new Vector2(x, bar.Position.Y), new Vector2(height * 1.2f, height));
             x += cell.Size.X;
-            if (BookControl.Draw("Tool " + tool, "", cell, context, BookControlStyle.Ink, hint: tool switch { DrawingTool.Pencil => "Pencil", DrawingTool.Eraser => "Eraser: rubs out what it passes over", _ => "Write: click a page to type a line" }))
+            if (BookControl.Draw("Tool " + tool, "", cell, context, BookControlStyle.Ink, hint: tool switch
+            {
+                DrawingTool.Pencil => "Pencil",
+                DrawingTool.Eraser => "Eraser: rubs out what it passes over",
+                DrawingTool.Text => "Write: click a page to type a line",
+                _ => "Eyedropper: pick up the colour of a drawn line or writing",
+            }))
             {
                 Finish();
+                if (tool == DrawingTool.Eyedropper && Tool != DrawingTool.Eyedropper) before = Tool;
                 Tool = tool;
             }
             var hovered = ImGui.IsItemHovered();
@@ -277,6 +341,30 @@ internal sealed class BookShellDrawing(PageMarks marks, IBookAssets assets)
             list.AddCircle(centre, radius, ImGui.GetColorU32(UiTheme.MutedInk with { W = 0.5f }), 16, 1f);
             if (Colour == index) list.AddCircle(centre, radius + 2.5f, ImGui.GetColorU32(UiTheme.Ink), 20, MathF.Max(1f, 1.5f * context.Scale));
             Controls["Colour " + index] = centre;
+            x += cell.Size.X;
+        }
+        // The custom colour: picked (and shown) here, or taken up by the eyedropper.
+        {
+            var cell = new UiRect(new Vector2(x, bar.Position.Y), new Vector2(height * 0.72f, height));
+            var centre = cell.Position + cell.Size / 2;
+            var chosen = Colour == Palette.Length;
+            if (PaperColours.Swatch("Custom colour", centre, height * 0.52f, chosen ? custom.Vector : null, chosen, chosen ? $"Your colour ({custom}); click to change it" : "Any colour", context))
+            {
+                Colour = Palette.Length;
+                customPicked = new Vector3(custom.Vector.X, custom.Vector.Y, custom.Vector.Z);
+                ImGui.OpenPopup("Pencil colour");
+            }
+            if (PaperColours.Begin("Pencil colour", context))
+            {
+                try
+                {
+                    ImGui.TextUnformatted("Pencil colour");
+                    PaperColours.Picker(ref customPicked, context);
+                    custom = Rgb.Of(new Vector4(customPicked, 1));
+                }
+                finally { PaperColours.End(); }
+            }
+            Controls["Custom colour"] = centre;
             x += cell.Size.X;
         }
         x += gap;
@@ -326,6 +414,14 @@ internal sealed class BookShellDrawing(PageMarks marks, IBookAssets assets)
                 Vector2 Turn(float x, float y) => centre + new Vector2(x * cos - y * sin, x * sin + y * cos);
                 list.AddQuad(Turn(-r, -r * 0.45f), Turn(r, -r * 0.45f), Turn(r, r * 0.45f), Turn(-r, r * 0.45f), ink, line);
                 list.AddLine(Turn(-r * 0.2f, -r * 0.45f), Turn(-r * 0.2f, r * 0.45f), ink, line);
+                break;
+            case DrawingTool.Eyedropper:
+                // A dropper: a slanted tube with a bulb at its top and a drop at its tip.
+                var top = centre + new Vector2(r * 0.7f, -r * 0.7f);
+                var tip = centre + new Vector2(-r * 0.75f, r * 0.75f);
+                list.AddLine(top, tip, ink, line * 1.8f);
+                list.AddCircleFilled(top, r * 0.32f, ink, 10);
+                list.AddCircleFilled(tip + new Vector2(-r * 0.05f, r * 0.25f), r * 0.14f, ink, 8);
                 break;
             default:
                 var size = UiTypography.Measure("Aa", TextRole.Caption, context, float.MaxValue, false);

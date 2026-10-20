@@ -118,6 +118,8 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
     internal bool WantsEscape => wantsEscape;
     private volatile bool wantsEscape;
     private volatile bool escapeRequested;
+    // Whether a popup was open when the book last drew.
+    private bool popupOpen;
 
     internal void RequestEscape() => escapeRequested = true;
     // The page number being typed over: null when none, otherwise whether it is the right page's.
@@ -173,6 +175,7 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         try { return DrawBook(bounds, context); }
         finally
         {
+            popupOpen = ImGui.IsPopupOpen("", ImGuiPopupFlags.AnyPopupId | ImGuiPopupFlags.AnyPopupLevel);
             holding = pressing || dragging || desk.Busy || symbols.Busy || drawing.Busy || ImGui.IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows) && ImGui.IsAnyItemActive();
             // A field being written in keeps Escape for itself; otherwise the book wants it while it is shown and
             // either holds a stamp or info, or has focus.
@@ -189,7 +192,9 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         var escape = escapeRequested;
         escapeRequested = false;
         if (ReadsEscape && ImGui.IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows) && !ImGui.IsAnyItemActive() && ImGui.IsKeyPressed(ImGuiKey.Escape, false)) escape = true;
-        if (escape && !ImGui.IsAnyItemActive())
+        // An open popup (a colour picker) takes Escape for itself; ImGui closes it before the book draws, so a popup open
+        // last frame counts too.
+        if (escape && !ImGui.IsAnyItemActive() && !popupOpen && !ImGui.IsPopupOpen("", ImGuiPopupFlags.AnyPopupId | ImGuiPopupFlags.AnyPopupLevel))
         {
             if (desk.Busy) desk.Cancel();
             else if (symbols.Busy) symbols.Cancel();
@@ -272,6 +277,7 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         var explore = false;
         var back = false;
         PassportEdition? issued = null;
+        Action<UiRect>? leafMarks = null;
         desk.BeginFrame();
         symbols.BeginFrame();
         drawing.BeginFrame();
@@ -517,7 +523,7 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
             {
                 if (entry.Kind != PassportPageKind.Stamps) passport.DrawSymbols(entry.Id, new UiRect(ImGui.GetWindowPos(), ImGui.GetWindowSize()), symbols.Hidden);
                 if (passport.NationShows(entry) == PassportPageKind.NationBanner) Banner(index, side == Side.Right);
-                Contents(entry, Printed(Fit(entry)), false, side == Side.Right);
+                Contents(entry, Printed(Fit(entry)), false, side == Side.Right, leaf: true);
             };
         }
 
@@ -528,7 +534,7 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
             // The holder's symbols lie on the paper beneath everything printed on the page.
             if (entry.Kind != PassportPageKind.Stamps)
             {
-                passport.DrawSymbols(entry.Id, region, symbols.Hidden);
+                passport.DrawSymbols(entry.Id, region, symbols.Hidden, symbols.Changing);
                 if (live) symbols.Register(entry.Id, region);
             }
             if (passport.NationShows(entry) == PassportPageKind.NationBanner) Banner(index, rightSide);
@@ -546,6 +552,14 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
             });
         }
 
+        // Where a stamp page can be drawn on: its paper, in a little from the edges, down to the page box's foot.
+        UiRect Drawable(UiRect paper, UiRect box)
+        {
+            var inset = 8 * page.Scale;
+            var top = paper.Position.Y + inset;
+            return new UiRect(new Vector2(paper.Position.X + inset, top), new Vector2(MathF.Max(1, paper.Size.X - inset * 2), MathF.Max(1, box.Max.Y - top)));
+        }
+
         // Printed pages shrink to their paper; enlarged host text keeps its size and may scroll instead.
         float Fit(PassportPage entry) => enlarged > 1f ? 1f : fits.GetValueOrDefault(entry.Id, 1f);
         UiContext Printed(float fit) => page with { Scale = page.Scale * fit, FontSize = MathF.Max(8f, MathF.Round(page.FontSize * fit)) };
@@ -558,13 +572,21 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
             passport.DrawNationBanner(BookSurface.Paper(layout.Book, face, layout.IsSpread && rightSide), layout.Footer.Position.Y - 4 * context.Scale, page);
         }
 
-        void Contents(PassportPage entry, UiContext type, bool live, bool rightSide)
+        // leaf: drawn on a turning leaf, whose content is cut to the page's box; marks reaching into the margins are drawn
+        // after that cut (TurningLeaf calls leafMarks with the leaf's paper).
+        void Contents(PassportPage entry, UiContext type, bool live, bool rightSide, bool leaf = false)
         {
             if (entry.Kind == PassportPageKind.Stamps)
             {
                 passport.Engrave(type);
                 desk.DrawSheet(entry.Sheet, live, rightSide && layout.IsSpread, type);
-                drawing.DrawSheet(entry.Sheet, live, type, UiTheme.EditionInk);
+                var box = new UiRect(ImGui.GetWindowPos(), ImGui.GetWindowSize());
+                if (leaf) leafMarks = paper => drawing.DrawSheet(entry.Sheet, false, type, UiTheme.EditionInk, Drawable(paper, box));
+                else
+                {
+                    var face = layout.IsSpread ? BookFace.Spread : (fixedPages.Count + entry.Sheet) % 2 == 1 ? BookFace.Right : BookFace.Left;
+                    drawing.DrawSheet(entry.Sheet, live, type, UiTheme.EditionInk, Drawable(BookSurface.Paper(layout.Book, face, layout.IsSpread && rightSide), box));
+                }
                 return;
             }
             if (holder.Identity.Appearance == null && entry.Kind is PassportPageKind.NationBanner or PassportPageKind.NationMap)
@@ -770,6 +792,7 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
                     // The background pattern turns with the leaf, across its whole paper.
                     PagePattern.Draw(list, Background, face, UiTheme.Lines, holder.Identity.Edition, assets, alpha);
                     var contentStart = list.VtxBuffer.Size;
+                    leafMarks = null;
                     var startIndex = list.IdxBuffer.Size;
                     if (content != null)
                     {
@@ -781,6 +804,9 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
                     }
                     // Only what shows in the page's window turns with the leaf, never what is scrolled out of it.
                     LeafProjection.Crop(list, contentStart, startIndex, region);
+                    // A stamp page's marks may reach into its margins: drawn after the cut, still turning with the leaf.
+                    leafMarks?.Invoke(face);
+                    leafMarks = null;
                     leaf.Warp(list, start, face, back, alpha);
                     var viewport = ImGui.GetMainViewport();
                     LeafProjection.Unclip(list, new Vector4(viewport.Pos, viewport.Pos.X + viewport.Size.X, viewport.Pos.Y + viewport.Size.Y));
@@ -995,12 +1021,14 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         UiTypography.Text("PASSPORT EDITION", TextRole.Caption, context, UiTheme.MutedInk);
         ImGui.Dummy(new Vector2(0, 12 * context.Scale));
         var identity = holder.Identity;
-        var width = UiLayout.ContentWidth;
-        var origin = ImGui.GetCursorScreenPos();
+        // The covers keep in from the page's edges, so their hover and selection marks are never cut.
+        var ring = MathF.Ceiling(3 * context.Scale);
+        var width = UiLayout.ContentWidth - ring * 2;
+        var origin = ImGui.GetCursorScreenPos() + new Vector2(ring);
         // One row of six small covers; hovering names each.
         var picked = EditionShelf.Draw(passport, origin, width, PassportEdition.All.Count, identity.Appearance?.Edition, pendingEdition, true, context, labels: false);
-        ImGui.SetCursorScreenPos(origin);
-        ImGui.Dummy(new Vector2(width, EditionShelf.Height(width, PassportEdition.All.Count, context, labels: false)));
+        ImGui.SetCursorScreenPos(origin - new Vector2(ring));
+        ImGui.Dummy(new Vector2(width + ring * 2, EditionShelf.Height(width, PassportEdition.All.Count, context, labels: false) + ring));
         if (picked != null)
         {
             if (identity.Appearance == null) holder.ChangeEdition(picked.Id);
@@ -1063,13 +1091,15 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         ImGui.Dummy(new Vector2(0, 10 * context.Scale));
         var look = holder.Identity.Look;
         var chosen = Background;
-        var width = UiLayout.ContentWidth;
+        // Selection rings reach past a tile: the tiles keep in from the page's edges.
+        var ring = MathF.Ceiling(3 * context.Scale);
+        var width = UiLayout.ContentWidth - ring * 2;
         const int Columns = 4;
         var gap = 12 * context.Scale;
         var tile = new Vector2((width - gap * (Columns - 1)) / Columns, 0);
         tile.Y = MathF.Round(tile.X * 0.72f);
         var label = UiTypography.Size(TextRole.Caption, context) + 6 * context.Scale;
-        var origin = ImGui.GetCursorScreenPos();
+        var origin = ImGui.GetCursorScreenPos() + new Vector2(ring);
         var list = ImGui.GetWindowDrawList();
         var all = Enum.GetValues<PageBackground>();
         for (var index = 0; index < all.Length; index++)
@@ -1095,8 +1125,8 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
             backgroundTiles[background] = paper.Position + paper.Size / 2;
         }
         var rows = (all.Length + Columns - 1) / Columns;
-        ImGui.SetCursorScreenPos(origin);
-        ImGui.Dummy(new Vector2(width, rows * (tile.Y + label) + (rows - 1) * gap));
+        ImGui.SetCursorScreenPos(origin - new Vector2(ring));
+        ImGui.Dummy(new Vector2(width + ring * 2, rows * (tile.Y + label) + (rows - 1) * gap + ring));
         ImGui.Dummy(new Vector2(0, 8 * context.Scale));
         UiTypography.Text("Every page, stamp pages included, is printed on it, in the rings' colour (Customization). It is part of the edition's look, so changing edition returns to the rings.", TextRole.Body, context, UiTheme.MutedInk);
     }
@@ -1143,13 +1173,14 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         ImGui.Dummy(new Vector2(0, 10 * context.Scale));
         var chosen = holder.Identity.Appearance?.IdentityLayout ?? IdentityLayout.Classic;
         var look = holder.Identity.Look;
-        var width = UiLayout.ContentWidth;
+        var ring = MathF.Ceiling(3 * context.Scale);
+        var width = UiLayout.ContentWidth - ring * 2;
         var gap = 14 * context.Scale;
         var all = Enum.GetValues<IdentityLayout>();
         var tile = new Vector2((width - gap * (all.Length - 1)) / all.Length, 0);
         tile.Y = MathF.Round(tile.X * 0.62f);
         var label = UiTypography.Size(TextRole.Caption, context) + 6 * context.Scale;
-        var origin = ImGui.GetCursorScreenPos();
+        var origin = ImGui.GetCursorScreenPos() + new Vector2(ring);
         var list = ImGui.GetWindowDrawList();
         var ink = ImGui.GetColorU32(look.Text with { W = 0.55f });
         var frame = ImGui.GetColorU32(look.Text with { W = 0.3f });
@@ -1228,8 +1259,8 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
                 list.AddLine(new Vector2(page.X + pad, y + half.Y * 0.06f), new Vector2(page.X + half.X - pad, y + half.Y * 0.06f), frame, thin);
             }
         }
-        ImGui.SetCursorScreenPos(origin);
-        ImGui.Dummy(new Vector2(width, tile.Y + label));
+        ImGui.SetCursorScreenPos(origin - new Vector2(ring));
+        ImGui.Dummy(new Vector2(width + ring * 2, tile.Y + label + ring));
         ImGui.Dummy(new Vector2(0, 8 * context.Scale));
         UiTypography.Text(Describe(chosen), TextRole.Body, context, UiTheme.MutedInk);
         ImGui.Dummy(new Vector2(0, 20 * context.Scale));
@@ -1481,7 +1512,7 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
 
     private BookShellIntent DrawClosed(UiRect bounds, UiContext context)
     {
-        passport.DrawCover(bounds, context, carried: symbols.Hidden);
+        passport.DrawCover(bounds, context, carried: symbols.Hidden, changing: symbols.Changing);
         var surface = PassportDocumentView.CoverSurface(bounds);
         symbols.BeginFrame();
         if (holder.Identity.Appearance != null) symbols.Register(SymbolSurface.Cover, surface);

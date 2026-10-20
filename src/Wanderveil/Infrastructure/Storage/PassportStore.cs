@@ -149,7 +149,11 @@ internal sealed class PassportStore(string directory)
         {
             var list = new JsonArray();
             foreach (var symbol in symbols.Items)
-                list.Add(new JsonObject { ["symbol"] = symbol.Symbol, ["on"] = symbol.Surface, ["x"] = symbol.X, ["y"] = symbol.Y, ["turn"] = symbol.Rotation, ["size"] = symbol.Size });
+            {
+                var entry = new JsonObject { ["symbol"] = symbol.Symbol, ["on"] = symbol.Surface, ["x"] = symbol.X, ["y"] = symbol.Y, ["turn"] = symbol.Rotation, ["size"] = symbol.Size };
+                if (symbol.Colour is { } colour) entry["colour"] = colour.ToString();
+                list.Add(entry);
+            }
             node["symbols"] = list;
         }
         return node;
@@ -194,7 +198,10 @@ internal sealed class PassportStore(string directory)
             {
                 if (entry is not JsonObject symbol || Text(symbol, "symbol") is not { } id || Text(symbol, "on") is not { } surface)
                     throw new FormatException("A passport's placed symbol names its symbol and where it is.");
-                read.Add(new PlacedSymbol(id, surface, Real(symbol, "x"), Real(symbol, "y"), Real(symbol, "turn"), Real(symbol, "size")));
+                // Its own colour, if it has one.
+                Rgb? colour = null;
+                if (symbol["colour"] != null) colour = Rgb.TryParse(Text(symbol, "colour"), out var own) ? own : throw new FormatException("A placed symbol's colour is #RRGGBB.");
+                read.Add(new PlacedSymbol(id, surface, Real(symbol, "x"), Real(symbol, "y"), Real(symbol, "turn"), Real(symbol, "size"), colour));
             }
             symbols = SymbolLayer.Of(read) is { IsEmpty: false } layer ? layer : null;
         }

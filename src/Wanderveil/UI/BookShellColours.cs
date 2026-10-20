@@ -25,8 +25,6 @@ internal sealed class BookShellColours(PassportProfile holder)
         (ColourPart.Lines, "RINGS", [("Black", 0x000000), ("White", 0xFFFFFF), ("Gold", 0xB99662), ("Sage", 0x5E8A4A), ("Wine", 0x7A2232), ("Navy", 0x2A3B52), ("Rose", 0xC9967E), ("Sky", 0x7FA6C4)]),
     ];
 
-    // The custom swatch's wheel of hues, before anything is picked.
-    private static readonly int[] Hues = [0xD98880, 0xD9C27A, 0x8CC48C, 0x7FC4C4, 0x8C9ED9, 0xC48CC4];
 
     // Where each swatch was drawn last frame (row part, index from the left), for checks that click a given one.
     private readonly System.Collections.Generic.Dictionary<(ColourPart, int), Vector2> drawn = [];
@@ -133,8 +131,12 @@ internal sealed class BookShellColours(PassportProfile holder)
         var list = ImGui.GetWindowDrawList();
         var origin = ImGui.GetCursorScreenPos();
         var width = UiLayout.ContentWidth;
-        var height = MathF.Round(100 * context.Scale);
-        var cover = new UiRect(origin, new Vector2(height * 0.75f, height));
+        // As tall as the page's lines need (with room under the link), and never shorter than the cover reads well at.
+        var name0 = identity.Name.Length > 0 ? identity.Name : "Ari Vale";
+        float Tall(string text, TextRole role, float scale) => UiTypography.Measure(text, role, context with { FontSize = context.FontSize * scale }, width * 0.6f, false).Y;
+        var needed = (9 + 4 + 1 + 6 + 14) * context.Scale + Tall(name0, TextRole.Title, 0.75f) + Tall("HOME WORLD", TextRole.Caption, 1f) + Tall("Demo world", TextRole.Body, 1f) + Tall("Explore discoveries »", TextRole.Body, 1f);
+        var height = MathF.Round(MathF.Max(100 * context.Scale, needed));
+        var cover = new UiRect(origin, new Vector2(MathF.Round(100 * context.Scale) * 0.75f, height));
         var corner = 5 * context.Scale;
         list.AddRectFilled(cover.Position + new Vector2(2, 3) * context.Scale, cover.Max + new Vector2(2, 3) * context.Scale, ImGui.GetColorU32(new Vector4(0, 0, 0, 0.25f)), corner);
         list.AddRectFilled(cover.Position, cover.Max, ImGui.GetColorU32(look.Cloth), corner);
@@ -224,13 +226,7 @@ internal sealed class BookShellColours(PassportProfile holder)
                 selected = custom;
                 var shown = picking == part ? Rgb.Of(new Vector4(picked, 1)) : custom ? current : null;
                 if (shown is { } colour) list.AddCircleFilled(center, size / 2 - 1, ImGui.GetColorU32(colour.Vector), 24);
-                else
-                    for (var slice = 0; slice < 6; slice++)
-                    {
-                        list.PathArcTo(center, size / 2 - 1, slice * MathF.Tau / 6, (slice + 1) * MathF.Tau / 6, 6);
-                        list.PathLineTo(center);
-                        list.PathFillConvex(ImGui.GetColorU32(Rgb.Hex(Hues[slice]).Vector));
-                    }
+                else PaperColours.Wheel(list, center, size / 2 - 1);
                 list.AddCircle(center, size / 2 - 1, ImGui.GetColorU32(UiTheme.Ink with { W = 0.35f }), 24, 1);
                 if (hovered) ImGui.SetTooltip("Custom colour");
                 if (clicked)
@@ -253,28 +249,13 @@ internal sealed class BookShellColours(PassportProfile holder)
     // A colour picker on paper: dragging previews on the swatch; letting go (or entering a hex) keeps it.
     private void Picker(ColourPart part, UiContext context)
     {
-        ImGui.PushStyleColor(ImGuiCol.PopupBg, UiTheme.Paper);
-        ImGui.PushStyleColor(ImGuiCol.Text, UiTheme.Ink);
-        ImGui.PushStyleColor(ImGuiCol.FrameBg, UiTheme.PaperInset);
-        ImGui.PushStyleColor(ImGuiCol.Border, UiTheme.Gold);
-        ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(10, 10) * context.Scale);
+        if (!PaperColours.Begin($"Custom {part}", context)) { if (picking == part) picking = null; return; }
         try
         {
-            if (!ImGui.BeginPopup($"Custom {part}")) { if (picking == part) picking = null; return; }
-            try
-            {
-                ImGui.TextUnformatted($"Custom {Name(part).ToLowerInvariant()}");
-                ImGui.SetNextItemWidth(200 * context.Scale);
-                ImGui.ColorPicker3("##Picker", ref picked, ImGuiColorEditFlags.NoAlpha | ImGuiColorEditFlags.NoSidePreview | ImGuiColorEditFlags.PickerHueBar | ImGuiColorEditFlags.DisplayHex);
-                if (ImGui.IsItemDeactivatedAfterEdit()) holder.SetColour(part, Rgb.Of(new Vector4(picked, 1)));
-            }
-            finally { ImGui.EndPopup(); }
+            ImGui.TextUnformatted($"Custom {Name(part).ToLowerInvariant()}");
+            if (PaperColours.Picker(ref picked, context)) holder.SetColour(part, Rgb.Of(new Vector4(picked, 1)));
         }
-        finally
-        {
-            ImGui.PopStyleVar();
-            ImGui.PopStyleColor(4);
-        }
+        finally { PaperColours.End(); }
     }
 
     private static Rgb Printed(PassportEdition edition, ColourPart part) => Rgb.Of(part switch

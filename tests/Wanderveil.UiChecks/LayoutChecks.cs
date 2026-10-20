@@ -122,6 +122,10 @@ internal static class LayoutChecks
             book.Click(book.Tab(2));
             book.Frames(3);
             check(book.Shell.PageOverflow == 0 && book.Shell.PageOverflowX == 0, "Layout overflows with the identity layouts.");
+            // The left-most sketch and tile keep their selection rings inside the page.
+            var left = book.Page(false);
+            check(book.Shell.IdentityLayoutTile(IdentityLayout.Classic) is { } classic && book.Shell.BackgroundTile(PageBackground.Guilloche) is { } rings && book.Page(true) is var rightPage
+                && classic.X - left.Position.X > 0 && rings.X > rightPage.Position.X, "The layout choices lie outside their pages.");
             book.Click(book.Shell.IdentityLayoutTile(IdentityLayout.Mirrored)!.Value);
             book.Frames(2);
             check(holder.Identity.Appearance?.IdentityLayout == IdentityLayout.Mirrored, "Clicking an identity layout's sketch does not choose it.");

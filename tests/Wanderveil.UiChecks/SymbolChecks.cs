@@ -68,7 +68,7 @@ internal static class SymbolChecks
 
     private static void Storage(Action<bool, string> check)
     {
-        var symbols = SymbolLayer.Of([new PlacedSymbol("crest-uldah", "cover", 0.25f, 0.75f, 0.5f, 0.3f), On("nation-banner", "heart", 0.1f, 0.9f)]);
+        var symbols = SymbolLayer.Of([new PlacedSymbol("crest-uldah", "cover", 0.25f, 0.75f, 0.5f, 0.3f, Rgb.Hex(0x2F4F8A)), On("nation-banner", "heart", 0.1f, 0.9f)]);
         var identity = PassportIdentity.Sample with
         {
             Appearance = new PassportAppearance("uldah", Symbols: symbols),
@@ -77,7 +77,7 @@ internal static class SymbolChecks
         var text = PassportStore.Serialize(identity);
         var read = PassportStore.Parse(text);
         check(read == identity.Normalize() && read.PreviousAppearance?.Placed.Items.Single().Symbol == "moon", "The passport file does not round-trip symbols, in order, and the previous appearance's.");
-        check(text.Contains("\"version\": 3", StringComparison.Ordinal) && text.Contains("\"on\": \"cover\"", StringComparison.Ordinal), "Symbols are not saved as version 3 with their surface.");
+        check(text.Contains("\"version\": 3", StringComparison.Ordinal) && text.Contains("\"on\": \"cover\"", StringComparison.Ordinal) && text.Contains("\"colour\": \"#2F4F8A\"", StringComparison.Ordinal), "Symbols are not saved as version 3 with their surface and own colour.");
         // A version 2 file has none; a symbol or surface this version does not know is left out.
         var older = PassportStore.Parse("{\"format\":\"wanderveil.passport\",\"version\":2,\"number\":\"EZ 1\",\"appearance\":{\"edition\":\"gridania\"}}");
         check(older.Appearance == PassportAppearance.Gridania, "A version 2 passport does not read as it was.");
@@ -133,12 +133,35 @@ internal static class SymbolChecks
         book.Save(artifacts, "symbols-decorating.bmp");
 
         // The knob dragged out and round: the symbol grows and turns.
-        var (body, knob, _) = symbols.Handles[0];
+        var (body, knob, _, _) = symbols.Handles[0];
         var before = profile.Identity.Appearance!.Placed.Items[0];
         var outward = knob - body;
-        book.Drag(knob, body + new Vector2(-outward.Y, outward.X) * 1.5f);
+        // Held halfway, the symbol already shows turned and larger.
+        book.Move(knob);
+        ImGui.GetIO().AddMouseButtonEvent(0, true); book.Frame();
+        var midway = body + new Vector2(-outward.Y, outward.X) * 1.5f;
+        for (var step = 1; step <= 6; step++) { var point = Vector2.Lerp(knob, midway, step / 6f); ImGui.GetIO().AddMousePosEvent(point.X, point.Y); book.Frame(); }
+        check(symbols.Changing is { } live && live.Symbol.Size > before.Size * 1.3f && profile.Identity.Appearance!.Placed.Items[0] == before, "A symbol does not show turning and resizing while its knob is held.");
+        book.Save(artifacts, "symbols-knob-held.bmp", keepMouse: true);
+        ImGui.GetIO().AddMouseButtonEvent(0, false); book.Frames(3);
         var after = profile.Identity.Appearance!.Placed.Items.Single(symbol => symbol.Symbol == "sparkle");
         check(after.Size > before.Size * 1.3f && MathF.Abs(MathF.Abs(after.Rotation) - MathF.PI / 2) < 0.15f, $"The knob does not resize and turn the symbol ({before.Size} to {after.Size}, turned {after.Rotation}).");
+
+        // Its colour dot opens its colours: Red is kept, the passport's colour returns it to following the page ink.
+        var sparkleNow = profile.Identity.Appearance!.Placed.Items.Length - 1;
+        book.Click(symbols.Handles[sparkleNow].Colour);
+        book.Frames(2);
+        check(symbols.ColourSwatches.Count == 7, "A symbol's colour dot does not open its colours.");
+        book.Save(artifacts, "symbols-colour.bmp");
+        book.Click(symbols.ColourSwatches[3]);
+        check(profile.Identity.Appearance!.Placed.Items[^1] is { Symbol: "sparkle", Colour: { } red } && red == Rgb.Hex(0xA3302A), "Picking a symbol colour does not keep it.");
+        book.Click(symbols.ColourSwatches[0]);
+        check(profile.Identity.Appearance!.Placed.Items[^1].Colour == null, "The passport's colour does not return a symbol to following it.");
+        book.Click(symbols.ColourSwatches[4]);
+        // Escape closes the colours and nothing else.
+        book.Key(ImGuiKey.Escape);
+        book.Frames(2);
+        check(symbols.Decorating && symbols.ColourSwatches.Count == 0, "Escape on a symbol's colours does more than close them.");
 
         // A drag carries the sparkle (now on top) across to the map page.
         var sparkle = profile.Identity.Appearance!.Placed.Items.Length - 1;

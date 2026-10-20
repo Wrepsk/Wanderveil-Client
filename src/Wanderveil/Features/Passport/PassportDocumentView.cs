@@ -32,7 +32,7 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportProfile h
     // window is then the flat placement whose board the leaf's Source describes. edition draws another
     // edition's cover than the passport's (the edition chooser), without the holder's own line or symbols.
     // carried is the index of a symbol in the holder's hand, left out here.
-    internal void DrawCover(UiRect window, UiContext context, LeafProjection? leaf = null, PassportEdition? edition = null, int carried = -1)
+    internal void DrawCover(UiRect window, UiContext context, LeafProjection? leaf = null, PassportEdition? edition = null, int carried = -1, (int Index, PlacedSymbol Symbol)? changing = null)
     {
         var shown = edition ?? holder.Identity.Edition;
         // The passport's own cover in its holder's colours; another edition's as that edition prints it.
@@ -55,7 +55,7 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportProfile h
         // The holder's symbols, pressed in the same foil as the lettering, beneath it.
         if (edition == null && holder.Identity.Appearance?.Symbols is { } symbols)
             SymbolArt.DrawSurface(list, assets, symbols, SymbolSurface.Cover, CoverSurface(window), colours.Foil, leaf, carried,
-                new Vector2(0, MathF.Max(1, unit)), colours.PaleCloth ? new Vector4(1f, 1f, 1f, 0.6f) : new Vector4(0.02f, 0.05f, 0.03f, 0.55f));
+                new Vector2(0, MathF.Max(1, unit)), colours.PaleCloth ? new Vector4(1f, 1f, 1f, 0.6f) : new Vector4(0.02f, 0.05f, 0.03f, 0.55f), changing);
         CoverText(shown.Heading, 117, 13, 6);
         if (Plate(BookAsset.EditionCrest, out var crest, 150 * unit))
         {
@@ -111,9 +111,9 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportProfile h
     }
 
     // The holder's symbols on one of the first pages, on the paper beneath everything printed there.
-    internal void DrawSymbols(string page, UiRect area, int carried = -1)
+    internal void DrawSymbols(string page, UiRect area, int carried = -1, (int Index, PlacedSymbol Symbol)? changing = null)
     {
-        if (holder.Identity.Appearance?.Symbols is { } symbols) SymbolArt.DrawSurface(ImGui.GetWindowDrawList(), assets, symbols, page, area, UiTheme.EditionInk, except: carried);
+        if (holder.Identity.Appearance?.Symbols is { } symbols) SymbolArt.DrawSurface(ImGui.GetWindowDrawList(), assets, symbols, page, area, UiTheme.EditionInk, except: carried, shown: changing);
     }
 
     // The passport number engraved into the lower right corner of a stamp page, as on the printed design:

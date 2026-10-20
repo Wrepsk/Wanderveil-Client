@@ -42,8 +42,9 @@ internal static class SymbolSurface
 }
 
 // One placed symbol: on a surface, its centre (0 to 1 across and down the surface), how far it is turned
-// (radians), and its size as a share of the surface's width.
-internal readonly record struct PlacedSymbol(string Symbol, string Surface, float X, float Y, float Rotation, float Size)
+// (radians), its size as a share of the surface's width, and its own colour (null follows the passport: foil on the
+// cover, page ink on the pages).
+internal readonly record struct PlacedSymbol(string Symbol, string Surface, float X, float Y, float Rotation, float Size, Rgb? Colour = null)
 {
     internal const float MinimumSize = 0.05f;
     internal const float MaximumSize = 0.6f;

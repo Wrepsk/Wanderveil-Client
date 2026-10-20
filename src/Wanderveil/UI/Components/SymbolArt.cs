@@ -54,16 +54,18 @@ internal static class SymbolArt
             uv0, new Vector2(uv1.X, uv0.Y), uv1, new Vector2(uv0.X, uv1.Y), tint);
     }
 
-    // The symbols placed on one surface, in order, skipping the one at except (carried in hand).
-    internal static void DrawSurface(ImDrawListPtr list, IBookAssets assets, SymbolLayer layer, string surface, UiRect area, Vector4 colour, LeafProjection? leaf = null, int except = -1, Vector2? shadow = null, Vector4 shadowColour = default)
+    // The symbols placed on one surface, in order, skipping the one at except (carried in hand), and drawing the one in
+    // shown as it is being changed (turned, resized, or recoloured) before the change is kept. colour is the passport's,
+    // for symbols without their own.
+    internal static void DrawSurface(ImDrawListPtr list, IBookAssets assets, SymbolLayer layer, string surface, UiRect area, Vector4 colour, LeafProjection? leaf = null, int except = -1, Vector2? shadow = null, Vector4 shadowColour = default, (int Index, PlacedSymbol Symbol)? shown = null)
     {
         for (var index = 0; index < layer.Items.Length; index++)
         {
-            var placed = layer.Items[index];
+            var placed = shown is { } changing && changing.Index == index ? changing.Symbol : layer.Items[index];
             if (index == except || placed.Surface != surface || PassportSymbol.Find(placed.Symbol) is not { } symbol) continue;
             var (center, size) = Place(placed, area);
             if (shadow is { } offset) Draw(list, assets, symbol, center + offset, size, placed.Rotation, shadowColour, leaf);
-            Draw(list, assets, symbol, center, size, placed.Rotation, colour, leaf);
+            Draw(list, assets, symbol, center, size, placed.Rotation, placed.Colour?.Vector ?? colour, leaf);
         }
     }
 }
