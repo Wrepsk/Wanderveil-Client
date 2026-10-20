@@ -83,6 +83,7 @@ internal sealed class BookShellDrawing(PageMarks marks, IBookAssets assets)
     {
         areas.Clear();
         Controls.Clear();
+        ClearChoices.Clear();
     }
 
     // A stamp page whose marks are drawn this frame, measured from the current window (the page's box) and shown as
@@ -126,8 +127,9 @@ internal sealed class BookShellDrawing(PageMarks marks, IBookAssets assets)
                     case DrawingTool.Pencil:
                         if (hovered) ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
                         if (ImGui.IsItemActivated()) { live.Clear(); liveSheet = area.Sheet; smoothed = at; pressure = 0.8f; live.Add(new InkPoint(at.X, at.Y, pressure)); }
-                        if (ImGui.IsItemActive() && liveSheet == area.Sheet) Follow(at, page);
-                        if (ImGui.IsItemDeactivated() && liveSheet == area.Sheet) EndStroke(pageInk);
+                        // Only a stroke the pencil began goes on (the eyedropper hands the pencil back while the mouse is down).
+                        if (ImGui.IsItemActive() && liveSheet == area.Sheet && live.Count > 0) Follow(at, page);
+                        if (ImGui.IsItemDeactivated() && liveSheet == area.Sheet && live.Count > 0) EndStroke(pageInk);
                         full = hovered && !marks.HasRoomOn(area.Sheet, 1);
                         break;
                     case DrawingTool.Eraser:
@@ -287,7 +289,7 @@ internal sealed class BookShellDrawing(PageMarks marks, IBookAssets assets)
     private Rgb Ink(Vector4 pageInk) => Colour >= Palette.Length ? custom : Palette[Colour].Hex < 0 ? Rgb.Of(pageInk) : Rgb.Hex(Palette[Colour].Hex);
 
     // How wide the toolbar is at this height: tools, palette, sizes, and Undo, with a gap between each group.
-    internal static float ToolbarWidth(float height) => height * (4 * 1.2f + (Palette.Length + 1) * 0.72f + 3 * 0.9f + 1.2f + 3 * 0.4f);
+    internal static float ToolbarWidth(float height) => height * (4 * 1.2f + (Palette.Length + 1) * 0.72f + 3 * 0.9f + 2 * 1.2f + 3 * 0.4f);
 
     // The toolbar across the footer, from left to right of bar: the three tools, the palette, the sizes, and Undo.
     // raised: the toolbar lies over the page (a narrow page), so it gets a paper backing of its own.
@@ -393,6 +395,50 @@ internal sealed class BookShellDrawing(PageMarks marks, IBookAssets assets)
         var tip = turn + new Vector2(-r * 0.95f, r * 0.05f);
         list.AddTriangleFilled(tip + new Vector2(-r * 0.4f, -r * 0.1f), tip + new Vector2(r * 0.4f, -r * 0.1f), tip + new Vector2(0, r * 0.55f), ImGui.GetColorU32(undoInk));
         Controls["Undo"] = undo.Position + undo.Size / 2;
+
+        // Clear: a waste-paper bin offering each page shown; Undo brings a cleared page back.
+        var clear = new UiRect(new Vector2(undo.Max.X, bar.Position.Y), new Vector2(height * 1.2f, height));
+        var shown = areas.OrderBy(area => area.Frame.Position.X).ToArray();
+        ImGui.BeginDisabled(Busy || shown.All(area => !marks.StrokesOn(area.Sheet).Any() && !marks.TextsOn(area.Sheet).Any()));
+        if (BookControl.Draw("Clear", "", clear, context, BookControlStyle.Ink, hint: "Clear a page's drawing and writing")) { Finish(); ImGui.OpenPopup("Clear a page"); }
+        var binInk = ImGui.GetColorU32(ImGui.IsItemHovered() ? UiTheme.Ink : UiTheme.MutedInk);
+        ImGui.EndDisabled();
+        Bin(list, clear, binInk, context);
+        Controls["Clear"] = clear.Position + clear.Size / 2;
+        if (PaperColours.Begin("Clear a page", context))
+        {
+            try
+            {
+                ImGui.TextUnformatted("Clear the drawing and writing on");
+                foreach (var (area, index) in shown.Select((area, index) => (area, index)))
+                {
+                    var marked = marks.StrokesOn(area.Sheet).Any() || marks.TextsOn(area.Sheet).Any();
+                    var name = shown.Length == 1 ? "this page" : index == 0 ? "the left page" : "the right page";
+                    ImGui.BeginDisabled(!marked);
+                    if (ImGui.Selectable(name)) { marks.ClearSheet(area.Sheet); ImGui.CloseCurrentPopup(); }
+                    ImGui.EndDisabled();
+                    ClearChoices[index] = ImGui.GetItemRectMin() + ImGui.GetItemRectSize() / 2;
+                }
+                ImGui.TextDisabled("Undo brings it back.");
+            }
+            finally { PaperColours.End(); }
+        }
+    }
+
+    // For checks: where each choice of the Clear popup was drawn (0 the left or only page, 1 the right).
+    internal Dictionary<int, Vector2> ClearChoices { get; } = [];
+
+    // A small bin: a lid, and a body narrowing to its foot, with two ribs.
+    private static void Bin(ImDrawListPtr list, UiRect cell, uint ink, UiContext context)
+    {
+        var centre = cell.Position + cell.Size / 2;
+        var r = cell.Size.Y * 0.3f;
+        var line = MathF.Max(1f, 1.3f * context.Scale);
+        list.AddLine(centre + new Vector2(-r, -r * 0.7f), centre + new Vector2(r, -r * 0.7f), ink, line);
+        list.AddLine(centre + new Vector2(-r * 0.3f, -r), centre + new Vector2(r * 0.3f, -r), ink, line);
+        list.AddQuad(centre + new Vector2(-r * 0.8f, -r * 0.5f), centre + new Vector2(r * 0.8f, -r * 0.5f), centre + new Vector2(r * 0.6f, r), centre + new Vector2(-r * 0.6f, r), ink, line);
+        list.AddLine(centre + new Vector2(-r * 0.22f, -r * 0.25f), centre + new Vector2(-r * 0.18f, r * 0.75f), ink, line);
+        list.AddLine(centre + new Vector2(r * 0.22f, -r * 0.25f), centre + new Vector2(r * 0.18f, r * 0.75f), ink, line);
     }
 
     // A pencil (a slanted shaft with a tip), an eraser (a slanted block), or writing (a small "Aa").

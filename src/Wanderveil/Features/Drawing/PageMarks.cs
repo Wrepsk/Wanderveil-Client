@@ -121,6 +121,17 @@ internal sealed class PageMarks
         return Change(strokes, texts.Add(kept));
     }
 
+    // Takes every mark off one page (one step of undo).
+    internal bool ClearSheet(int sheet) => Change(strokes.RemoveAll(stroke => stroke.Sheet == sheet), texts.RemoveAll(text => text.Sheet == sheet));
+
+    // Takes every mark off every page, for good: nothing to undo afterwards.
+    internal bool ClearAll()
+    {
+        var changed = Change(ImmutableList<InkStroke>.Empty, ImmutableList<PageText>.Empty);
+        undo.Clear();
+        return changed;
+    }
+
     // Groups the changes until EndChange into one step of undo (an eraser's drag).
     internal void BeginChange() => group ??= (strokes, texts);
 

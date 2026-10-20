@@ -35,7 +35,7 @@ internal sealed class BookShellSymbols(PassportProfile holder, IBookAssets asset
     private readonly record struct Area(string Surface, UiRect Bounds);
 
     // From: the index of a placed symbol being moved, or -1 for a new one from the sheet.
-    internal sealed record Carry(string Symbol, int From, float Rotation, float Size, bool Held);
+    internal sealed record Carry(string Symbol, int From, float Rotation, float Size, bool Held, Rgb? Colour = null);
 
     internal bool Decorating { get; private set; }
     internal bool SheetOpen { get; private set; }
@@ -109,17 +109,22 @@ internal sealed class BookShellSymbols(PassportProfile holder, IBookAssets asset
         if (!Decorating || Carrying != null || SheetOpen || holder.Identity.Appearance?.Symbols is not { } layer) return;
         foreach (var area in areas)
         {
+            // A page's handles lie in a window of their own over its content; the cover has no content window, so its
+            // handles go in the book's own window, after the cover's marks (which so keep their clicks).
+            var own = area.Surface != SymbolSurface.Cover;
             ImGui.SetCursorScreenPos(area.Bounds.Position);
             ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, Vector2.Zero);
+            ImGui.PushID("Symbols " + area.Surface);
             try
             {
-                if (!ImGui.BeginChild("Symbols " + area.Surface, area.Bounds.Size, false, ImGuiWindowFlags.NoBackground | ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.NoSavedSettings)) continue;
+                if (own && !ImGui.BeginChild("Symbols " + area.Surface, area.Bounds.Size, false, ImGuiWindowFlags.NoBackground | ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.NoSavedSettings)) { ImGui.EndChild(); continue; }
                 // Top first, so the symbol drawn on top is the one a click reaches.
                 for (var index = layer.Items.Length - 1; index >= 0; index--)
                     if (layer.Items[index].Surface == area.Surface) Symbol(index, layer.Items[index], area, context);
                 if ((uint)colourTarget < (uint)layer.Items.Length && layer.Items[colourTarget].Surface == area.Surface) ColourPopup(layer.Items[colourTarget], area, context);
+                if (own) ImGui.EndChild();
             }
-            finally { ImGui.EndChild(); ImGui.PopStyleVar(); }
+            finally { ImGui.PopID(); ImGui.PopStyleVar(); }
         }
     }
 
@@ -256,7 +261,7 @@ internal sealed class BookShellSymbols(PassportProfile holder, IBookAssets asset
 
     private void PickUp(int index, PlacedSymbol placed, bool held)
     {
-        Carrying = new Carry(placed.Symbol, index, placed.Rotation, placed.Size, held);
+        Carrying = new Carry(placed.Symbol, index, placed.Rotation, placed.Size, held, placed.Colour);
         SheetOpen = false;
     }
 
@@ -353,7 +358,7 @@ internal sealed class BookShellSymbols(PassportProfile holder, IBookAssets asset
 
         // The symbol in hand, in a window of its own above the surfaces, with a soft shadow beneath it.
         var size = carry.Size * (under?.Bounds.Size.X ?? lastWidth);
-        var colour = under?.Surface == SymbolSurface.Cover ? UiTheme.Foil : UiTheme.EditionInk;
+        var colour = carry.Colour?.Vector ?? (under?.Surface == SymbolSurface.Cover ? UiTheme.Foil : UiTheme.EditionInk);
         ImGui.SetCursorScreenPos(window.Position);
         ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, Vector2.Zero);
         try
@@ -376,7 +381,7 @@ internal sealed class BookShellSymbols(PassportProfile holder, IBookAssets asset
     private void Put(Carry carry, Area area, Vector2 mouse)
     {
         var at = SymbolArt.At(mouse, carry.Size, area.Bounds);
-        var placed = new PlacedSymbol(carry.Symbol, area.Surface, at.X, at.Y, carry.Rotation, carry.Size);
+        var placed = new PlacedSymbol(carry.Symbol, area.Surface, at.X, at.Y, carry.Rotation, carry.Size, carry.Colour);
         if (carry.From >= 0) holder.ReplaceSymbol(carry.From, placed);
         // A new one goes on top, and the sheet comes back for the next.
         else { holder.AddSymbol(placed); SheetOpen = true; }

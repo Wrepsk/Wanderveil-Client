@@ -43,8 +43,9 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
     private readonly EditionAssets editions = (EditionAssets)(assets = new EditionAssets(assets, () => identity!.Identity.Edition.Id));
     // An edition picked in Settings, waiting for the holder to confirm the change.
     private string? pendingEdition;
-    // Remove all symbols, picked in Settings and waiting for the holder to confirm it.
+    // Remove all symbols, picked in Settings and waiting for the holder to confirm it; likewise all drawing.
     private bool confirmClearSymbols;
+    private bool confirmClearDrawing;
     // An edition the passport is being exchanged for: the old book slides away, and once it is gone the new
     // edition's book is summoned in its place.
     private string? swapTo;
@@ -104,6 +105,7 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
     internal string? PendingEdition => pendingEdition;
     // Whether Remove all symbols is waiting for its answer.
     internal bool ConfirmingClearSymbols => confirmClearSymbols;
+    internal bool ConfirmingClearDrawing => confirmClearDrawing;
     // Whether the identity pages are being written on (the footer's Edit / Done).
     internal bool EditingIdentity { get; private set; }
     // How far a page's printed contents are shrunk to fit its paper (1 when they fit as set).
@@ -330,7 +332,7 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
             riffle.Start(next > Category ? 1 : -1, BookShellRiffle.LeavesFor(1), BookSection.Settings, (int)Category, ReducedMotion);
             Category = next;
             pendingEdition = null;
-            confirmClearSymbols = false;
+            confirmClearSymbols = confirmClearDrawing = false;
         }
         if (chosen is { } tab) Navigate(tab);
         else if (explore) Navigate(BookSection.Discover);
@@ -479,7 +481,7 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
                             // edition waits for its answer the colours and preview step aside: the change would reset them.
                             if (side != Side.Right) { ImGui.Dummy(new Vector2(0, 16 * type.Scale)); EditionOptions(type); if (pendingEdition == null) colours.Preview(type); }
                             if (side == Side.Single) ImGui.Dummy(new Vector2(0, 24 * type.Scale));
-                            if (side != Side.Left && pendingEdition == null) { colours.Draw(type); SymbolOptions(type); }
+                            if (side != Side.Left && pendingEdition == null) { colours.Draw(type); PlacedOptions(type); }
                             break;
                         case SettingsCategory.Layout:
                             // Left: the identity spread's layout; right: the pages' background and the nation pages.
@@ -924,7 +926,7 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         desk.CloseInfo();
         pageEntry = null;
         pendingEdition = null;
-        confirmClearSymbols = false;
+        confirmClearSymbols = confirmClearDrawing = false;
         var distance = (int)to - (int)Section;
         riffle.Start(Math.Sign(distance), BookShellRiffle.LeavesFor(distance), Section, Section == BookSection.Settings ? (int)Category : VisiblePage, ReducedMotion);
         Section = to;
@@ -1055,33 +1057,46 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         if (BookControl.Link("Change back to " + before.Name, context)) Exchange(before.Id);
     }
 
-    // The symbols placed on the cover and first pages: how many, and Remove all symbols, which asks first (it cannot
-    // be undone).
-    private void SymbolOptions(UiContext context)
+    // What the holder placed and drew: the symbols on the cover and first pages, and the drawing and writing on the stamp
+    // pages, each with a way to remove it all that asks first (neither can be undone).
+    private void PlacedOptions(UiContext context)
     {
-        var count = holder.Identity.Appearance?.Placed.Items.Length ?? 0;
-        if (count == 0) confirmClearSymbols = false;
-        ImGui.Dummy(new Vector2(0, 20 * context.Scale));
-        UiTypography.Text("SYMBOLS", TextRole.Caption, context, UiTheme.MutedInk);
+        var symbolCount = holder.Identity.Appearance?.Placed.Items.Length ?? 0;
+        var marks = drawing.Marks;
+        var pages = marks.Strokes.Select(stroke => stroke.Sheet).Concat(marks.Texts.Select(text => text.Sheet)).Distinct().Count();
+        if (symbolCount == 0) confirmClearSymbols = false;
+        if (pages == 0) confirmClearDrawing = false;
+        ImGui.Dummy(new Vector2(0, 18 * context.Scale));
+        UiTypography.Text("SYMBOLS AND DRAWING", TextRole.Caption, context, UiTheme.MutedInk);
         ImGui.Dummy(new Vector2(0, 6 * context.Scale));
-        var placed = count == 1 ? "1 symbol" : $"{count} symbols";
-        if (count == 0)
+        var symbolsText = symbolCount == 1 ? "1 symbol" : $"{symbolCount} symbols";
+        var pagesText = pages == 1 ? "1 page" : $"{pages} pages";
+        if (confirmClearSymbols || confirmClearDrawing)
         {
-            UiTypography.Text("None placed. Decorate the cover or the first pages from their own Decorate mark.", TextRole.Body, context, UiTheme.MutedInk);
-            return;
-        }
-        if (confirmClearSymbols)
-        {
-            UiTypography.Text($"Remove all {placed} from the cover and pages? This cannot be undone.", TextRole.Body, context, UiTheme.Ink);
+            UiTypography.Text(confirmClearSymbols ? $"Remove all {symbolsText} from the cover and pages? This cannot be undone." : $"Remove all drawing and writing from {pagesText}? This cannot be undone.", TextRole.Body, context, UiTheme.Ink);
             ImGui.Dummy(new Vector2(0, 6 * context.Scale));
-            if (BookControl.Link("Remove them", context)) { holder.ClearSymbols(); symbols.Stop(); confirmClearSymbols = false; }
+            if (BookControl.Link(confirmClearSymbols ? "Remove them" : "Remove it", context))
+            {
+                if (confirmClearSymbols) { holder.ClearSymbols(); symbols.Stop(); }
+                else { drawing.Stop(); marks.ClearAll(); }
+                confirmClearSymbols = confirmClearDrawing = false;
+            }
             ImGui.SameLine(0, 18 * context.Scale);
-            if (BookControl.Link("Keep them", context)) confirmClearSymbols = false;
+            if (BookControl.Link(confirmClearSymbols ? "Keep them" : "Keep it", context)) confirmClearSymbols = confirmClearDrawing = false;
             return;
         }
-        UiTypography.Text($"{placed} placed on the cover and first pages.", TextRole.Body, context, UiTheme.Ink);
+        if (symbolCount == 0 && pages == 0)
+        {
+            UiTypography.Text("None yet. Decorate the cover and first pages, or draw on the stamp pages, from their own marks.", TextRole.Body, context, UiTheme.MutedInk);
+            return;
+        }
+        var said = symbolCount > 0 && pages > 0 ? $"{symbolsText} placed; drawing on {pagesText}."
+            : symbolCount > 0 ? $"{symbolsText} placed on the cover and first pages." : $"Drawing and writing on {pagesText}.";
+        UiTypography.Text(said, TextRole.Body, context, UiTheme.Ink);
         ImGui.Dummy(new Vector2(0, 6 * context.Scale));
-        if (BookControl.Link("Remove all symbols", context)) confirmClearSymbols = true;
+        if (symbolCount > 0 && BookControl.Link("Remove all symbols", context)) confirmClearSymbols = true;
+        if (symbolCount > 0 && pages > 0) ImGui.SameLine(0, 18 * context.Scale);
+        if (pages > 0 && BookControl.Link("Remove all drawing", context)) confirmClearDrawing = true;
     }
 
     // The pages' background: a small sheet of paper for each, printed with it; the one in use is outlined.

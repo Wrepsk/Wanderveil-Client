@@ -160,6 +160,15 @@ internal static class DrawingChecks
             book.Click(drawing.Controls["Pencil"]);
             book.Drag(right.Position + right.Size * new Vector2(0.2f, 0.6f), right.Position + right.Size * new Vector2(0.7f, 0.75f));
             check(book.Shell.PageOverflow == 0 && book.Shell.PageOverflowX == 0, "Drawing makes a page scroll.");
+            // The bin clears one page; Undo brings it back.
+            var onLeft = marks.StrokesOn(0).Count();
+            book.Click(drawing.Controls["Clear"]);
+            book.Frames(2);
+            check(drawing.ClearChoices.Count == 2, "The bin does not offer the two pages shown.");
+            book.Click(drawing.ClearChoices[0]);
+            check(!marks.StrokesOn(0).Any() && marks.TextsOn(1).Any(), "Clearing the left page leaves its marks, or clears the right one.");
+            book.Click(drawing.Controls["Undo"]);
+            check(marks.StrokesOn(0).Count() == onLeft, "Undo does not bring a cleared page back.");
             // The paper's left, right, and top margins can be drawn on too (only the foot keeps its margin).
             var margin = new Vector2(page.Position.X - page.Size.X * 0.06f, page.Position.Y - page.Size.X * 0.04f);
             book.Drag(margin, margin + new Vector2(page.Size.X * 0.3f, 0));
@@ -175,6 +184,11 @@ internal static class DrawingChecks
             var onRed = InkPointOnScreen(red.Sheet == 0 ? page : right, red.Points[red.Points.Length / 2]);
             book.Click(onRed);
             check(drawing.Colour == 3 && drawing.Tool == DrawingTool.Pencil, $"The eyedropper does not take up a line's colour and hand back the pencil (colour {drawing.Colour}, {drawing.Tool}).");
+            // Held down and dragged after the pick (the pencil handed back mid-click), nothing breaks and nothing is drawn.
+            var strokesBefore = marks.Strokes.Count;
+            book.Click(drawing.Controls["Eyedropper"]);
+            book.Drag(onRed, onRed + new Vector2(60, 20));
+            check(marks.Strokes.Count == strokesBefore && drawing.Tool == DrawingTool.Pencil && drawing.Colour == 3, "Dragging on from an eyedropper pick draws, or breaks.");
             book.Click(drawing.Controls["Eyedropper"]);
             book.Click(InkPointOnScreen(page, reached.Points[reached.Points.Length / 2]));
             check(drawing.Colour == BookShellDrawing.Palette.Length && drawing.Custom == reached.Colour || drawing.Colour < BookShellDrawing.Palette.Length, "The eyedropper does not take up any line's colour.");

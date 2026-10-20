@@ -163,10 +163,11 @@ internal static class SymbolChecks
         book.Frames(2);
         check(symbols.Decorating && symbols.ColourSwatches.Count == 0, "Escape on a symbol's colours does more than close them.");
 
-        // A drag carries the sparkle (now on top) across to the map page.
+        // A drag carries the sparkle (now on top, Blue) across to the map page, keeping its colour.
         var sparkle = profile.Identity.Appearance!.Placed.Items.Length - 1;
         book.Drag(symbols.Handles[sparkle].Body, right.Position + right.Size * new Vector2(0.3f, 0.2f));
         check(profile.Identity.Appearance!.Placed.Items.All(symbol => symbol.Surface == "nation-map") && book.Shell.VisiblePage == 0, "Dragging a symbol does not carry it to the other page.");
+        check(profile.Identity.Appearance!.Placed.Items.Single(symbol => symbol.Symbol == "sparkle").Colour == Rgb.Hex(0x2F4F8A), "Moving a symbol loses its colour.");
 
         // Its × takes it off.
         book.Click(symbols.Handles[profile.Identity.Appearance!.Placed.Items.Length - 1].Remove);
@@ -214,6 +215,12 @@ internal static class SymbolChecks
         book.Click(symbols.SheetCells["sparkle"]);
         book.Click(cover.Position + cover.Size * new Vector2(0.2f, 0.84f));
         check(profile.Identity.Appearance?.Placed.CountOn(SymbolSurface.Cover) == 2 && !book.Shell.IsBookOpen, "Symbols are not placed on the cover, or a click opens the book.");
+        // With symbols on the cover, its marks still take clicks: the left-most (the sheet) opens the sheet again.
+        book.Key(ImGuiKey.Escape);
+        check(!symbols.SheetOpen, "Escape does not put the cover's sheet away.");
+        for (var x = cover.Position.X + 8; x < cover.Max.X && !symbols.SheetOpen; x += 6)
+            if (book.ClickControl(new Vector2(x, band))) break;
+        check(symbols.SheetOpen && symbols.Decorating, "The cover's marks do not take clicks while symbols are on it.");
         book.Key(ImGuiKey.Escape);
         book.Key(ImGuiKey.Escape);
         check(!symbols.Decorating, "Escape does not end decorating the cover.");
@@ -267,6 +274,18 @@ internal static class SymbolChecks
         book.ClickControl(Last()!.Value);
         check(profile.Identity.Appearance?.Symbols == null && !book.Shell.ConfirmingClearSymbols && book.Shell.PageOverflow == 0, "Remove them does not clear every symbol.");
         book.Save(artifacts, "symbols-cleared.bmp");
+
+        // Remove all drawing, below: it asks first, then takes every page's marks, for good.
+        var marks = book.Shell.Drawing.Marks;
+        marks.AddStroke(new Wanderveil.Features.Drawing.InkStroke(0, Rgb.Hex(0x3A3D44), 0.006f, [new(0.1f, 0.1f, 1f), new(0.5f, 0.5f, 1f)]));
+        marks.SetText(null, new Wanderveil.Features.Drawing.PageText(3, "A note", 0.2f, 0.2f, 0.05f, Rgb.Hex(0x3A3D44)));
+        book.Frames(3);
+        book.ClickControl(Last()!.Value);
+        check(book.Shell.ConfirmingClearDrawing && marks.Strokes.Count == 1 && book.Shell.PageOverflow == 0, "Remove all drawing does not ask first, or Customization overflows.");
+        book.Save(artifacts, "drawing-clear-confirm.bmp");
+        book.ClickControl(Last()!.Value);
+        book.ClickControl(Last()!.Value);
+        check(marks.Strokes.Count == 0 && marks.Texts.Count == 0 && !marks.CanUndo, "Remove it does not take every mark for good.");
     }
 
     // On a single page the footer's two decorating controls and the sheet still fit.
