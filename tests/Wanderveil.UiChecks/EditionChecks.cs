@@ -48,7 +48,7 @@ internal static class EditionChecks
         // Version 1 came before editions: every such passport was Gridania, and stays so, chosen.
         var old = PassportStore.Parse("{\"format\":\"wanderveil.passport\",\"version\":1,\"number\":\"EZ 1\",\"name\":\"Ari\"}");
         check(old.Appearance == PassportAppearance.Gridania && old.PreviousAppearance == null && old.Name == "Ari", "A version 1 passport does not migrate to a chosen Gridania edition.");
-        check(PassportStore.Serialize(old).Contains("\"version\": 2", StringComparison.Ordinal), "A migrated passport is not saved as version 2.");
+        check(PassportStore.Serialize(old).Contains("\"version\": 3", StringComparison.Ordinal), "A migrated passport is not saved as the current version.");
         // An edition this version does not know is kept as written, drawing as Eorzea meanwhile.
         var later = PassportStore.Parse("{\"format\":\"wanderveil.passport\",\"version\":2,\"number\":\"EZ 1\",\"appearance\":{\"edition\":\"sharlayan\"}}");
         check(later.Appearance?.Edition == "sharlayan" && later.Edition.Id == "eorzea" && PassportStore.Serialize(later).Contains("sharlayan", StringComparison.Ordinal), "An unknown edition is lost.");
@@ -170,13 +170,15 @@ internal static class EditionChecks
         Console.WriteLine("PASS edition-settings");
     }
 
-    // With no stamp waiting, the nation pages offer nothing in the footer (no Arrange); the identity pages offer Edit.
+    // With no stamp waiting, the nation pages' footer offers only Decorate (no Arrange); the identity pages offer Edit.
     private static void Footer(Action<bool, string> check)
     {
         var profile = new PassportProfile(PassportIdentity.Sample);
         using var book = new CollectChecks.Book(new Vector2(1200, 820), new StampCollection(), identity: profile);
         book.Open();
-        check(!book.ClickControl(book.StampControl()) && !book.Shell.Desk.Arrange, "The nation pages' footer offers a control.");
+        check(book.ClickControl(book.StampControl()) && book.Shell.Symbols.Decorating && !book.Shell.Desk.Arrange, "The nation pages' footer offers Arrange, or not Decorate.");
+        book.Key(ImGuiKey.Escape);
+        book.Key(ImGuiKey.Escape);
         book.Key(ImGuiKey.PageDown);
         book.Click(book.StampControl());
         check(book.Shell.EditingIdentity, "The identity pages' footer does not offer Edit.");

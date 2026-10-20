@@ -41,7 +41,7 @@ internal static class RuntimePassportChecks
                 using var original = File.OpenRead(Path.Combine(AppContext.BaseDirectory, "Assets", "Editions", edition.Id, plate + ".png"));
                 check(SHA256.HashData(stream!).SequenceEqual(SHA256.HashData(original)), $"Runtime and generated plate differ: {edition.Id}-{plate}");
             }
-        foreach (var plate in new[] { "book-cover", "demo-portrait", "stamp-atlas" }.Concat(PassportEdition.All.SelectMany(edition => new[] { "book-open", "cover", "banner", "map-overhead", "crest" }.Select(plate => edition.Id + "-" + plate))))
+        foreach (var plate in new[] { "book-cover", "demo-portrait", "stamp-atlas", "symbols" }.Concat(PassportEdition.All.SelectMany(edition => new[] { "book-open", "cover", "banner", "map-overhead", "crest" }.Select(plate => edition.Id + "-" + plate))))
             foreach (var level in new[] { ".half", ".quarter" })
                 check(plugin.GetManifestResourceNames().Contains("Wanderveil.Assets." + plate + level + ".png"), "Runtime plate lacks a reduced copy: " + plate + level);
         check(!plugin.GetManifestResourceNames().Any(name => name.Contains("SourceSerif4", StringComparison.Ordinal)), "Replaced Source Serif 4 font entered the runtime assembly.");

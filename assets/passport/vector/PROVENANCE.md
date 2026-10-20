@@ -8,7 +8,9 @@ for this repository. No game textures, extracted pixels, third-party logos, or u
 included; nation names and heraldic ideas are attributable to Square Enix and are interpreted, not
 copied. These plates are project assets under the repository license.
 
-Every `editions/<edition>/` folder plus `book-cover.png`, `demo-portrait.png`, and `stamp-atlas.png` are embedded
+The symbol plate (`symbols.png`) reuses the crests and emblems as flat masks; its twelve motifs are new for this repository.
+
+Every `editions/<edition>/` folder plus `book-cover.png`, `demo-portrait.png`, `stamp-atlas.png`, and `symbols.png` are embedded
 in the plugin, one edition per choosable passport. The map is
 schematic, not validated geography, and the portrait is an anonymous placeholder.
 

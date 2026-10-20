@@ -21,7 +21,7 @@ internal sealed record PassportLoad(LoadOutcome Outcome, PassportIdentity? Ident
 internal sealed class PassportStore(string directory)
 {
     internal const string Format = "wanderveil.passport";
-    internal const int Version = 2;
+    internal const int Version = 3;
     private const long MaximumBytes = 256 * 1024;
     // A chosen picture is kept as chosen up to this size; it is scaled down when shown.
     internal const long MaximumPictureBytes = 16 * 1024 * 1024;
@@ -89,6 +89,8 @@ internal sealed class PassportStore(string directory)
         // Migrations: each step upgrades the object one version in memory; the next save writes the current
         // version, and the backup keeps the old one.
         if (version == 1) Migrate1To2(file);
+        // Version 3 added placed symbols; a version 2 file has none, so it reads as it is. (An earlier client
+        // refuses a version 3 file rather than saving over symbols it cannot keep.)
         var passportNumber = Text(file, "number");
         if (string.IsNullOrWhiteSpace(passportNumber)) throw new FormatException("A passport file has its number.");
         DateOnly? issued = null;
@@ -133,6 +135,13 @@ internal sealed class PassportStore(string directory)
             }
             node["colours"] = parts;
         }
+        if (appearance.Symbols is { IsEmpty: false } symbols)
+        {
+            var list = new JsonArray();
+            foreach (var symbol in symbols.Items)
+                list.Add(new JsonObject { ["symbol"] = symbol.Symbol, ["on"] = symbol.Surface, ["x"] = symbol.X, ["y"] = symbol.Y, ["turn"] = symbol.Rotation, ["size"] = symbol.Size });
+            node["symbols"] = list;
+        }
         return node;
     }
 
@@ -165,7 +174,22 @@ internal sealed class PassportStore(string directory)
             if (colours.IsEmpty) colours = null;
         }
         else if (appearance["colours"] != null) throw new FormatException("A passport's colours are a JSON object.");
-        return new PassportAppearance(edition, colours);
+        // Placed symbols in drawing order. One this version does not know, or on a surface it does not have, is
+        // left out (a later version's file is refused before this), as are any past a surface's limit.
+        SymbolLayer? symbols = null;
+        if (appearance["symbols"] is JsonArray placed)
+        {
+            var read = new List<PlacedSymbol>();
+            foreach (var entry in placed)
+            {
+                if (entry is not JsonObject symbol || Text(symbol, "symbol") is not { } id || Text(symbol, "on") is not { } surface)
+                    throw new FormatException("A passport's placed symbol names its symbol and where it is.");
+                read.Add(new PlacedSymbol(id, surface, Real(symbol, "x"), Real(symbol, "y"), Real(symbol, "turn"), Real(symbol, "size")));
+            }
+            symbols = SymbolLayer.Of(read) is { IsEmpty: false } layer ? layer : null;
+        }
+        else if (appearance["symbols"] != null) throw new FormatException("A passport's symbols are a list.");
+        return new PassportAppearance(edition, colours, symbols);
     }
 
     private static string Key(IdentityField field) => JsonNamingPolicy.CamelCase.ConvertName(field.ToString());

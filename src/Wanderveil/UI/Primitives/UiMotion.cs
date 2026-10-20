@@ -23,6 +23,8 @@ internal static class UiMotion
     internal const float RibbonRoll = 0.12f;
     // The tab bar swapping between section tabs and Settings category tabs: the old tabs sink, the new ones rise.
     internal const float TabSwap = 0.36f;
+    // The symbol sheet sliding up over the book, or away.
+    internal const float SheetSlide = 0.24f;
     // The most one frame may advance motion: a long hitch must not skip a sequence's ordering.
     internal const float LongestFrame = 0.1f;
 

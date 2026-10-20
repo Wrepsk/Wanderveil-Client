@@ -47,6 +47,7 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
     private readonly PassportDocumentView passport = new(assets, identity!, portrait);
     private readonly IdentityEditor editor = new(identity!, portrait, character);
     private readonly BookShellColours colours = new(identity!);
+    private readonly BookShellSymbols symbols = new(identity!, assets);
     // The fixed pages (nation, identity); unlimited blank stamp pages follow them.
     private readonly IReadOnlyList<PassportPage> fixedPages = ValidatePages(pages ?? PassportDocumentView.SamplePages);
     private readonly BookShellStamps desk = new(stamps!, assets);
@@ -85,6 +86,8 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
     internal int PageCount => Math.Max(fixedPages.Count, TotalPages);
     internal int FixedPageCount => fixedPages.Count;
     internal BookShellStamps Desk => desk;
+    // Decorating the cover and first pages with symbols.
+    internal BookShellSymbols Symbols => symbols;
     internal PassportProfile Identity => holder;
     // The colours the plates were drawn in last frame (null before the first frame).
     internal PlateTint? PlateTint => editions.Tint;
@@ -161,11 +164,11 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         try { return DrawBook(bounds, context); }
         finally
         {
-            holding = pressing || dragging || desk.Busy || ImGui.IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows) && ImGui.IsAnyItemActive();
+            holding = pressing || dragging || desk.Busy || symbols.Busy || ImGui.IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows) && ImGui.IsAnyItemActive();
             // A field being written in keeps Escape for itself; otherwise the book wants it while it is shown and
             // either holds a stamp or info, or has focus.
             wantsEscape = motion.Phase != BookPhase.Hidden && !ImGui.IsAnyItemActive()
-                && (desk.Busy || desk.Info != null || EditingIdentity || ImGui.IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows));
+                && (desk.Busy || desk.Info != null || EditingIdentity || symbols.Decorating || ImGui.IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows));
         }
     }
 
@@ -180,6 +183,9 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         if (escape && !ImGui.IsAnyItemActive())
         {
             if (desk.Busy) desk.Cancel();
+            else if (symbols.Busy) symbols.Cancel();
+            else if (symbols.SheetOpen) symbols.CloseSheet();
+            else if (symbols.Decorating) symbols.Stop();
             else if (desk.Info != null) desk.CloseInfo();
             else if (EditingIdentity) StopEditing();
             else motion.Dismiss();
@@ -196,6 +202,8 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         // Editing lasts while the identity pages rest open; turning or leaving them ends it.
         var identityShown = Section == BookSection.Passport && !turning && !riffle.Active && (IsIdentity(VisiblePage) || layout.IsSpread && IsIdentity(VisiblePage + 1));
         if (EditingIdentity && !identityShown) StopEditing();
+        // Decorating lasts while the cover or the first pages (before the stamps) rest open.
+        if (symbols.Decorating && (holder.Identity.Appearance == null || Section == BookSection.Passport && !turning && !riffle.Active && VisiblePage >= fixedPages.Count)) symbols.Stop();
 
         // Pages, tabs, and controls fade in once the cover has landed.
         ImGui.PushStyleVar(ImGuiStyleVar.Alpha, MathF.Max(0.01f, motion.Reveal));
@@ -249,9 +257,12 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         var back = false;
         PassportEdition? issued = null;
         desk.BeginFrame();
+        symbols.BeginFrame();
         if (riffle.Active) DrawRiffle();
         else if (turning) DrawTurn();
         else DrawSpread(Section, Section == BookSection.Settings ? (int)Category : VisiblePage);
+        symbols.DrawHandles(page);
+        symbols.DrawSheet(layout.IsSpread ? layout.RightPage : layout.LeftPage, page, ImGui.GetIO().DeltaTime, ReducedMotion);
 
         var openSettings = Section != BookSection.Settings && BookControl.Draw("Settings", "Settings", layout.Settings(context), page, BookControlStyle.Ink, hint: "Wanderveil settings");
         if (BookControl.Draw("Smaller", "-", layout.Tool(0, context), page, BookControlStyle.Ink, hint: "Smaller passport")) PreferredWidth = MathF.Max(420, PreferredWidth / 1.15f);
@@ -261,9 +272,22 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         // The nation pages hold no stamps to arrange, so there the footer only offers placing a waiting stamp (on the
         // identity pages it offers Edit; on the stamp pages, the whole stamp control).
         var nationShown = Section == BookSection.Passport && IsNation(VisiblePage) && (!layout.IsSpread || IsNation(VisiblePage + 1));
-        if (resting && (!nationShown || desk.Carrying != null || collection.Unplaced.Any())) StampControls(identityShown);
+        UiRect? lastFooter = null;
+        if (resting && symbols.Decorating) DecorateControls();
+        else
+        {
+            if (resting && (!nationShown || desk.Carrying != null || collection.Unplaced.Any())) StampControls(identityShown);
+            // The first pages (and, on the closed book, the cover) take symbols.
+            if (resting && VisiblePage < fixedPages.Count && holder.Identity.Appearance != null && desk.Carrying == null && !EditingIdentity
+                && BookControl.Draw("Decorate", "Decorate", Footer("Decorate"), page, BookControlStyle.Ink, hint: "Place symbols on these pages (and on the cover)"))
+            {
+                StopEditing();
+                symbols.Start();
+            }
+        }
         ImGui.PopStyleVar();
         var edgeTurn = desk.Update(bounds, layout.Book, layout.LeftPage.Size.X, page, ImGui.GetIO().DeltaTime);
+        symbols.Update(bounds, page);
 
         var placeStamp = discover.TakePassportRequest();
         if (issued != null) Exchange(issued.Id);
@@ -285,7 +309,7 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         var turns = Section == BookSection.Passport && !riffle.Active;
         // While a stamp is carried or turned, the mouse belongs to it: the book neither moves nor turns.
         int? click = null;
-        var drag = desk.Busy || desk.TookClick ? Vector2.Zero : Gesture(layout.Book, turns, out click);
+        var drag = desk.Busy || desk.TookClick || symbols.Busy || symbols.TookClick ? Vector2.Zero : Gesture(layout.Book, turns, out click);
         if (turns)
         {
             if (edgeTurn != 0 && !turn.Active) Turn(edgeTurn, step);
@@ -311,7 +335,7 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
                 if (BookControl.Draw("Identity", edit, Footer(edit), page, BookControlStyle.Ink, hint: EditingIdentity ? "Stop editing (Escape)" : "Write your details, signature, and picture"))
                 {
                     if (EditingIdentity) StopEditing();
-                    else { EditingIdentity = true; editor.Reset(); }
+                    else { EditingIdentity = true; editor.Reset(); symbols.Stop(); }
                 }
                 return;
             }
@@ -325,12 +349,32 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
             else desk.Arrange = !desk.Arrange;
         }
 
-        // A footer control's place: right-aligned before the size and close marks, clear of the page number on a single page.
+        // While decorating, the footer offers Done and the symbol sheet.
+        void DecorateControls()
+        {
+            if (BookControl.Draw("Decorate", "Done", Footer("Done"), page, BookControlStyle.Ink, hint: "Stop decorating (Escape)")) symbols.Stop();
+            var sheet = symbols.SheetOpen ? "Close sheet" : "Add symbol";
+            if (symbols.Carrying == null && BookControl.Draw("Symbol sheet", sheet, Footer(sheet), page, BookControlStyle.Ink, hint: symbols.SheetOpen ? "Put the sheet of symbols away" : "Choose a symbol to place")) symbols.ToggleSheet();
+        }
+
+        // A footer control's place: right-aligned before the size and close marks (or left of the footer control
+        // placed before it), clear of the page number on a single page.
         UiRect Footer(string label)
         {
-            var tools = layout.Tool(0, context);
+            var first = lastFooter == null;
+            var tools = lastFooter ?? layout.Tool(0, context);
             var width = MathF.Max(BookShellLayout.SettingsWidth(context), UiTypography.Measure(label, TextRole.Caption, page, float.MaxValue, false).X + 20 * page.Scale);
-            return new UiRect(new Vector2(tools.Position.X - BookShellLayout.Gap(context) - width, tools.Position.Y), new Vector2(width, tools.Size.Y));
+            var placed = new UiRect(new Vector2(tools.Position.X - BookShellLayout.Gap(context) - width, tools.Position.Y), new Vector2(width, tools.Size.Y));
+            // A second control that would cover a page number steps left past it (the first is placed clear of it).
+            var number = UiTypography.Measure("100", TextRole.Caption, page, 80, false).X / 2 + 8 * page.Scale;
+            foreach (var right in first ? [] : layout.IsSpread ? new[] { true, false } : [false])
+            {
+                var folio = layout.Folio(right).X;
+                if (placed.Position.X < folio + number && placed.Max.X > folio - number)
+                    placed = placed with { Position = new Vector2(folio - number - BookShellLayout.Gap(context) - width, placed.Position.Y) };
+            }
+            lastFooter = placed;
+            return placed;
         }
 
         // The resting spread of a section: passport pages, or a section's two pages (one when narrow).
@@ -417,6 +461,7 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
             var entry = PageAt(index);
             return () =>
             {
+                if (entry.Kind != PassportPageKind.Stamps) passport.DrawSymbols(entry.Id, new UiRect(ImGui.GetWindowPos(), ImGui.GetWindowSize()), symbols.Hidden);
                 if (entry.Kind == PassportPageKind.NationBanner) Banner(index, side == Side.Right);
                 Contents(entry, Printed(Fit(entry)), false, side == Side.Right);
             };
@@ -426,6 +471,12 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         void DocumentPage(int index, UiRect region, bool rightSide, bool live)
         {
             var entry = PageAt(index);
+            // The holder's symbols lie on the paper beneath everything printed on the page.
+            if (entry.Kind != PassportPageKind.Stamps)
+            {
+                passport.DrawSymbols(entry.Id, region, symbols.Hidden);
+                if (live) symbols.Register(entry.Id, region);
+            }
             if (entry.Kind == PassportPageKind.NationBanner) Banner(index, rightSide);
             var fit = Fit(entry);
             var type = Printed(fit);
@@ -782,6 +833,7 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         if (to == Section || riffle.Active) return;
         if (turn.Active) { turn.Finish(); VisiblePage = turn.Target; }
         StopEditing();
+        symbols.Stop();
         desk.Cancel();
         desk.CloseInfo();
         pageEntry = null;
@@ -1043,6 +1095,7 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         desk.Cancel();
         desk.CloseInfo();
         StopEditing();
+        symbols.Stop();
         pageEntry = null;
         ribbonExtension = 0f;
         pressing = dragging = false;
@@ -1081,12 +1134,15 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
     private void CloseBook()
     {
         motion.CloseToCover();
+        // Decorating carries on onto the cover; a symbol in hand is put back.
+        symbols.Cancel();
         pressing = dragging = false;
     }
 
     private void OpenBook()
     {
         motion.Open();
+        symbols.Cancel();
         VisiblePage = 0;
         turn.Reset(0);
         riffle.Reset();
@@ -1096,7 +1152,10 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
 
     private BookShellIntent DrawClosed(UiRect bounds, UiContext context)
     {
-        passport.DrawCover(bounds, context);
+        passport.DrawCover(bounds, context, carried: symbols.Hidden);
+        var surface = PassportDocumentView.CoverSurface(bounds);
+        symbols.BeginFrame();
+        if (holder.Identity.Appearance != null) symbols.Register(SymbolSurface.Cover, surface);
         var moving = motion.IsMoving;
         ImGui.BeginDisabled(moving);
         // Window controls are stamped into the cover's lower band, beneath its arc; Settings live inside the book.
@@ -1113,12 +1172,36 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         if (BookControl.Draw("Larger", "+", new UiRect(new Vector2(x, top), new Vector2(small, height)), stamp, BookControlStyle.Foil, hint: "Larger passport")) PreferredWidth = MathF.Min(1400, PreferredWidth * 1.15f);
         x += small + spacing;
         var close = BookControl.Draw("Close", "×", new UiRect(new Vector2(x, top), new Vector2(small, height)), stamp, BookControlStyle.Foil, hint: "Close passport (Escape)");
+        // Decorate (or, while decorating, Done and the sheet), left of the window marks.
+        var left = board.X + 356 * unit - 3 * small - 2 * spacing;
+        bool CoverMark(string id, string label, string hint)
+        {
+            var width = UiTypography.Measure(label, TextRole.Caption, stamp, float.MaxValue, false).X + 16 * unit;
+            left -= spacing + width;
+            return BookControl.Draw(id, label, new UiRect(new Vector2(left, top), new Vector2(width, height)), stamp, BookControlStyle.Foil, hint: hint);
+        }
+        if (holder.Identity.Appearance != null && !symbols.Decorating && CoverMark("Decorate", "Decorate", "Place symbols on the cover (and the first pages)")) symbols.Start();
+        else if (symbols.Decorating)
+        {
+            if (CoverMark("Decorate", "Done", "Stop decorating (Escape)")) symbols.Stop();
+            var sheet = symbols.SheetOpen ? "Close sheet" : "Add symbol";
+            if (symbols.Carrying == null && CoverMark("Symbol sheet", sheet, symbols.SheetOpen ? "Put the sheet of symbols away" : "Choose a symbol to place")) symbols.ToggleSheet();
+        }
         ImGui.EndDisabled();
         if (close) motion.Dismiss();
+        // Symbols on the cover are sized like a page's printing: the board's width over a page's 520 units.
+        var coverType = context with { Scale = surface.Size.X / 520f, FontSize = MathF.Max(10f, MathF.Round(surface.Size.X * 16f / 420f)) };
+        if (!moving)
+        {
+            symbols.DrawHandles(coverType);
+            symbols.DrawSheet(new UiRect(board + new Vector2(22, 112) * unit, new Vector2(376, 404) * unit), coverType, ImGui.GetIO().DeltaTime, ReducedMotion);
+            symbols.Update(bounds, coverType);
+        }
         if (moving) { pressing = dragging = false; return new BookShellIntent(motion.Phase == BookPhase.Hidden, Vector2.Zero); }
 
         var cover = new UiRect(board, new Vector2(420, 560) * unit);
-        var drag = Gesture(cover, true, out var click, opensOnly: true);
+        int? click = null;
+        var drag = symbols.Busy || symbols.TookClick ? Vector2.Zero : Gesture(cover, true, out click, opensOnly: true);
         if (click > 0) OpenBook();
         else if (!ImGui.IsAnyItemFocused() && (Keys(ImGuiKey.Space) || Keys(ImGuiKey.Enter) || Keys(ImGuiKey.KeypadEnter) || Keys(ImGuiKey.PageDown))) OpenBook();
         return new BookShellIntent(motion.Phase == BookPhase.Hidden, drag);

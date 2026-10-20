@@ -22,6 +22,7 @@ Status: implemented foundations for static Passport and Discover previews, 18 Oc
 | `PassportIdentity.cs` | The holder's identity (self-reported fields, number, issue date, portrait placement) with field limits and normalization, `PortraitCrop`, and the `PassportProfile` the pages edit |
 | `PassportEdition.cs` | The six nation editions (words, cloth, foil, page ink) and `PassportAppearance`, the part a change of edition replaces |
 | `PassportColours.cs` | The holder's colours (`Rgb`, `PassportColours`) and `PassportLook`: the colours drawn, kept legible |
+| `PassportSymbols.cs` | The symbol set (`PassportSymbol`), the surfaces that take symbols, a placed symbol, and `SymbolLayer`: symbols in drawing order, at most 24 to a surface |
 | `EditionShelf.cs` | The editions as small real covers to choose from, with or without names beneath |
 | `PictureFrames.cs` | The five frames for the holder's picture (printed, corners, embossed, deckled, none), as draw-list geometry |
 | `IdentityEditor.cs` | Writing on the identity pages in place: soft-wrapped fields over a faint inset, picture placement, the character fill, and the cover line |
@@ -37,6 +38,7 @@ Status: implemented foundations for static Passport and Discover previews, 18 Oc
 | `Infrastructure/Storage/SafeFile.cs`, `BackgroundSaver.cs` | Shared atomic save with backup and recovery, profile names, and coalesced background saving |
 | `UI/Components/PlateRecolour.cs` | Recolouring plates through their weight maps, coverage-weighted reduced copies, and a small PNG reader for the plugin's own plates |
 | `UI/BookShellColours.cs` | The Settings colour rows (swatches, custom picker, May adjust boxes, reset) and the How it looks preview |
+| `UI/BookShellSymbols.cs`, `Components/SymbolArt.cs` | Decorating the cover and first pages: the symbol sheet, a symbol in hand, knobs that turn and resize, × to take one off; and drawing a symbol tinted, turned, and carried on a turning leaf |
 | `Infrastructure/Media/PortraitPicture.cs`, `Infrastructure/Game/GameCharacter.cs` | The holder's picture (file picker, background decode and copy, texture swap) and the logged-in character, in game only |
 | `StampArt.cs` | A design as a faint square proof or an issued stamp turned as placed, with the procedural motif as fallback |
 | `PostcardArtwork.cs` | Original geometric scenery; no textures or external art |

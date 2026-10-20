@@ -30,8 +30,9 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportProfile h
 
     // window is the cover plate's rectangle. With a leaf, the cover is drawn turning on its spine:
     // window is then the flat placement whose board the leaf's Source describes. edition draws another
-    // edition's cover than the passport's (the edition chooser), without the holder's own line.
-    internal void DrawCover(UiRect window, UiContext context, LeafProjection? leaf = null, PassportEdition? edition = null)
+    // edition's cover than the passport's (the edition chooser), without the holder's own line or symbols.
+    // carried is the index of a symbol in the holder's hand, left out here.
+    internal void DrawCover(UiRect window, UiContext context, LeafProjection? leaf = null, PassportEdition? edition = null, int carried = -1)
     {
         var shown = edition ?? holder.Identity.Edition;
         // The passport's own cover in its holder's colours; another edition's as that edition prints it.
@@ -51,6 +52,10 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportProfile h
         // Sizes, tops, and letter-spacing come from the Gridania board in the Eorzea Passport design (420 x 560 units).
         var (board, unit) = BookSurface.CoverBoard(window);
         var centerX = board.X + 210 * unit;
+        // The holder's symbols, pressed in the same foil as the lettering, beneath it.
+        if (edition == null && holder.Identity.Appearance?.Symbols is { } symbols)
+            SymbolArt.DrawSurface(list, assets, symbols, SymbolSurface.Cover, CoverSurface(window), colours.Foil, leaf, carried,
+                new Vector2(0, MathF.Max(1, unit)), colours.PaleCloth ? new Vector4(1f, 1f, 1f, 0.6f) : new Vector4(0.02f, 0.05f, 0.03f, 0.55f));
         CoverText(shown.Heading, 117, 13, 6);
         if (Plate(BookAsset.EditionCrest, out var crest, 150 * unit))
         {
@@ -96,6 +101,19 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportProfile h
             UiTypography.DrawTracked(list, position + new Vector2(0, MathF.Max(1, unit)), text, TextRole.Title, type, spacing, shadow);
             UiTypography.DrawTracked(list, position, text, TextRole.Title, type, spacing, foil with { W = alpha });
         }
+    }
+
+    // The board of a cover plate placed at window: where the cover's symbols go.
+    internal static UiRect CoverSurface(UiRect window)
+    {
+        var (board, unit) = BookSurface.CoverBoard(window);
+        return new UiRect(board, new Vector2(420, 560) * unit);
+    }
+
+    // The holder's symbols on one of the first pages, on the paper beneath everything printed there.
+    internal void DrawSymbols(string page, UiRect area, int carried = -1)
+    {
+        if (holder.Identity.Appearance?.Symbols is { } symbols) SymbolArt.DrawSurface(ImGui.GetWindowDrawList(), assets, symbols, page, area, UiTheme.EditionInk, except: carried);
     }
 
     // The passport number engraved into the lower right corner of a stamp page, as on the printed design:

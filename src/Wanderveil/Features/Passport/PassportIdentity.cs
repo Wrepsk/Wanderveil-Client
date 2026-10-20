@@ -210,6 +210,26 @@ internal sealed class PassportProfile(PassportIdentity identity)
         return Update(Identity with { Appearance = appearance with { Colours = colours.IsEmpty ? null : colours } });
     }
 
+    // Places a symbol on top of the others on its surface; false when it is unknown or its surface is full.
+    internal bool AddSymbol(PlacedSymbol symbol) =>
+        symbol.IsKnown && Appearance().Placed.HasRoomOn(symbol.Surface) && SetSymbols(Appearance().Placed.Add(symbol));
+
+    // Moves, turns, or resizes the symbol at index (in the layer's drawing order); it comes to the top.
+    internal bool ReplaceSymbol(int index, PlacedSymbol symbol)
+    {
+        var placed = Appearance().Placed;
+        if ((uint)index >= (uint)placed.Items.Length || !symbol.IsKnown) return false;
+        // Carried onto another surface, it needs room there.
+        if (symbol.Surface != placed.Items[index].Surface && !placed.HasRoomOn(symbol.Surface)) return false;
+        return SetSymbols(placed.Replace(index, symbol));
+    }
+
+    internal bool RemoveSymbol(int index) => SetSymbols(Appearance().Placed.Remove(index));
+
+    private PassportAppearance Appearance() => Identity.Appearance ?? new PassportAppearance(Identity.Edition.Id);
+
+    private bool SetSymbols(SymbolLayer symbols) => Update(Identity with { Appearance = Appearance() with { Symbols = symbols.IsEmpty ? null : symbols } });
+
     // Puts back the appearance the last change replaced (and keeps the one it replaces in turn).
     internal bool RestorePrevious() =>
         Identity.PreviousAppearance is { } previous && Update(Identity with { Appearance = previous, PreviousAppearance = Identity.Appearance });

@@ -39,6 +39,22 @@ internal sealed class PreviewTextures : IBookAssets
         images[BookAsset.NationBanner] = Study("banner");
         images[BookAsset.NationMap] = Study("map-overhead");
         images[BookAsset.EditionCrest] = Study("crest");
+        images[BookAsset.Symbols] = Load(Path.Combine(AppContext.BaseDirectory, "Assets", "symbols.png"), 3000);
+    }
+
+    private BookImage Load(string file, ulong id)
+    {
+        using var bitmap = new Bitmap(file);
+        var data = bitmap.LockBits(new Rectangle(0, 0, bitmap.Width, bitmap.Height), ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+        try
+        {
+            var pixels = new byte[bitmap.Width * bitmap.Height * 4];
+            for (var y = 0; y < bitmap.Height; y++) Marshal.Copy(data.Scan0 + y * data.Stride, pixels, y * bitmap.Width * 4, bitmap.Width * 4);
+            for (var pixel = 0; pixel < pixels.Length; pixel += 4) (pixels[pixel], pixels[pixel + 2]) = (pixels[pixel + 2], pixels[pixel]);
+            Register(id, bitmap.Width, bitmap.Height, pixels);
+            return new BookImage(new ImTextureID(id), bitmap.Width, bitmap.Height);
+        }
+        finally { bitmap.UnlockBits(data); }
     }
 
     public bool TryGet(BookAsset asset, out BookImage image, float drawWidth = 0f) => images.TryGetValue(asset, out image);

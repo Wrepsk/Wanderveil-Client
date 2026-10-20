@@ -159,6 +159,48 @@ const neutral = { ...shared, ...editions.eorzea };
 await emit(cover("eorzea", neutral), "book-cover.png", COVER.w, COVER.h);
 await emit(fill(read("portrait.svg"), neutral), "demo-portrait.png", 1086, 1448);
 await emit(read("stamp-atlas.svg"), "stamp-atlas.png", 2172, 724);
+await symbols();
+
+// The symbols a holder places on the cover and first pages, as white masks the client tints (foil on the cover,
+// page ink on the paper): white prints fully, grey fainter, and black is cut out. The six nations' crests, their
+// emblems, then the motifs of svg/symbols.svg, in a 6 x 4 grid of 256 px cells; the client's PassportSymbol.All
+// keeps this order.
+async function symbols() {
+  const SYMBOL = 256;
+  const nations = ["eorzea", "gridania", "uldah", "limsa", "ishgard", "garlemald"];
+  const motifs = ["sparkle", "crystal", "moon", "sun", "leaf", "waves", "snowflake", "key", "flower", "feather", "mountains", "heart"];
+  const mask = { cover: "#000000", foil: "#FFFFFF", accent: "#8C8C8C", paper: "#000000", ink: "#FFFFFF" };
+  // Masks are flat: no embossing filter.
+  const flat = (svg) => fill(svg, mask).replace(/\sfilter="url\(#\w+\)"/g, "");
+  const sources = Object.fromEntries([...read("symbols.svg").matchAll(/<symbol id="([\w-]+)"[^>]*>([\s\S]*?)<\/symbol>/g)].map((match) => [match[1], match[2]]));
+  const cells = [
+    ...nations.map((id) => nest(flat(read(`crest-${id}.svg`)), -50, -50, 100, 100)),
+    ...nations.map((id) => nest(flat(read(`emblem-${id}.svg`)), -46, -46, 92, 92)),
+    ...motifs.map((name) => { if (!(name in sources)) throw new Error(`No symbol ${name} in symbols.svg`); return sources[name]; }),
+  ];
+  const width = 6 * SYMBOL;
+  const height = 4 * SYMBOL;
+  const atlas = Buffer.alloc(width * height * 4);
+  for (const [index, cell] of cells.entries()) {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-54 -54 108 108" width="${SYMBOL}" height="${SYMBOL}"><g fill="#FFFFFF">${cell}</g></svg>`;
+    const { data } = await raw(svg);
+    const left = (index % 6) * SYMBOL;
+    const top = Math.floor(index / 6) * SYMBOL;
+    for (let y = 0; y < SYMBOL; y++) for (let x = 0; x < SYMBOL; x++) {
+      const from = (y * SYMBOL + x) * 4;
+      const to = ((top + y) * width + left + x) * 4;
+      const light = (0.2126 * data[from] + 0.7152 * data[from + 1] + 0.0722 * data[from + 2]) / 255;
+      atlas.fill(255, to, to + 3);
+      atlas[to + 3] = Math.round(data[from + 3] * light);
+    }
+  }
+  // No eighth copy: its 32 px cells would lose the thinner lines.
+  for (const [suffix, divisor] of LEVELS.filter(([, divisor]) => divisor <= 4)) {
+    const file = resolve(out, `symbols${suffix}.png`);
+    await sharp(atlas, { raw: { width, height, channels: 4 } }).resize(width / divisor, height / divisor, { kernel: "lanczos3" }).png({ compressionLevel: 9 }).toFile(file);
+    results.push(`symbols${suffix}`);
+  }
+}
 
 if (process.argv.includes("--sheet")) {
   // Review-only contact sheet (gitignored): every edition cover with its crest, then the runtime spread.

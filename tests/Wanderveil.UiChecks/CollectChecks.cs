@@ -477,6 +477,8 @@ internal static class CollectChecks
         }
 
         internal BookShellLayout Layout => BookShellLayout.Create(root, context, Shell.VisiblePage);
+        // The book window as last drawn.
+        internal UiRect Root => root;
 
         // A page's region on screen: the right page of a spread, or its left (or only) page.
         internal UiRect Page(bool right) => right && Layout.IsSpread ? Layout.RightPage : Layout.LeftPage;
