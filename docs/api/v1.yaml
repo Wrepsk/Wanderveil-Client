@@ -1,11 +1,12 @@
 openapi: 3.1.0
 info:
   title: Wanderveil API
-  version: 1.0.0-draft.1
+  version: 1.0.0
   summary: Sign-in by character verification, sessions, and the holder's private passport.
   description: |
-    Draft, 20 October 2026. Nothing implements it yet, and it may change without notice until the first client release
-    that uses it. See README.md beside this file for the rules every endpoint follows.
+    Version 1, 21 October 2026: implemented by the Wanderveil server and this client, and used in game against a local
+    server. Compatibility promises begin with the first client release that uses it; until then it may still change.
+    See README.md beside this file for the rules every endpoint follows.
 
     Every account is one FFXIV character verified through the Lodestone or XIVAuth. A verification proves control of
     that character's Lodestone profile at sign-in time, nothing more.
