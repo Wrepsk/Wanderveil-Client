@@ -146,8 +146,18 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportProfile h
         {
             case PassportPageKind.NationBanner: break; // Drawn on the paper by DrawNationBanner.
             case PassportPageKind.NationMap: Nation(ref flow, false, width, context); break;
-            case PassportPageKind.Portrait: Portrait(ref flow, width, context, editor); break;
-            case PassportPageKind.Information: Information(ref flow, width, context, editor); break;
+            // The identity spread as its holder laid it out.
+            case PassportPageKind.Portrait or PassportPageKind.Information:
+                switch (Layout, page.Kind)
+                {
+                    case (IdentityLayout.Compact, PassportPageKind.Portrait): Card(ref flow, width, context, editor); break;
+                    case (IdentityLayout.Compact, _): Record(ref flow, width, context, editor, true); break;
+                    case (IdentityLayout.Mirrored, PassportPageKind.Portrait): Information(ref flow, width, context, editor); break;
+                    case (IdentityLayout.Mirrored, _): Portrait(ref flow, width, context, editor); break;
+                    case (_, PassportPageKind.Portrait): Portrait(ref flow, width, context, editor); break;
+                    default: Information(ref flow, width, context, editor); break;
+                }
+                break;
             case PassportPageKind.Stamps: break; // Blank paper; the owner's stamps are drawn over it.
             default: flow.Text("A place for future memories", TextRole.Title); break;
         }
@@ -156,6 +166,11 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportProfile h
         ImGui.Dummy(new Vector2(width, flow.Height));
         return flow.Height;
     }
+
+    private IdentityLayout Layout => holder.Identity.Appearance?.IdentityLayout ?? IdentityLayout.Classic;
+
+    // Whether this page ends the identity spread's reading (its record), where the way on to Discover is printed.
+    internal bool EndsIdentity(PassportPage page) => page.Kind == (Layout == IdentityLayout.Mirrored ? PassportPageKind.Portrait : PassportPageKind.Information);
 
     // A pennant hung from the top edge of the page down to the lower margin, with foil lettering.
     internal void DrawNationBanner(UiRect paper, float bottom, UiContext context)
@@ -218,14 +233,28 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportProfile h
         var identity = holder.Identity;
         flow.Text("02 / PORTRAIT & SIGNATURE", TextRole.Caption, true);
         flow.Gap(16);
-        var area = flow.Reserve(330 * context.Scale);
+        Picture(ref flow, 330 * context.Scale, context, editor);
+        flow.Gap(24);
+        Signature(ref flow, width, context, editor);
+    }
+
+    // The portrait in its frame, its caption, and (editing) the picture's links and frame choice.
+    private void Picture(ref PageFlow flow, float height, UiContext context, IdentityEditor? editor)
+    {
+        var identity = holder.Identity;
+        var area = flow.Reserve(height);
         var own = flow.IsDrawing ? PortraitFrame(area, context, editor) : identity.Portrait != null && picture?.TryGet(out _) == true;
         var hasPlaceholder = assets.TryGet(BookAsset.Portrait, out _);
         flow.Gap(12);
         flow.Text(own ? editor != null ? "DRAG TO MOVE / SCROLL TO ZOOM" : "HOLDER'S PORTRAIT" : hasPlaceholder ? "Demo portrait placeholder" : "Offline portrait preview", TextRole.Caption, true);
         editor?.PictureLinks(ref flow);
         if (own) editor?.FrameChoice(ref flow);
-        flow.Gap(24);
+    }
+
+    // The signature line, and (editing) the cover line beneath it.
+    private void Signature(ref PageFlow flow, float width, UiContext context, IdentityEditor? editor)
+    {
+        var identity = holder.Identity;
         // A long name signs smaller, as a hand would to fit the line; past half size it wraps instead of clipping.
         var type = context with { HeadingFont = context.SignatureFont, FontSize = context.FontSize * 1.5f };
         if (editor != null) editor.Field(ref flow, IdentityField.Signature, TextRole.Heading, identity.Name.Length > 0 ? identity.Name : "Your signature", type);
@@ -286,6 +315,19 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportProfile h
         flow.Gap(16);
         Pair(ref flow, new("FAVORITE JOB", IdentityField.FavoriteJob, "Favorite job"), new("FREE COMPANY", IdentityField.FreeCompany, "Free company"), width, context, editor);
         flow.Gap(16);
+        Record(ref flow, width, context, editor, false);
+    }
+
+    // The passport's record: issue date and number, the wish for the road, a few words, and the machine line. As a
+    // page of its own (the compact layout) it opens with the edition's heading.
+    private void Record(ref PageFlow flow, float width, UiContext context, IdentityEditor? editor, bool page)
+    {
+        var identity = holder.Identity;
+        if (page)
+        {
+            flow.Text(identity.Edition.Name.ToUpperInvariant() + " / PASSPORT RECORD", TextRole.Caption, true);
+            flow.Gap(16);
+        }
         var issued = identity.Issued?.ToString("dd MMM yyyy", System.Globalization.CultureInfo.InvariantCulture).ToUpperInvariant() ?? "";
         Pair(ref flow, new("DATE OF ISSUE", null, issued), new("PASSPORT NO.", null, identity.Number), width, context, null, true);
         flow.Rule();
@@ -302,6 +344,45 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportProfile h
         var mono = new PageFlow(flow.Reserve(0).Position, width, context with { BodyFont = context.MonoFont }, flow.IsDrawing);
         mono.Text(identity.MachineLine(), TextRole.Caption, true);
         flow.Reserve(mono.Height);
+    }
+
+    // The compact layout's first page: the portrait beside the name and details, the signature beneath.
+    private void Card(ref PageFlow flow, float width, UiContext context, IdentityEditor? editor)
+    {
+        var identity = holder.Identity;
+        flow.Text(identity.Edition.Name.ToUpperInvariant() + " / ADVENTURER IDENTITY", TextRole.Caption, true);
+        editor?.CharacterLink(ref flow);
+        flow.Gap(16);
+        var gap = 18 * context.Scale;
+        var pictureWidth = MathF.Round(width * 0.42f);
+        var column = width - pictureWidth - gap;
+        // Measured first, then drawn side by side in a row as tall as the taller.
+        var left = new PageFlow(Vector2.Zero, pictureWidth, context, false);
+        var right = new PageFlow(Vector2.Zero, column, context, false);
+        Picture(ref left, pictureWidth / PortraitAspect, context, editor);
+        Details(ref right, editor);
+        var row = flow.Reserve(MathF.Max(left.Height, right.Height));
+        if (flow.IsDrawing)
+        {
+            left = new PageFlow(row.Position, pictureWidth, context, true);
+            right = new PageFlow(row.Position + new Vector2(pictureWidth + gap, 0), column, context, true);
+            Picture(ref left, pictureWidth / PortraitAspect, context, editor);
+            Details(ref right, editor);
+        }
+        flow.Gap(24);
+        Signature(ref flow, width, context, editor);
+
+        void Details(ref PageFlow details, IdentityEditor? writer)
+        {
+            if (writer != null) writer.Field(ref details, IdentityField.Name, TextRole.Title, "Your name");
+            else if (identity.Name.Length > 0) details.Text(identity.Name, TextRole.Title);
+            else details.Text("Not filled in yet. Choose Edit to write your details.", TextRole.Body, true);
+            foreach (var entry in new Entry[] { new("HOME WORLD", IdentityField.HomeWorld, "Home world"), new("DATA CENTER", IdentityField.DataCenter, "Data center"), new("FAVORITE JOB", IdentityField.FavoriteJob, "Favorite job"), new("FREE COMPANY", IdentityField.FreeCompany, "Free company") })
+            {
+                details.Gap(14);
+                Field(ref details, entry, writer);
+            }
+        }
     }
 
     // One labelled box of the identity form: a field the holder writes (Field set; Text is its placeholder),

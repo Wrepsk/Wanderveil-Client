@@ -136,6 +136,7 @@ internal sealed class PassportStore(string directory)
             node["colours"] = parts;
         }
         if (appearance.Background != PageBackground.Guilloche) node["background"] = JsonNamingPolicy.CamelCase.ConvertName(appearance.Background.ToString());
+        if (appearance.IdentityLayout != IdentityLayout.Classic) node["identityLayout"] = JsonNamingPolicy.CamelCase.ConvertName(appearance.IdentityLayout.ToString());
         if (appearance.Symbols is { IsEmpty: false } symbols)
         {
             var list = new JsonArray();
@@ -195,7 +196,12 @@ internal sealed class PassportStore(string directory)
         if (appearance["background"] is JsonValue backgroundValue && backgroundValue.TryGetValue<string>(out var backgroundName))
             background = Enum.TryParse<PageBackground>(backgroundName, true, out var parsed) && Enum.IsDefined(parsed) && !char.IsDigit(backgroundName[0]) ? parsed : PageBackground.Guilloche;
         else if (appearance["background"] != null) throw new FormatException("A passport's background is a name.");
-        return new PassportAppearance(edition, colours, symbols, background);
+        // So is a layout: an unknown one reads as the classic spread.
+        var identityLayout = IdentityLayout.Classic;
+        if (appearance["identityLayout"] is JsonValue layoutValue && layoutValue.TryGetValue<string>(out var layoutName))
+            identityLayout = Enum.TryParse<IdentityLayout>(layoutName, true, out var parsedLayout) && Enum.IsDefined(parsedLayout) && !char.IsDigit(layoutName[0]) ? parsedLayout : IdentityLayout.Classic;
+        else if (appearance["identityLayout"] != null) throw new FormatException("A passport's identity layout is a name.");
+        return new PassportAppearance(edition, colours, symbols, background, identityLayout);
     }
 
     private static string Key(IdentityField field) => JsonNamingPolicy.CamelCase.ConvertName(field.ToString());

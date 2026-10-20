@@ -437,6 +437,8 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
                             if (side != Side.Left && pendingEdition == null) { colours.Draw(type); SymbolOptions(type); }
                             break;
                         case SettingsCategory.Layout:
+                            // Left: the identity spread's layout; right: the pages' background.
+                            if (side != Side.Right) { ImGui.Dummy(new Vector2(0, 24 * type.Scale)); IdentityLayoutOptions(type); }
                             if (side == Side.Single) ImGui.Dummy(new Vector2(0, 24 * type.Scale));
                             if (side != Side.Left) BackgroundOptions(type);
                             break;
@@ -531,7 +533,7 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
                 return;
             }
             passport.Compose(entry, type, live && EditingIdentity ? editor : null);
-            if (entry.Kind == PassportPageKind.Information && !(live && EditingIdentity))
+            if (passport.EndsIdentity(entry) && !(live && EditingIdentity))
             {
                 ImGui.Dummy(new Vector2(0, 10 * type.Scale));
                 explore |= BookControl.Link("Explore discoveries »", type);
@@ -1058,6 +1060,117 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
     }
 
     private readonly Dictionary<PageBackground, Vector2> backgroundTiles = [];
+    private readonly Dictionary<IdentityLayout, Vector2> identityTiles = [];
+
+    // Where an identity layout's sketch was drawn last frame, for checks.
+    internal Vector2? IdentityLayoutTile(IdentityLayout layout) => identityTiles.TryGetValue(layout, out var at) ? at : null;
+
+    // The identity spread's layouts, each a small sketch of the open spread: the portrait as a filled frame, the
+    // text as lines, the signature as a stroke. The one in use is outlined.
+    private void IdentityLayoutOptions(UiContext context)
+    {
+        UiTypography.Text("IDENTITY PAGES", TextRole.Caption, context, UiTheme.MutedInk);
+        ImGui.Dummy(new Vector2(0, 10 * context.Scale));
+        var chosen = holder.Identity.Appearance?.IdentityLayout ?? IdentityLayout.Classic;
+        var look = holder.Identity.Look;
+        var width = UiLayout.ContentWidth;
+        var gap = 14 * context.Scale;
+        var all = Enum.GetValues<IdentityLayout>();
+        var tile = new Vector2((width - gap * (all.Length - 1)) / all.Length, 0);
+        tile.Y = MathF.Round(tile.X * 0.62f);
+        var label = UiTypography.Size(TextRole.Caption, context) + 6 * context.Scale;
+        var origin = ImGui.GetCursorScreenPos();
+        var list = ImGui.GetWindowDrawList();
+        var ink = ImGui.GetColorU32(look.Text with { W = 0.55f });
+        var frame = ImGui.GetColorU32(look.Text with { W = 0.3f });
+        var thin = MathF.Max(1, context.Scale);
+        for (var index = 0; index < all.Length; index++)
+        {
+            var layout = all[index];
+            var at = origin + new Vector2(index * (tile.X + gap), 0);
+            ImGui.SetCursorScreenPos(at);
+            var picked = ImGui.InvisibleButton("Identity layout " + layout, tile + new Vector2(0, label));
+            var hovered = ImGui.IsItemHovered();
+            var half = new Vector2(tile.X / 2, tile.Y);
+            list.AddRectFilled(at + new Vector2(1, 2) * context.Scale, at + tile + new Vector2(1, 2) * context.Scale, ImGui.GetColorU32(new Vector4(0, 0, 0, 0.15f)), 2 * context.Scale);
+            list.AddRectFilled(at, at + tile, ImGui.GetColorU32(look.Paper), 2 * context.Scale);
+            list.AddLine(at + new Vector2(half.X, 0), at + new Vector2(half.X, tile.Y), ImGui.GetColorU32(new Vector4(0, 0, 0, 0.18f)), thin);
+            var pad = half.X * 0.16f;
+            switch (layout)
+            {
+                case IdentityLayout.Compact:
+                    Card(at);
+                    Lines(at + new Vector2(half.X, 0), 0.12f, 7);
+                    break;
+                default:
+                    var portraitRight = layout == IdentityLayout.Mirrored;
+                    Portrait(at + new Vector2(portraitRight ? half.X : 0, 0));
+                    Lines(at + new Vector2(portraitRight ? 0 : half.X, 0), 0.14f, 7);
+                    break;
+            }
+            var selected = layout == chosen;
+            if (selected || hovered) list.AddRect(at - new Vector2(2), at + tile + new Vector2(2), ImGui.GetColorU32(selected ? UiTheme.Ink : UiTheme.MutedInk), 3 * context.Scale, ImDrawFlags.None, MathF.Max(1, (selected ? 2f : 1f) * context.Scale));
+            var name = layout.ToString();
+            var measured = UiTypography.Measure(name, TextRole.Caption, context, tile.X, false);
+            UiTypography.Draw(list, new Vector2(at.X + (tile.X - measured.X) / 2, at.Y + tile.Y + 4 * context.Scale), name, TextRole.Caption, context, tile.X, selected ? UiTheme.Ink : UiTheme.MutedInk, false);
+            if (hovered) { ImGui.SetMouseCursor(ImGuiMouseCursor.Hand); ImGui.SetTooltip(Describe(layout)); }
+            if (picked) holder.SetIdentityLayout(layout);
+            identityTiles[layout] = at + tile / 2;
+
+            // A page of text: a short heading then lines, from top down.
+            void Lines(Vector2 page, float top, int count)
+            {
+                for (var line = 0; line < count; line++)
+                {
+                    var y = page.Y + half.Y * (top + line * 0.11f);
+                    var length = line == 0 ? 0.45f : line % 3 == 2 ? 0.55f : 0.72f;
+                    list.AddLine(new Vector2(page.X + pad, y), new Vector2(page.X + pad + (half.X - pad * 2) * length, y), ink, thin);
+                }
+            }
+
+            // The portrait page: a frame, then the signature stroke and its rule.
+            void Portrait(Vector2 page)
+            {
+                var size = new Vector2(half.X * 0.46f, half.X * 0.46f / 0.75f);
+                var min = page + new Vector2((half.X - size.X) / 2, half.Y * 0.12f);
+                list.AddRectFilled(min, min + size, frame);
+                Signature(page, min.Y + size.Y + half.Y * 0.14f);
+            }
+
+            // The compact card: a small frame beside lines, the signature beneath.
+            void Card(Vector2 page)
+            {
+                var size = new Vector2(half.X * 0.34f, half.X * 0.34f / 0.75f);
+                var min = page + new Vector2(pad, half.Y * 0.14f);
+                list.AddRectFilled(min, min + size, frame);
+                for (var line = 0; line < 4; line++)
+                {
+                    var y = min.Y + size.Y * (0.1f + line * 0.27f);
+                    list.AddLine(new Vector2(min.X + size.X + pad * 0.6f, y), new Vector2(page.X + half.X - pad, y), ink, thin);
+                }
+                Signature(page, min.Y + size.Y + half.Y * 0.16f);
+            }
+
+            void Signature(Vector2 page, float y)
+            {
+                var from = new Vector2(page.X + half.X * 0.3f, y);
+                list.AddBezierCubic(from, from + new Vector2(half.X * 0.1f, -half.Y * 0.06f), from + new Vector2(half.X * 0.25f, half.Y * 0.05f), from + new Vector2(half.X * 0.4f, -half.Y * 0.02f), ink, thin);
+                list.AddLine(new Vector2(page.X + pad, y + half.Y * 0.06f), new Vector2(page.X + half.X - pad, y + half.Y * 0.06f), frame, thin);
+            }
+        }
+        ImGui.SetCursorScreenPos(origin);
+        ImGui.Dummy(new Vector2(width, tile.Y + label));
+        ImGui.Dummy(new Vector2(0, 8 * context.Scale));
+        UiTypography.Text(Describe(chosen), TextRole.Body, context, UiTheme.MutedInk);
+        ImGui.Dummy(new Vector2(0, 20 * context.Scale));
+
+        static string Describe(IdentityLayout layout) => layout switch
+        {
+            IdentityLayout.Mirrored => "Details on the left page, your portrait and signature on the right.",
+            IdentityLayout.Compact => "Your portrait beside your name and details, the signature beneath; the passport's record on the right page.",
+            _ => "Your portrait and signature on the left page, your details on the right.",
+        };
+    }
 
     // Where a background's tile was drawn last frame, for checks.
     internal Vector2? BackgroundTile(PageBackground background) => backgroundTiles.TryGetValue(background, out var at) ? at : null;
@@ -1101,7 +1214,7 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         {
             SettingsCategory.General => "How your passport moves. Changes are saved as you make them.",
             SettingsCategory.Customization => "Your passport's edition and colours.",
-            SettingsCategory.Layout => "How your pages are laid out, starting with the paper's background. Layouts for the identity and nation pages come next.",
+            SettingsCategory.Layout => "How your pages are laid out: the identity spread and the paper's background. The nation pages' layout comes next.",
             _ => "What your passport keeps on this PC, and whether it is saved.",
         }, TextRole.Body, context, UiTheme.Ink);
         ImGui.Dummy(new Vector2(0, 20 * context.Scale));

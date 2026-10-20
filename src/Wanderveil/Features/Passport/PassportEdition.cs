@@ -69,11 +69,16 @@ internal sealed record PassportEdition(string Id, string Name, string Code, stri
 // rings' place (ruled lines, a grid, dots, zigzags, waves, or the edition's own emblem repeated).
 internal enum PageBackground { Guilloche, Plain, Lined, Grid, Dots, Zigzag, Waves, Edition }
 
+// How the identity spread is laid out. Classic: portrait and signature on the left page, details on the right.
+// Mirrored: the same, sides swapped. Compact: the portrait beside the name and details on the left page with the
+// signature beneath, and the record (issue date, number, motto, about, machine line) on the right.
+internal enum IdentityLayout { Classic, Mirrored, Compact }
+
 // How the passport looks, apart from what its holder wrote: its edition, the holder's colours over it, and the
-// symbols they placed on the cover and first pages, and its structure (so far, the pages' background). Changing
+// symbols they placed on the cover and first pages, and its structure (the pages' background, the identity spread's layout). Changing
 // edition replaces the whole appearance (the colours return to the new edition's own, the symbols are cleared, the
 // background is the rings again), and the one before is kept so it can be restored.
-internal sealed record PassportAppearance(string Edition, PassportColours? Colours = null, SymbolLayer? Symbols = null, PageBackground Background = PageBackground.Guilloche)
+internal sealed record PassportAppearance(string Edition, PassportColours? Colours = null, SymbolLayer? Symbols = null, PageBackground Background = PageBackground.Guilloche, IdentityLayout IdentityLayout = IdentityLayout.Classic)
 {
     internal static readonly PassportAppearance Gridania = new(PassportEdition.Gridania.Id);
 

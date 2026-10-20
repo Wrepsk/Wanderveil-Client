@@ -230,6 +230,10 @@ internal sealed class PassportProfile(PassportIdentity identity)
     internal bool SetBackground(PageBackground background) =>
         Enum.IsDefined(background) && Update(Identity with { Appearance = Appearance() with { Background = background } });
 
+    // Lays the identity spread out another way; part of the appearance, so a change of edition resets it.
+    internal bool SetIdentityLayout(IdentityLayout layout) =>
+        Enum.IsDefined(layout) && Update(Identity with { Appearance = Appearance() with { IdentityLayout = layout } });
+
     // Takes every symbol off the cover and pages.
     internal bool ClearSymbols() => Identity.Appearance is { Symbols: not null } && SetSymbols(SymbolLayer.Empty);
 
