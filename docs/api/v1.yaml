@@ -5,8 +5,8 @@ info:
   summary: Sign-in by character verification, sessions, and the holder's private passport.
   description: |
     Version 1, 21 October 2026: implemented by the Wanderveil server and this client, and used in game against a local
-    server. The 1.1.0 additions (the passport's other parts, sharing, view requests, viewers, visits, blocks, and
-    reports; ADR-0005) are a draft that nothing implements yet. Compatibility promises begin with the first client release that uses it; until then it may still change.
+    server. Of the 1.1.0 additions (ADR-0005), the passport's other parts are implemented on the server; sharing,
+    view requests, viewers, visits, blocks, and reports are still a draft. Compatibility promises begin with the first client release that uses it; until then it may still change.
     See README.md beside this file for the rules every endpoint follows.
 
     Every account is one FFXIV character verified through the Lodestone or XIVAuth. A verification proves control of
@@ -260,7 +260,7 @@ paths:
       tags: [Passport]
       operationId: getStamps
       summary: The holder's stamps and their placements.
-      description: Draft, 1.1.0 (ADR-0005); not implemented yet.
+      description: 1.1.0 (ADR-0005); implemented on the server, not yet used by the client.
       responses:
         '200':
           description: The record. `ETag` carries its revision.
@@ -276,7 +276,7 @@ paths:
       tags: [Passport]
       operationId: putStamps
       summary: Save the holder's stamps, with the same revision rules as the passport.
-      description: Draft, 1.1.0 (ADR-0005). Needs `If-None-Match` `*` or `If-Match`, as `PUT /v1/passport`; at most 4 MiB.
+      description: 1.1.0 (ADR-0005); implemented on the server. Needs `If-None-Match` `*` or `If-Match`, as `PUT /v1/passport`; at most 4 MiB, sent uncompressed.
       parameters:
         - $ref: '#/components/parameters/IfMatch'
         - $ref: '#/components/parameters/IfNoneMatch'
@@ -306,7 +306,7 @@ paths:
       tags: [Passport]
       operationId: getMarks
       summary: The holder's drawing and writing on stamp pages.
-      description: Draft, 1.1.0 (ADR-0005). The response may be gzip-compressed when the request accepts it.
+      description: 1.1.0 (ADR-0005); implemented on the server. Answered gzip-compressed when the request accepts it.
       responses:
         '200':
           description: The record. `ETag` carries its revision.
@@ -323,14 +323,14 @@ paths:
       operationId: putMarks
       summary: Save the holder's drawing and writing, with the same revision rules as the passport.
       description: |
-        Draft, 1.1.0 (ADR-0005). Sent with `Content-Encoding: gzip`: at most 4 MiB as sent and 16 MiB of JSON once
-        expanded. Needs `If-None-Match` `*` or `If-Match`, as `PUT /v1/passport`.
+        1.1.0 (ADR-0005); implemented on the server. Best sent with `Content-Encoding: gzip` (no other encoding is
+        accepted): at most 4 MiB as sent and 16 MiB of JSON once expanded. Needs `If-None-Match` `*` or `If-Match`, as
+        `PUT /v1/passport`.
       parameters:
         - $ref: '#/components/parameters/IfMatch'
         - $ref: '#/components/parameters/IfNoneMatch'
         - name: Content-Encoding
           in: header
-          required: true
           schema: { type: string, const: gzip }
       requestBody:
         required: true
@@ -358,7 +358,7 @@ paths:
       tags: [Passport]
       operationId: getPicture
       summary: The holder's picture, as saved.
-      description: Draft, 1.1.0 (ADR-0005).
+      description: 1.1.0 (ADR-0005); implemented on the server.
       responses:
         '200':
           description: The picture. `ETag` carries its revision.
@@ -377,8 +377,9 @@ paths:
       operationId: putPicture
       summary: Save the holder's picture (a copy re-encoded by the client).
       description: |
-        Draft, 1.1.0 (ADR-0005). PNG or JPEG, at most 4 MiB and 2048 px on its longer side; the server checks the type
-        from the first bytes, whatever the Content-Type says. Needs `If-None-Match` `*` or `If-Match`.
+        1.1.0 (ADR-0005); implemented on the server. PNG or JPEG, at most 4 MiB and 2048 px on its longer side; the
+        server checks the type from the first bytes, whatever the Content-Type says. Needs `If-None-Match` `*` or
+        `If-Match`; the same picture again is answered as saved without a new revision.
       parameters:
         - $ref: '#/components/parameters/IfMatch'
         - $ref: '#/components/parameters/IfNoneMatch'
@@ -412,7 +413,7 @@ paths:
       tags: [Passport]
       operationId: deletePicture
       summary: Remove the holder's picture.
-      description: Draft, 1.1.0 (ADR-0005). Needs `If-Match` with the picture's revision.
+      description: 1.1.0 (ADR-0005); implemented on the server. Needs `If-Match` with the picture's revision (or `*`).
       parameters:
         - $ref: '#/components/parameters/IfMatch'
       responses:

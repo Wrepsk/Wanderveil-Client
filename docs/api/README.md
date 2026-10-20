@@ -2,11 +2,11 @@
 
 Status: **v1** (`1.0.0`), 21 October 2026. [`v1.yaml`](v1.yaml) (OpenAPI 3.1) describes signing in by character verification, the session, account deletion, and the holder's private passport record. The Wanderveil server and this client implement all of it ([how](../online.md)), and both sign-ins and passport sync have been used in game against a local server. No hosted server exists yet. Until the first client release that uses it, v1 may still change; afterwards, changes within `v1` only add things.
 
-## Draft additions (1.1.0, not implemented)
+## Additions in 1.1.0 (the parts are implemented on the server; the rest is a draft)
 
 Passport sharing ([ADR-0005](https://github.com/Wrepsk/FFXIV-Wanderveil), in the coordination repository) adds, only adding endpoints and codes:
 
-- **The passport's other parts:** `/v1/passport/stamps` and `/v1/passport/marks` (documents with revisions, as the passport; drawing sent gzip-compressed), and `/v1/passport/picture` (PNG or JPEG, at most 4 MiB and 2048 px).
+- **The passport's other parts:** `/v1/passport/stamps` and `/v1/passport/marks` (documents with revisions, as the passport; drawing best sent gzip-compressed, and answered compressed when asked), and `/v1/passport/picture` (PNG or JPEG, at most 4 MiB and 2048 px).
 - **Sharing:** `/v1/sharing` sets `approved` (the default) or `anyone`.
 - **View requests:** `/v1/view-requests` asks (always `202`), lists incoming or outgoing, approves, declines, and withdraws. A decline looks like no answer until the request expires after 14 days.
 - **Viewers:** `/v1/viewers` lists approved viewers and removes them.
