@@ -144,8 +144,11 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportProfile h
         var flow = new PageFlow(origin, width, context, true);
         switch (page.Kind)
         {
-            case PassportPageKind.NationBanner: break; // Drawn on the paper by DrawNationBanner.
-            case PassportPageKind.NationMap: Nation(ref flow, false, width, context); break;
+            // The nation pages as their holder arranged them: the banner is drawn on the paper by DrawNationBanner; a
+            // hidden one leaves blank paper.
+            case PassportPageKind.NationBanner or PassportPageKind.NationMap:
+                if (NationShows(page) == PassportPageKind.NationMap) Nation(ref flow, false, width, context);
+                break;
             // The identity spread as its holder laid it out.
             case PassportPageKind.Portrait or PassportPageKind.Information:
                 switch (Layout, page.Kind)
@@ -166,6 +169,10 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportProfile h
         ImGui.Dummy(new Vector2(width, flow.Height));
         return flow.Height;
     }
+
+    // What a nation page shows (banner, map, or nothing), as the holder arranged them.
+    internal PassportPageKind? NationShows(PassportPage page) => page.Kind is PassportPageKind.NationBanner or PassportPageKind.NationMap
+        ? (holder.Identity.Appearance?.Nation ?? default).Shows(page.Kind == PassportPageKind.NationMap) : null;
 
     private IdentityLayout Layout => holder.Identity.Appearance?.IdentityLayout ?? IdentityLayout.Classic;
 

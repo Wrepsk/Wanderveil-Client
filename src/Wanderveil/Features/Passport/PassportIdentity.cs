@@ -234,6 +234,9 @@ internal sealed class PassportProfile(PassportIdentity identity)
     internal bool SetIdentityLayout(IdentityLayout layout) =>
         Enum.IsDefined(layout) && Update(Identity with { Appearance = Appearance() with { IdentityLayout = layout } });
 
+    // Swaps or hides the nation pages' banner and map; part of the appearance, so a change of edition resets it.
+    internal bool SetNationPages(NationPages nation) => Update(Identity with { Appearance = Appearance() with { Nation = nation } });
+
     // Takes every symbol off the cover and pages.
     internal bool ClearSymbols() => Identity.Appearance is { Symbols: not null } && SetSymbols(SymbolLayer.Empty);
 

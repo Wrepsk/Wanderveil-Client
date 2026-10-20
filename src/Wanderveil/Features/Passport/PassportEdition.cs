@@ -74,11 +74,20 @@ internal enum PageBackground { Guilloche, Plain, Lined, Grid, Dots, Zigzag, Wave
 // signature beneath, and the record (issue date, number, motto, about, machine line) on the right.
 internal enum IdentityLayout { Classic, Mirrored, Compact }
 
+// The nation spread (the passport's first two pages): Swapped puts the map on the left and the banner on the right;
+// HideBanner and HideMap leave that page blank paper, free for symbols. The default is the banner left, the map right.
+internal readonly record struct NationPages(bool Swapped = false, bool HideBanner = false, bool HideMap = false)
+{
+    // What the nation page at this place (first or second) shows: the banner, the map, or nothing.
+    internal PassportPageKind? Shows(bool second) => (second != Swapped) ? HideMap ? null : PassportPageKind.NationMap : HideBanner ? null : PassportPageKind.NationBanner;
+}
+
 // How the passport looks, apart from what its holder wrote: its edition, the holder's colours over it, and the
-// symbols they placed on the cover and first pages, and its structure (the pages' background, the identity spread's layout). Changing
+// symbols they placed on the cover and first pages, and its structure (the pages' background, the identity spread's
+// layout, the nation pages). Changing
 // edition replaces the whole appearance (the colours return to the new edition's own, the symbols are cleared, the
 // background is the rings again), and the one before is kept so it can be restored.
-internal sealed record PassportAppearance(string Edition, PassportColours? Colours = null, SymbolLayer? Symbols = null, PageBackground Background = PageBackground.Guilloche, IdentityLayout IdentityLayout = IdentityLayout.Classic)
+internal sealed record PassportAppearance(string Edition, PassportColours? Colours = null, SymbolLayer? Symbols = null, PageBackground Background = PageBackground.Guilloche, IdentityLayout IdentityLayout = IdentityLayout.Classic, NationPages Nation = default)
 {
     internal static readonly PassportAppearance Gridania = new(PassportEdition.Gridania.Id);
 

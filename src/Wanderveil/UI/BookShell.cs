@@ -437,10 +437,10 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
                             if (side != Side.Left && pendingEdition == null) { colours.Draw(type); SymbolOptions(type); }
                             break;
                         case SettingsCategory.Layout:
-                            // Left: the identity spread's layout; right: the pages' background.
+                            // Left: the identity spread's layout; right: the pages' background and the nation pages.
                             if (side != Side.Right) { ImGui.Dummy(new Vector2(0, 24 * type.Scale)); IdentityLayoutOptions(type); }
                             if (side == Side.Single) ImGui.Dummy(new Vector2(0, 24 * type.Scale));
-                            if (side != Side.Left) BackgroundOptions(type);
+                            if (side != Side.Left) { BackgroundOptions(type); NationOptions(type); }
                             break;
                         default:
                             if (side == Side.Single) ImGui.Dummy(new Vector2(0, 24 * type.Scale));
@@ -477,7 +477,7 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
             return () =>
             {
                 if (entry.Kind != PassportPageKind.Stamps) passport.DrawSymbols(entry.Id, new UiRect(ImGui.GetWindowPos(), ImGui.GetWindowSize()), symbols.Hidden);
-                if (entry.Kind == PassportPageKind.NationBanner) Banner(index, side == Side.Right);
+                if (passport.NationShows(entry) == PassportPageKind.NationBanner) Banner(index, side == Side.Right);
                 Contents(entry, Printed(Fit(entry)), false, side == Side.Right);
             };
         }
@@ -492,7 +492,7 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
                 passport.DrawSymbols(entry.Id, region, symbols.Hidden);
                 if (live) symbols.Register(entry.Id, region);
             }
-            if (entry.Kind == PassportPageKind.NationBanner) Banner(index, rightSide);
+            if (passport.NationShows(entry) == PassportPageKind.NationBanner) Banner(index, rightSide);
             var fit = Fit(entry);
             var type = Printed(fit);
             Page(entry.Id, region, () =>
@@ -1061,9 +1061,37 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
 
     private readonly Dictionary<PageBackground, Vector2> backgroundTiles = [];
     private readonly Dictionary<IdentityLayout, Vector2> identityTiles = [];
+    private readonly Vector2[] nationControls = new Vector2[3];
+
+    // Where the nation pages' Banner box, Map box, and Swap sides link were drawn last frame, for checks.
+    internal Vector2 NationControl(int index) => nationControls[index];
 
     // Where an identity layout's sketch was drawn last frame, for checks.
     internal Vector2? IdentityLayoutTile(IdentityLayout layout) => identityTiles.TryGetValue(layout, out var at) ? at : null;
+
+    // The nation pages: the banner and the map each shown or not, and which side each is on. A hidden one leaves its
+    // page blank, free for symbols.
+    private void NationOptions(UiContext context)
+    {
+        var nation = holder.Identity.Appearance?.Nation ?? default;
+        ImGui.Dummy(new Vector2(0, 24 * context.Scale));
+        UiTypography.Text("NATION PAGES", TextRole.Caption, context, UiTheme.MutedInk);
+        ImGui.Dummy(new Vector2(0, 8 * context.Scale));
+        if (BookControl.Toggle("Banner", !nation.HideBanner, context)) holder.SetNationPages(nation with { HideBanner = !nation.HideBanner });
+        nationControls[0] = (ImGui.GetItemRectMin() + ImGui.GetItemRectMax()) / 2;
+        ImGui.SameLine(0, 24 * context.Scale);
+        if (BookControl.Toggle("Map", !nation.HideMap, context)) holder.SetNationPages(nation with { HideMap = !nation.HideMap });
+        nationControls[1] = (ImGui.GetItemRectMin() + ImGui.GetItemRectMax()) / 2;
+        ImGui.SameLine(0, 24 * context.Scale);
+        if (BookControl.Link("Swap sides", context)) holder.SetNationPages(nation with { Swapped = !nation.Swapped });
+        nationControls[2] = (ImGui.GetItemRectMin() + ImGui.GetItemRectMax()) / 2;
+        ImGui.Dummy(new Vector2(0, 6 * context.Scale));
+        var left = nation.Shows(false);
+        var right = nation.Shows(true);
+        string Name(PassportPageKind? kind) => kind == PassportPageKind.NationBanner ? "the banner" : kind == PassportPageKind.NationMap ? "the map" : "blank paper";
+        var said = $"Left, {Name(left)}; right, {Name(right)}.";
+        UiTypography.Text(char.ToUpperInvariant(said[0]) + said[1..] + (left == null || right == null ? " A blank page is yours for symbols." : ""), TextRole.Body, context, UiTheme.MutedInk);
+    }
 
     // The identity spread's layouts, each a small sketch of the open spread: the portrait as a filled frame, the
     // text as lines, the signature as a stroke. The one in use is outlined.
@@ -1214,7 +1242,7 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         {
             SettingsCategory.General => "How your passport moves. Changes are saved as you make them.",
             SettingsCategory.Customization => "Your passport's edition and colours.",
-            SettingsCategory.Layout => "How your pages are laid out: the identity spread and the paper's background. The nation pages' layout comes next.",
+            SettingsCategory.Layout => "How your pages are laid out: the identity spread, the nation pages, and the paper's background.",
             _ => "What your passport keeps on this PC, and whether it is saved.",
         }, TextRole.Body, context, UiTheme.Ink);
         ImGui.Dummy(new Vector2(0, 20 * context.Scale));

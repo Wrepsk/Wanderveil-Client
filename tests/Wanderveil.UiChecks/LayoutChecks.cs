@@ -18,6 +18,7 @@ internal static class LayoutChecks
         Storage(check);
         Drawn(check, artifacts);
         Identity(check, artifacts);
+        Nation(check, artifacts);
         Console.WriteLine("PASS layout");
     }
 
@@ -157,5 +158,61 @@ internal static class LayoutChecks
         single.Frames(8);
         check(single.Shell.PageOverflowX == 0, "The compact card overflows sideways on a single page.");
         single.Save(artifacts, "layout-identity-compact-narrow.bmp");
+    }
+
+    // The nation pages: the banner and map swapped or hidden, saved, and set from Layout; a hidden one leaves blank paper.
+    private static void Nation(Action<bool, string> check, string? artifacts)
+    {
+        var standard = default(NationPages);
+        check(standard.Shows(false) == PassportPageKind.NationBanner && standard.Shows(true) == PassportPageKind.NationMap, "The nation pages do not start banner left, map right.");
+        var swapped = new NationPages(Swapped: true, HideMap: true);
+        check(swapped.Shows(false) == null && swapped.Shows(true) == PassportPageKind.NationBanner, "Swapping or hiding does not move the banner and map.");
+
+        var profile = new PassportProfile(PassportIdentity.Sample);
+        check(profile.SetNationPages(new NationPages(Swapped: true)) && !profile.SetNationPages(new NationPages(Swapped: true)), "Setting the nation pages is not one change.");
+        profile.ChangeEdition("ishgard");
+        check(profile.Identity.Appearance?.Nation == default(NationPages), "A change of edition keeps the nation pages' arrangement.");
+        profile.RestorePrevious();
+        check(profile.Identity.Appearance?.Nation.Swapped == true, "Change back does not restore the nation pages' arrangement.");
+
+        var saved = PassportIdentity.Sample with { Appearance = PassportAppearance.Gridania with { Nation = new NationPages(true, true, false) } };
+        var text = PassportStore.Serialize(saved);
+        check(text.Contains("\"swapped\": true", StringComparison.Ordinal) && text.Contains("\"banner\": false", StringComparison.Ordinal) && PassportStore.Parse(text) == saved.Normalize()
+            && !PassportStore.Serialize(PassportIdentity.Sample).Contains("nationPages", StringComparison.Ordinal), "The nation pages' arrangement is not saved, or the standard one is written.");
+        foreach (var bad in new[] { "{\"swapped\":\"yes\"}", "[]" })
+        {
+            try
+            {
+                PassportStore.Parse("{\"format\":\"wanderveil.passport\",\"version\":3,\"number\":\"EZ 1\",\"appearance\":{\"edition\":\"gridania\",\"nationPages\":" + bad + "}}");
+                check(false, $"Malformed nation pages {bad} are accepted.");
+            }
+            catch (FormatException) { check(true, ""); }
+        }
+
+        // In Settings: the Map box hides the map, Swap sides moves the banner right; Layout still fits.
+        var holder = new PassportProfile(PassportIdentity.Sample);
+        using var book = new CollectChecks.Book(new Vector2(1200, 820), new StampCollection(), identity: holder);
+        book.Open();
+        book.Shell.ShowSettings();
+        book.Frames(3);
+        book.Click(book.Tab(2));
+        book.Frames(3);
+        book.Click(book.Shell.NationControl(1));
+        book.Frames(2);
+        book.Click(book.Shell.NationControl(2));
+        book.Frames(3);
+        check(holder.Identity.Appearance?.Nation == new NationPages(Swapped: true, HideMap: true) && book.Shell.PageOverflow == 0 && book.Shell.PageOverflowX == 0,
+            $"The Map box and Swap sides do not arrange the nation pages, or Layout overflows ({holder.Identity.Appearance?.Nation}).");
+        book.Save(artifacts, "layout-nation-settings.bmp");
+        book.Shell.GoBack();
+        for (var frame = 0; frame < 120 && book.Shell.IsRiffling; frame++) book.Frame();
+        book.Key(ImGuiKey.Home);
+        book.Open();
+        check(book.Shell.VisiblePage == 0 && book.Shell.PageOverflow == 0, "The arranged nation spread does not open.");
+        book.Save(artifacts, "layout-nation-swapped.bmp");
+        // Map shown again, on the left.
+        holder.SetNationPages(new NationPages(Swapped: true));
+        book.Frames(3);
+        book.Save(artifacts, "layout-nation-map-left.bmp");
     }
 }

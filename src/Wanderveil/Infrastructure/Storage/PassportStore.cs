@@ -137,6 +137,14 @@ internal sealed class PassportStore(string directory)
         }
         if (appearance.Background != PageBackground.Guilloche) node["background"] = JsonNamingPolicy.CamelCase.ConvertName(appearance.Background.ToString());
         if (appearance.IdentityLayout != IdentityLayout.Classic) node["identityLayout"] = JsonNamingPolicy.CamelCase.ConvertName(appearance.IdentityLayout.ToString());
+        if (appearance.Nation != default)
+        {
+            var nation = new JsonObject();
+            if (appearance.Nation.Swapped) nation["swapped"] = true;
+            if (appearance.Nation.HideBanner) nation["banner"] = false;
+            if (appearance.Nation.HideMap) nation["map"] = false;
+            node["nationPages"] = nation;
+        }
         if (appearance.Symbols is { IsEmpty: false } symbols)
         {
             var list = new JsonArray();
@@ -201,7 +209,19 @@ internal sealed class PassportStore(string directory)
         if (appearance["identityLayout"] is JsonValue layoutValue && layoutValue.TryGetValue<string>(out var layoutName))
             identityLayout = Enum.TryParse<IdentityLayout>(layoutName, true, out var parsedLayout) && Enum.IsDefined(parsedLayout) && !char.IsDigit(layoutName[0]) ? parsedLayout : IdentityLayout.Classic;
         else if (appearance["identityLayout"] != null) throw new FormatException("A passport's identity layout is a name.");
-        return new PassportAppearance(edition, colours, symbols, background, identityLayout);
+        var nationPages = default(NationPages);
+        if (appearance["nationPages"] is JsonObject pages)
+        {
+            bool Flag(string key, bool fallback) => pages[key] switch
+            {
+                null => fallback,
+                JsonValue flag when flag.TryGetValue<bool>(out var value) => value,
+                _ => throw new FormatException($"A passport's nation pages' {key} is true or false."),
+            };
+            nationPages = new NationPages(Flag("swapped", false), !Flag("banner", true), !Flag("map", true));
+        }
+        else if (appearance["nationPages"] != null) throw new FormatException("A passport's nation pages are a JSON object.");
+        return new PassportAppearance(edition, colours, symbols, background, identityLayout, nationPages);
     }
 
     private static string Key(IdentityField field) => JsonNamingPolicy.CamelCase.ConvertName(field.ToString());
