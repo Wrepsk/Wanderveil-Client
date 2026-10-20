@@ -112,8 +112,10 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportProfile h
         var at = page.Max - new Vector2(width + 8 * context.Scale, height + 6 * context.Scale);
         var list = ImGui.GetWindowDrawList();
         var light = MathF.Max(1, MathF.Round(context.Scale));
-        UiTypography.DrawTracked(list, at - new Vector2(light), number, TextRole.Caption, type, spacing, UiTheme.MutedInk with { W = 0.5f });
-        UiTypography.DrawTracked(list, at, number, TextRole.Caption, type, spacing, new Vector4(0.93f, 0.9f, 0.84f, 0.9f));
+        // Pressed into the paper whatever its colour: letters a little paler than the paper, edged a little darker.
+        var paper = UiTheme.Paper;
+        UiTypography.DrawTracked(list, at - new Vector2(light), number, TextRole.Caption, type, spacing, Vector4.Lerp(paper, new Vector4(0, 0, 0, 1), 0.55f) with { W = 0.55f });
+        UiTypography.DrawTracked(list, at, number, TextRole.Caption, type, spacing, Vector4.Lerp(paper, Vector4.One, 0.5f) with { W = 0.9f });
     }
 
     // editor: write on the identity pages in place (only on resting pages, never on a turning leaf).

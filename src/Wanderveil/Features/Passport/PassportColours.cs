@@ -55,35 +55,43 @@ internal sealed record PassportColours(Rgb? Cloth = null, Rgb? Foil = null, Rgb?
     };
 }
 
-// The colours the passport is drawn in: the edition's, with the holder's over them, then kept legible. Foil must
-// read on its cloth (3:1), body text and captions on the paper (4.5:1), and printed controls on the paper (4.5:1);
-// a colour that would not is moved toward black or white just far enough, and Adjusted says which were moved.
-internal sealed record PassportLook(Vector4 Cloth, Vector4 Foil, Vector4 Ink, Vector4 Paper, ColourPart[] Adjusted)
+// The colours the passport is drawn in: the edition's, with the holder's over them, then kept legible. The paper
+// is always as picked; text and captions print dark on a light paper and light on a dark one (LightText), and
+// must read on it (4.5:1). Foil must read on its cloth (3:1) and printed controls on the paper (4.5:1); a colour
+// that would not is moved toward black or white just far enough, and Adjusted says which were moved.
+internal sealed record PassportLook(Vector4 Cloth, Vector4 Foil, Vector4 Ink, Vector4 Paper, Vector4 Text, Vector4 Caption, bool LightText, ColourPart[] Adjusted)
 {
     // The paper the editions are printed on (tools/passport-art/editions.mjs, shared.paper).
     internal static readonly Vector4 EditionPaper = Rgb.Hex(0xD8C5A3).Vector;
     // The text inks printed on every page (UiTheme.Ink and MutedInk): the paper must keep them readable.
     private static readonly Vector4 TextInk = Rgb.Hex(0x19242E).Vector;
     private static readonly Vector4 CaptionInk = Rgb.Hex(0x43505A).Vector;
+    // Their light counterparts, for dark paper: warm off-white text, a quieter caption.
+    private static readonly Vector4 LightTextInk = Rgb.Hex(0xEFE8DA).Vector;
+    private static readonly Vector4 LightCaptionInk = Rgb.Hex(0xC2BAA9).Vector;
 
     internal static PassportLook Of(PassportEdition edition, PassportColours? colours = null)
     {
         colours ??= PassportColours.None;
         var adjusted = new System.Collections.Generic.List<ColourPart>();
         var cloth = colours.Cloth?.Vector ?? edition.Cloth;
-        var paper = Keep(ColourPart.Paper, colours.Paper?.Vector ?? EditionPaper, CaptionInk, 4.5f, towardWhite: true);
+        var paper = colours.Paper?.Vector ?? EditionPaper;
+        // Text turns light where dark ink would read worse than light; black or white always reaches 4.5:1.
+        var light = Contrast(LightTextInk, paper) > Contrast(TextInk, paper);
+        var text = Keep(null, light ? LightTextInk : TextInk, paper, 4.5f);
+        var caption = Keep(null, light ? LightCaptionInk : CaptionInk, paper, 4.5f);
         var foil = Keep(ColourPart.Foil, colours.Foil?.Vector ?? edition.Foil, cloth, 3f);
         var ink = Keep(ColourPart.Ink, colours.Ink?.Vector ?? edition.Ink, paper, 4.5f);
-        return new PassportLook(cloth, foil, ink, paper, adjusted.ToArray());
+        return new PassportLook(cloth, foil, ink, paper, text, caption, light, adjusted.ToArray());
 
-        // Moves colour until it reads against other; towardWhite forces the direction (the paper only lightens).
-        Vector4 Keep(ColourPart part, Vector4 colour, Vector4 other, float ratio, bool towardWhite = false)
+        // Moves colour until it reads against other: toward white on a dark background, black on a light one.
+        Vector4 Keep(ColourPart? part, Vector4 colour, Vector4 other, float ratio)
         {
             if (Contrast(colour, other) >= ratio) return colour;
-            var target = towardWhite || Luminance(other) < 0.18f ? Vector4.One : new Vector4(0, 0, 0, 1);
+            var target = Contrast(Vector4.One, other) > Contrast(new Vector4(0, 0, 0, 1), other) ? Vector4.One : new Vector4(0, 0, 0, 1);
             var moved = colour;
             for (var step = 1; step <= 40 && Contrast(moved, other) < ratio; step++) moved = Vector4.Lerp(colour, target, step / 40f) with { W = 1f };
-            adjusted.Add(part);
+            if (part is { } adjustedPart) adjusted.Add(adjustedPart);
             return moved;
         }
     }

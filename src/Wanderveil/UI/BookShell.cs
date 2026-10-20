@@ -140,7 +140,7 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         solid.Clear();
         var edition = holder.Identity.Edition;
         var look = holder.Identity.Look;
-        UiTheme.UseEdition(look.Cloth, look.Foil, look.FoilBright, look.Ink, look.Paper, look.PaperInset);
+        UiTheme.UseEdition(look.Cloth, look.Foil, look.FoilBright, look.Ink, look.Paper, look.PaperInset, look.Text, look.Caption);
         try { return DrawBook(bounds, context); }
         finally
         {

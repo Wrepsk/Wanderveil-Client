@@ -43,7 +43,7 @@ internal static class ColourChecks
             book.ClickControl(new Vector2(page.Position.X + 36 * scale, page.Position.Y + y));
         check(profile.Identity.Appearance?.Colours?.Paper == Rgb.Hex(0xE6DCC6) && profile.Identity.Appearance.Edition == "gridania", $"Clicking a paper swatch chose {profile.Identity.Appearance?.Colours}.");
         book.Frames(3);
-        check(UiTheme.Paper == Rgb.Hex(0xE6DCC6).Vector && book.Shell.PageOverflow == 0, "The book does not print on the picked paper.");
+        check(UiTheme.Paper == Rgb.Hex(0xE6DCC6).Vector && book.Shell.PageOverflow == 0, $"The book does not print on the picked paper ({Rgb.Of(UiTheme.Paper)}, overflow {book.Shell.PageOverflow}).");
         book.Save(artifacts, "colour-settings-picked.bmp");
         Console.WriteLine("PASS colour-settings");
     }
@@ -56,9 +56,17 @@ internal static class ColourChecks
         var printed = PassportLook.Of(PassportEdition.Gridania);
         check(printed.Adjusted.Length == 0 && printed.Cloth == PassportEdition.Gridania.Cloth && printed.Paper == PassportLook.EditionPaper, "An edition's own colours are adjusted.");
         // Each guard: foil on its cloth 3:1, captions on the paper 4.5:1, printed controls on the paper 4.5:1.
-        var dark = PassportLook.Of(PassportEdition.Gridania, new PassportColours(Cloth: Rgb.Hex(0x141414), Foil: Rgb.Hex(0x1A1A1A), Ink: Rgb.Hex(0xD8C5A3), Paper: Rgb.Hex(0x303030)));
+        var dark = PassportLook.Of(PassportEdition.Gridania, new PassportColours(Cloth: Rgb.Hex(0x141414), Foil: Rgb.Hex(0x1A1A1A), Ink: Rgb.Hex(0x303030), Paper: Rgb.Hex(0x303030)));
         check(PassportLook.Contrast(dark.Foil, dark.Cloth) >= 3 && dark.Adjusted.Contains(ColourPart.Foil), "Foil that does not read on its cloth is kept.");
-        check(PassportLook.Contrast(new Vector4(0x43 / 255f, 0x50 / 255f, 0x5A / 255f, 1), dark.Paper) >= 4.5 && dark.Adjusted.Contains(ColourPart.Paper), "A paper captions cannot be read on is kept.");
+        // Dark paper stays as picked; the text turns light and reads on it.
+        check(Rgb.Of(dark.Paper) == Rgb.Hex(0x303030) && !dark.Adjusted.Contains(ColourPart.Paper) && dark.LightText, "A dark paper is changed instead of the text.");
+        check(PassportLook.Contrast(dark.Text, dark.Paper) >= 4.5 && PassportLook.Contrast(dark.Caption, dark.Paper) >= 4.5, "Text or captions do not read on a dark paper.");
+        foreach (var hex in new[] { 0x000000, 0x777777, 0x767676, 0x808080, 0x5A1424, 0xFFFFFF, 0xD8C5A3, 0x2B5568 })
+        {
+            var on = PassportLook.Of(PassportEdition.Gridania, new PassportColours(Paper: Rgb.Hex(hex)));
+            check(PassportLook.Contrast(on.Text, on.Paper) >= 4.5 && PassportLook.Contrast(on.Caption, on.Paper) >= 4.5 && PassportLook.Contrast(on.Ink, on.Paper) >= 4.5, $"Text, captions, or page ink do not read on paper {Rgb.Hex(hex)}.");
+        }
+        check(!printed.LightText && Rgb.Of(printed.Text) == Rgb.Hex(0x19242E), "The usual paper does not print dark text.");
         check(PassportLook.Contrast(dark.Ink, dark.Paper) >= 4.5 && dark.Adjusted.Contains(ColourPart.Ink), "Ink that does not read on the paper is kept.");
         var fine = PassportLook.Of(PassportEdition.Gridania, new PassportColours(Cloth: Rgb.Hex(0x5A1424), Foil: Rgb.Hex(0xD4A83C)));
         check(fine.Adjusted.Length == 0 && Rgb.Of(fine.Cloth) == Rgb.Hex(0x5A1424) && Rgb.Of(fine.Foil) == Rgb.Hex(0xD4A83C), "Legible colours are moved.");
@@ -163,6 +171,15 @@ internal static class ColourChecks
         book.Key(ImGuiKey.PageDown);
         book.Save(artifacts, "colour-identity.bmp");
         check(UiTheme.Paper == PassportLook.Of(PassportEdition.Gridania, colours).Paper, "The pages do not print on the chosen paper.");
+        // Black paper with light text, as a holder might want it.
+        var night = new PassportProfile(PassportIdentity.Sample with { Appearance = new PassportAppearance("ishgard", new PassportColours(Paper: Rgb.Hex(0x141414))) });
+        using (var dark = new CollectChecks.Book(new Vector2(1200, 820), new StampCollection(), identity: night))
+        {
+            dark.Open();
+            dark.Key(ImGuiKey.PageDown);
+            check(UiTheme.Paper == Rgb.Hex(0x141414).Vector && PassportLook.Contrast(UiTheme.Ink, UiTheme.Paper) >= 4.5 && dark.Shell.PageOverflow == 0, "Black paper does not print light, readable text.");
+            dark.Save(artifacts, "colour-dark-paper.bmp");
+        }
         Console.WriteLine("PASS colour-drawn");
     }
 }

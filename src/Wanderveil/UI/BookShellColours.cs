@@ -38,10 +38,15 @@ internal sealed class BookShellColours(PassportProfile holder)
         UiTypography.Text("COLOURS", TextRole.Caption, context, UiTheme.MutedInk);
         foreach (var (part, label, swatches) in Rows)
         {
-            ImGui.Dummy(new Vector2(0, 8 * context.Scale));
+            ImGui.Dummy(new Vector2(0, 4 * context.Scale));
             UiTypography.Text(label, TextRole.Caption, context, UiTheme.MutedInk);
             ImGui.Dummy(new Vector2(0, 3 * context.Scale));
             Row(part, swatches, Printed(edition, part), chosen[part], context);
+        }
+        if (look.LightText)
+        {
+            ImGui.Dummy(new Vector2(0, 8 * context.Scale));
+            UiTypography.Text("On this dark paper, text prints light.", TextRole.Body, context, UiTheme.MutedInk);
         }
         if (look.Adjusted.Length > 0)
         {
@@ -58,8 +63,10 @@ internal sealed class BookShellColours(PassportProfile holder)
     {
         var size = MathF.Round(20 * context.Scale);
         var gap = MathF.Round(6 * context.Scale);
-        var width = UiLayout.ContentWidth;
-        var origin = ImGui.GetCursorScreenPos();
+        // The selection ring reaches past a swatch's edge: keep the row in from the page's edge so it is never cut.
+        var ring = MathF.Ceiling(4 * context.Scale);
+        var width = UiLayout.ContentWidth - ring * 2;
+        var origin = ImGui.GetCursorScreenPos() + new Vector2(ring);
         var perRow = Math.Max(1, (int)((width + gap) / (size + gap)));
         // The edition's own colour first, then the curated ones not equal to it, then the custom swatch.
         var colours = new[] { ($"{holder.Identity.Edition.Name}'s own", printed, (Rgb?)null) }
@@ -116,8 +123,8 @@ internal sealed class BookShellColours(PassportProfile holder)
             if (hovered) ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
         }
         var rows = (count + perRow - 1) / perRow;
-        ImGui.SetCursorScreenPos(origin);
-        ImGui.Dummy(new Vector2(width, rows * (size + gap) - gap));
+        ImGui.SetCursorScreenPos(origin - new Vector2(ring));
+        ImGui.Dummy(new Vector2(width + ring * 2, rows * (size + gap) - gap + ring * 2));
     }
 
     // A colour picker on paper: dragging previews on the swatch; letting go (or entering a hex) keeps it.
