@@ -116,7 +116,18 @@ internal sealed class PassportStore(string directory)
         file["version"] = 2;
     }
 
-    private static JsonObject Appearance(PassportAppearance appearance) => new() { ["edition"] = appearance.Edition };
+    private static JsonObject Appearance(PassportAppearance appearance)
+    {
+        var node = new JsonObject { ["edition"] = appearance.Edition };
+        if (appearance.Colours is { IsEmpty: false } colours)
+        {
+            var parts = new JsonObject();
+            foreach (var part in Enum.GetValues<ColourPart>())
+                if (colours[part] is { } colour) parts[JsonNamingPolicy.CamelCase.ConvertName(part.ToString())] = colour.ToString();
+            node["colours"] = parts;
+        }
+        return node;
+    }
 
     // An edition this version does not know is kept as written (it draws as Gridania), so nothing is lost.
     private static PassportAppearance? ReadAppearance(JsonObject file, string name)
@@ -124,7 +135,20 @@ internal sealed class PassportStore(string directory)
         if (file[name] == null) return null;
         if (file[name] is not JsonObject appearance || Text(appearance, "edition") is not { Length: > 0 } edition || edition.Length > 32)
             throw new FormatException($"A passport's {name} names its edition.");
-        return new PassportAppearance(edition);
+        PassportColours? colours = null;
+        if (appearance["colours"] is JsonObject parts)
+        {
+            colours = PassportColours.None;
+            foreach (var part in Enum.GetValues<ColourPart>())
+            {
+                var key = JsonNamingPolicy.CamelCase.ConvertName(part.ToString());
+                if (parts[key] == null) continue;
+                colours = Rgb.TryParse(Text(parts, key), out var colour) ? colours.With(part, colour) : throw new FormatException($"A passport's {key} colour is #RRGGBB.");
+            }
+            if (colours.IsEmpty) colours = null;
+        }
+        else if (appearance["colours"] != null) throw new FormatException("A passport's colours are a JSON object.");
+        return new PassportAppearance(edition, colours);
     }
 
     private static string Key(IdentityField field) => JsonNamingPolicy.CamelCase.ConvertName(field.ToString());

@@ -36,7 +36,7 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
     private readonly StampCollection collection = stamps ??= new StampCollection();
     private readonly PassportProfile holder = identity ??= new PassportProfile(profile);
     // Every plate the book draws is its current edition's own.
-    private readonly IBookAssets editions = assets = new EditionAssets(assets, () => identity!.Identity.Edition.Id);
+    private readonly IBookAssets editions = assets = new EditionAssets(assets, () => identity!.Identity.Edition.Id, () => Tint(identity!.Identity));
     // An edition picked in Settings, waiting for the holder to confirm the change.
     private string? pendingEdition;
     // An edition the passport is being exchanged for: the old book slides away, and once it is gone the new
@@ -44,6 +44,7 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
     private string? swapTo;
     private readonly PassportDocumentView passport = new(assets, identity!, portrait);
     private readonly IdentityEditor editor = new(identity!, portrait, character);
+    private readonly BookShellColours colours = new(identity!);
     // The fixed pages (nation, identity); unlimited blank stamp pages follow them.
     private readonly IReadOnlyList<PassportPage> fixedPages = ValidatePages(pages ?? PassportDocumentView.SamplePages);
     private readonly BookShellStamps desk = new(stamps!, assets);
@@ -138,7 +139,8 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
     {
         solid.Clear();
         var edition = holder.Identity.Edition;
-        UiTheme.UseEdition(edition.Cloth, edition.Foil, edition.FoilBright, edition.Ink);
+        var look = holder.Identity.Look;
+        UiTheme.UseEdition(look.Cloth, look.Foil, look.FoilBright, look.Ink, look.Paper, look.PaperInset);
         try { return DrawBook(bounds, context); }
         finally
         {
@@ -315,9 +317,11 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
             switch (section)
             {
                 case BookSection.Settings:
-                    if (side != Side.Right) { back |= SettingsIntroduction(type); EditionOptions(type); }
+                    // Left: how the book moves and what it holds; right: how it looks.
+                    if (side != Side.Right) { back |= SettingsIntroduction(type); ImGui.Dummy(new Vector2(0, 24 * type.Scale)); SettingsOptions(type); }
                     if (side == Side.Single) ImGui.Dummy(new Vector2(0, 24 * type.Scale));
-                    if (side != Side.Left) SettingsOptions(type);
+                    // While a change of edition waits for its answer the colours step aside: the change would reset them.
+                    if (side != Side.Left) { EditionOptions(type); if (pendingEdition == null) colours.Draw(type); }
                     break;
                 case BookSection.Discover when side != Side.Left:
                     discover.Draw(type, onPaper: true);
@@ -762,6 +766,16 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
 
     private PassportPage PageAt(int index) => index < fixedPages.Count ? fixedPages[index] : PassportPage.StampPage(index - fixedPages.Count);
 
+    // The recolouring the passport's plates need: from the edition's printed colours to the holder's.
+    private static PlateTint Tint(PassportIdentity identity)
+    {
+        var edition = identity.Edition;
+        var look = identity.Look;
+        return new PlateTint(new PlateColours(Rgb3(edition.Cloth), Rgb3(edition.Foil), Rgb3(PassportLook.EditionPaper)), new PlateColours(Rgb3(look.Cloth), Rgb3(look.Foil), Rgb3(look.Paper)));
+    }
+
+    private static Vector3 Rgb3(Vector4 colour) => new(colour.X, colour.Y, colour.Z);
+
     private bool IsNation(int index) => index < fixedPages.Count && fixedPages[index].Kind is PassportPageKind.NationBanner or PassportPageKind.NationMap;
 
     private bool IsIdentity(int index) => index < fixedPages.Count && fixedPages[index].Kind is PassportPageKind.Portrait or PassportPageKind.Information;
@@ -799,7 +813,6 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
     // the first pick at once.
     private void EditionOptions(UiContext context)
     {
-        ImGui.Dummy(new Vector2(0, 24 * context.Scale));
         UiTypography.Text("PASSPORT EDITION", TextRole.Caption, context, UiTheme.MutedInk);
         ImGui.Dummy(new Vector2(0, 12 * context.Scale));
         var identity = holder.Identity;

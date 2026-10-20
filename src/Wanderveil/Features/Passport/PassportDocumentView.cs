@@ -34,22 +34,25 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportProfile h
     internal void DrawCover(UiRect window, UiContext context, LeafProjection? leaf = null, PassportEdition? edition = null)
     {
         var shown = edition ?? holder.Identity.Edition;
+        // The passport's own cover in its holder's colours; another edition's as that edition prints it.
+        var colours = edition == null ? holder.Identity.Look : PassportLook.Of(edition);
         var list = ImGui.GetWindowDrawList();
         var light = leaf?.Light ?? 1f;
-        var hasCover = assets.TryGet(BookAsset.EditionCover, shown.Id, out var cover, window.Size.X) || assets.TryGet(BookAsset.Cover, out cover, window.Size.X);
+        bool Plate(BookAsset asset, out BookImage image, float width) => edition == null ? assets.TryGet(asset, out image, width) : assets.TryGet(asset, edition.Id, out image, width);
+        var hasCover = Plate(BookAsset.EditionCover, out var cover, window.Size.X) || assets.TryGet(BookAsset.Cover, out cover, window.Size.X);
         if (leaf is { } turning)
         {
             // Only the board turns; the plate's soft shadow margin stays behind.
             if (hasCover) turning.Leaf(list, cover.Texture, new Vector2(42f / 1024f, 141f / 1536f), new Vector2(982f / 1024f, 1394f / 1536f), Vector4.One);
-            else list.AddQuadFilled(turning.Project(0, 0), turning.Project(1, 0), turning.Project(1, 1), turning.Project(0, 1), LeafProjection.Tint(shown.Cloth, light));
+            else list.AddQuadFilled(turning.Project(0, 0), turning.Project(1, 0), turning.Project(1, 1), turning.Project(0, 1), LeafProjection.Tint(colours.Cloth, light));
         }
         else if (hasCover) list.AddImage(cover.Texture, window.Position, window.Max);
-        else BookSurface.Fallback(list, window, BookFace.Cover, context, shown.Cloth, shown.Foil);
+        else BookSurface.Fallback(list, window, BookFace.Cover, context, colours.Cloth, colours.Foil);
         // Sizes, tops, and letter-spacing come from the Gridania board in the Eorzea Passport design (420 x 560 units).
         var (board, unit) = BookSurface.CoverBoard(window);
         var centerX = board.X + 210 * unit;
         CoverText(shown.Heading, 117, 13, 6);
-        if (assets.TryGet(BookAsset.EditionCrest, shown.Id, out var crest, 150 * unit))
+        if (Plate(BookAsset.EditionCrest, out var crest, 150 * unit))
         {
             var placement = new UiRect(board + new Vector2(135, 153) * unit, new Vector2(150 * unit));
             if (leaf is { } crestLeaf) crestLeaf.Image(list, crest.Texture, BookSurface.Fit(placement, crest), LeafProjection.Tint(Vector4.One, light));
@@ -79,9 +82,9 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportProfile h
                 width = UiTypography.MeasureTracked(text, TextRole.Title, type, spacing);
             }
             var position = new Vector2(centerX - width / 2, board.Y + top * unit);
-            var foil = shown.Foil;
+            var foil = colours.Foil;
             // Pressed into dark cloth the foil casts a dark edge; into pale cloth, a light one.
-            var shadow = shown.PaleCloth ? new Vector4(1f, 1f, 1f, 0.6f * alpha) : new Vector4(0.02f, 0.05f, 0.03f, 0.55f * alpha);
+            var shadow = colours.PaleCloth ? new Vector4(1f, 1f, 1f, 0.6f * alpha) : new Vector4(0.02f, 0.05f, 0.03f, 0.55f * alpha);
             if (leaf is { } textLeaf)
             {
                 var font = UiTypography.ResolveFont(text, TextRole.Title, type);
@@ -152,7 +155,7 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportProfile h
         // Proportions are in the banner's 200 x 460 design units.
         var unit = width / 200f;
         Lettering(edition.Kicker, 34, 8, 2.5f, 0.85f);
-        if (assets.TryGet(BookAsset.EditionCrest, edition.Id, out var crest, 110 * unit)) BookSurface.Illustration(new UiRect(banner.Position + new Vector2(45, 62) * unit, new Vector2(110 * unit)), crest);
+        if (assets.TryGet(BookAsset.EditionCrest, out var crest, 110 * unit)) BookSurface.Illustration(new UiRect(banner.Position + new Vector2(45, 62) * unit, new Vector2(110 * unit)), crest);
         Lettering(edition.Name.ToUpperInvariant(), 198, 22, 4, 1);
         Lettering(edition.Realm, 240, 8, 3, 0.85f);
 
@@ -171,7 +174,7 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportProfile h
             }
             var position = new Vector2(banner.Position.X + (width - measured) / 2, banner.Position.Y + top * unit);
             UiTypography.DrawTracked(list, position + new Vector2(0, MathF.Max(1, unit * 0.6f)), text, TextRole.Title, type, spacing, new Vector4(0.02f, 0.05f, 0.03f, 0.5f * alpha));
-            UiTypography.DrawTracked(list, position, text, TextRole.Title, type, spacing, edition.Foil with { W = alpha });
+            UiTypography.DrawTracked(list, position, text, TextRole.Title, type, spacing, holder.Identity.Look.Foil with { W = alpha });
         }
     }
 
@@ -183,7 +186,7 @@ internal sealed class PassportDocumentView(IBookAssets assets, PassportProfile h
         flow.Text(isLeft ? edition.Name : edition.MapTitle, TextRole.Title);
         flow.Gap(16);
         var art = flow.Reserve(380 * context.Scale);
-        if (!assets.TryGet(isLeft ? BookAsset.NationBanner : BookAsset.NationMap, edition.Id, out var image, MathF.Min(width, art.Size.Y * 0.83f)))
+        if (!assets.TryGet(isLeft ? BookAsset.NationBanner : BookAsset.NationMap, out var image, MathF.Min(width, art.Size.Y * 0.83f)))
         { flow.Text("Artwork is loading or unavailable.", TextRole.Caption, true); return; }
         BookSurface.Illustration(art, image);
         flow.Gap(16);

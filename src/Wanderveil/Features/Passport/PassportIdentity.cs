@@ -27,6 +27,8 @@ internal sealed record PassportIdentity(string Name, string HomeWorld, string Fa
     internal PassportAppearance? PreviousAppearance { get; init; }
 
     internal PassportEdition Edition => PassportEdition.Find(Appearance?.Edition);
+    // The colours it is drawn in: the edition's, with the holder's over them, kept legible.
+    internal PassportLook Look => PassportLook.Of(Edition, Appearance?.Colours);
 
     internal string SignedName => Signature.Length > 0 ? Signature : Name;
 
@@ -178,6 +180,17 @@ internal sealed class PassportProfile(PassportIdentity identity)
         if (current?.Edition == edition) return false;
         return Update(Identity with { Appearance = new PassportAppearance(edition), PreviousAppearance = current });
     }
+
+    // Recolours one part of the passport (null returns it to the edition's own). Colours are part of the
+    // appearance, so a later change of edition replaces them, and change back brings them back.
+    internal bool SetColour(ColourPart part, Rgb? colour)
+    {
+        var appearance = Identity.Appearance ?? new PassportAppearance(Identity.Edition.Id);
+        var colours = appearance.Chosen.With(part, colour);
+        return Update(Identity with { Appearance = appearance with { Colours = colours.IsEmpty ? null : colours } });
+    }
+
+    internal bool ResetColours() => Identity.Appearance is { Colours: not null } appearance && Update(Identity with { Appearance = appearance with { Colours = null } });
 
     // Puts back the appearance the last change replaced (and keeps the one it replaces in turn).
     internal bool RestorePrevious() =>

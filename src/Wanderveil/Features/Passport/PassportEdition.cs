@@ -53,10 +53,12 @@ internal sealed record PassportEdition(string Id, string Name, string Code, stri
     private static Vector4 Rgb(int hex) => new(((hex >> 16) & 0xFF) / 255f, ((hex >> 8) & 0xFF) / 255f, (hex & 0xFF) / 255f, 1f);
 }
 
-// How the passport looks, apart from what its holder wrote: for now its edition; later its colours, symbols,
-// and structure. Changing edition replaces the whole appearance, and the one before is kept so it can be
-// restored.
-internal sealed record PassportAppearance(string Edition)
+// How the passport looks, apart from what its holder wrote: its edition and the holder's colours over it; later
+// also symbols and structure. Changing edition replaces the whole appearance (the colours return to the new
+// edition's own), and the one before is kept so it can be restored.
+internal sealed record PassportAppearance(string Edition, PassportColours? Colours = null)
 {
     internal static readonly PassportAppearance Gridania = new(PassportEdition.Gridania.Id);
+
+    internal PassportColours Chosen => Colours ?? PassportColours.None;
 }

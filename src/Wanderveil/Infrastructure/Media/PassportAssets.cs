@@ -2,10 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Reflection;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.ManagedFontAtlas;
 using Dalamud.Interface.Textures;
+using Dalamud.Interface.Textures.TextureWraps;
 using Dalamud.Interface.Utility;
 using Dalamud.Plugin.Services;
 using Wanderveil.UI.Components;
@@ -33,10 +35,27 @@ internal sealed class PassportAssets : IBookAssets, IDisposable
     private readonly IFontHandle[] fonts;
     private readonly Dictionary<(int Face, int Pixels), IFontHandle> sized = [];
     private readonly FontScope scope;
+    private readonly ITextureProvider provider;
+    private readonly Assembly assembly;
+    // Recoloured plates: the set being drawn, one built in the background and waiting for a frame boundary, and
+    // sets replaced, freed a few frames later once no draw list can still refer to them.
+    private readonly object gate = new();
+    private Recoloured? current;
+    private Recoloured? arrived;
+    private (string Edition, PlateTint Tint)? wanted;
+    private bool building;
+    private bool disposed;
+    private readonly List<(Recoloured Set, int Frames)> retired = [];
+
+    private sealed record Recoloured(string Edition, PlateTint Tint, Dictionary<BookAsset, (IDalamudTextureWrap Wrap, int Width)[]> Plates)
+    {
+        internal void Dispose() { foreach (var levels in Plates.Values) foreach (var level in levels) level.Wrap.Dispose(); }
+    }
 
     internal PassportAssets(ITextureProvider provider, IFontAtlas atlas)
     {
-        var assembly = typeof(PassportAssets).Assembly;
+        assembly = typeof(PassportAssets).Assembly;
+        this.provider = provider;
         this.atlas = atlas;
         var resources = new HashSet<string>(assembly.GetManifestResourceNames(), StringComparer.Ordinal);
         // Shared textures load from the host's cache only when first drawn, so unused editions cost no GPU memory.
@@ -62,6 +81,90 @@ internal sealed class PassportAssets : IBookAssets, IDisposable
     }
 
     public bool TryGet(BookAsset asset, out BookImage image, float drawWidth = 0f) => TryGet(asset, DefaultEdition, out image, drawWidth);
+
+    // A recoloured plate: from the set built for these colours, or while it is built, the set drawn before if it
+    // is the same edition's (so a colour change never flashes the printed colours), else the printed plate.
+    public bool TryGet(BookAsset asset, string edition, PlateTint tint, out BookImage image, float drawWidth = 0f)
+    {
+        Recoloured? shown;
+        lock (gate)
+        {
+            if (current?.Edition != edition || current.Tint != tint) Request(edition, tint);
+            shown = current?.Edition == edition ? current : null;
+        }
+        if (shown == null || !shown.Plates.TryGetValue(asset, out var levels)) return TryGet(asset, edition, out image, drawWidth);
+        Span<int> widths = stackalloc int[levels.Length];
+        for (var index = 0; index < levels.Length; index++) widths[index] = levels[index].Width;
+        var wrap = levels[BookImageLevels.Pick(widths, drawWidth)].Wrap;
+        image = new BookImage(wrap.Handle, wrap.Width, wrap.Height);
+        return true;
+    }
+
+    // At the start of each frame, on the draw thread: shows a recoloured set that has arrived, and frees sets
+    // replaced at least two frames ago.
+    internal void BeginFrame()
+    {
+        lock (gate)
+        {
+            for (var index = retired.Count - 1; index >= 0; index--)
+            {
+                if (retired[index].Frames >= 2) { retired[index].Set.Dispose(); retired.RemoveAt(index); }
+                else retired[index] = (retired[index].Set, retired[index].Frames + 1);
+            }
+            if (arrived == null) return;
+            if (current != null) retired.Add((current, 0));
+            current = arrived;
+            arrived = null;
+        }
+    }
+
+    // Under gate: asks for a set; one build runs at a time, and only the newest request waiting is built next.
+    private void Request(string edition, PlateTint tint)
+    {
+        if (wanted is { } asked && asked.Edition == edition && asked.Tint == tint) return;
+        wanted = (edition, tint);
+        if (building || disposed) return;
+        building = true;
+        Task.Run(Build);
+    }
+
+    private void Build()
+    {
+        while (true)
+        {
+            (string Edition, PlateTint Tint) job;
+            lock (gate)
+            {
+                if (wanted is not { } next || disposed || (current?.Edition == next.Edition && current.Tint == next.Tint) || (arrived?.Edition == next.Edition && arrived.Tint == next.Tint)) { building = false; return; }
+                job = next;
+            }
+            Recoloured? made = null;
+            try
+            {
+                var plates = new Dictionary<BookAsset, (IDalamudTextureWrap, int)[]>();
+                made = new Recoloured(job.Edition, job.Tint, plates);
+                foreach (var (asset, plate) in EditionRecolour.Plates)
+                {
+                    var levels = EditionRecolour.Levels(name => assembly.GetManifestResourceStream($"Wanderveil.Assets.{job.Edition}-{name}"), plate, job.Tint);
+                    plates[asset] = levels.Select(level => (provider.CreateFromRaw(RawImageSpecification.Rgba32(level.Width, level.Height), level.Rgba, $"Wanderveil {job.Edition} {plate} recoloured"), level.Width)).ToArray();
+                }
+            }
+            catch (Exception)
+            {
+                // A plate that cannot be recoloured keeps its printed colours; nothing else is affected.
+                made?.Dispose();
+                made = null;
+            }
+            lock (gate)
+            {
+                var stillWanted = wanted is { } latest && latest.Edition == job.Edition && latest.Tint == job.Tint;
+                if (made == null || disposed) { made?.Dispose(); if (made == null && stillWanted) { building = false; return; } continue; }
+                if (arrived != null) retired.Add((arrived, 0));
+                arrived = made;
+                if (stillWanted) { building = false; return; }
+            }
+        }
+    }
 
     public bool TryGet(BookAsset asset, string edition, out BookImage image, float drawWidth = 0f)
     {
@@ -102,7 +205,19 @@ internal sealed class PassportAssets : IBookAssets, IDisposable
         return scope;
     }
 
-    public void Dispose() => DisposeFonts();
+    public void Dispose()
+    {
+        lock (gate)
+        {
+            disposed = true;
+            current?.Dispose();
+            arrived?.Dispose();
+            foreach (var (set, _) in retired) set.Dispose();
+            current = arrived = null;
+            retired.Clear();
+        }
+        DisposeFonts();
+    }
 
     private void DisposeFonts()
     {

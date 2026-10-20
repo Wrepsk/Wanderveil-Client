@@ -464,6 +464,7 @@ internal static class CollectChecks
         private readonly UiContext context;
         private UiRect root;
         internal BookShell Shell { get; }
+        internal PreviewTextures Textures => host.Textures!;
 
         internal Book(Vector2 room, StampCollection stamps, BookShellContent? content = null, ISavedState? storage = null, bool readsEscape = true, bool motion = false, float textScale = 1f,
             PassportProfile? identity = null, Func<PreviewTextures, IPassportPortrait>? portrait = null, ICharacterSource? character = null)

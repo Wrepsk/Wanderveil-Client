@@ -29,13 +29,22 @@ internal interface IBookAssets
     // every edition draws the same.
     bool TryGet(BookAsset asset, string edition, out BookImage image, float drawWidth = 0f) => TryGet(asset, out image, drawWidth);
 
+    // The same plate recoloured (EditionRecolour). Until a recoloured copy is ready, or without one, the printed
+    // plate is drawn.
+    bool TryGet(BookAsset asset, string edition, PlateTint tint, out BookImage image, float drawWidth = 0f) => TryGet(asset, edition, out image, drawWidth);
+
     internal static bool IsEditionPlate(BookAsset asset) => asset is BookAsset.Open or BookAsset.EditionCover or BookAsset.NationBanner or BookAsset.NationMap or BookAsset.EditionCrest;
 }
 
 // The book's view of its plates: the current edition's own, chosen anew each draw.
-internal sealed class EditionAssets(IBookAssets inner, System.Func<string> edition) : IBookAssets
+internal sealed class EditionAssets(IBookAssets inner, System.Func<string> edition, System.Func<PlateTint>? tint = null) : IBookAssets
 {
-    public bool TryGet(BookAsset asset, out BookImage image, float drawWidth = 0f) => inner.TryGet(asset, edition(), out image, drawWidth);
+    // The current edition's plates, recoloured when the holder chose other colours.
+    public bool TryGet(BookAsset asset, out BookImage image, float drawWidth = 0f)
+    {
+        if (tint?.Invoke() is { Changes: true } colours && IBookAssets.IsEditionPlate(asset)) return inner.TryGet(asset, edition(), colours, out image, drawWidth);
+        return inner.TryGet(asset, edition(), out image, drawWidth);
+    }
 
     public bool TryGet(BookAsset asset, string id, out BookImage image, float drawWidth = 0f) => inner.TryGet(asset, id, out image, drawWidth);
 }

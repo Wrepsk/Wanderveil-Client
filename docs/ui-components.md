@@ -21,6 +21,7 @@ Status: implemented foundations for static Passport and Discover previews, 18 Oc
 | `PassportView.cs` | Earlier identity/notes composition and procedural portrait placeholder (gallery and checks) |
 | `PassportIdentity.cs` | The holder's identity (self-reported fields, number, issue date, portrait placement) with field limits and normalization, `PortraitCrop`, and the `PassportProfile` the pages edit |
 | `PassportEdition.cs` | The six nation editions (words, cloth, foil, page ink) and `PassportAppearance`, the part a change of edition replaces |
+| `PassportColours.cs` | The holder's colours (`Rgb`, `PassportColours`) and `PassportLook`: the colours drawn, kept legible |
 | `EditionShelf.cs` | The editions as small real covers to choose from, with or without names beneath |
 | `PictureFrames.cs` | The five frames for the holder's picture (printed, corners, embossed, deckled, none), as draw-list geometry |
 | `IdentityEditor.cs` | Writing on the identity pages in place: soft-wrapped fields over a faint inset, picture placement, the character fill, and the cover line |
@@ -34,6 +35,8 @@ Status: implemented foundations for static Passport and Discover previews, 18 Oc
 | `Infrastructure/Storage/StampStore.cs`, `StampPersistence.cs` | Versioned stamp file per profile; startup load and background saves |
 | `Infrastructure/Storage/PassportStore.cs`, `PassportPersistence.cs` | Versioned identity file and picture copy per profile; issue on first load, startup load and background saves |
 | `Infrastructure/Storage/SafeFile.cs`, `BackgroundSaver.cs` | Shared atomic save with backup and recovery, profile names, and coalesced background saving |
+| `UI/Components/PlateRecolour.cs` | Recolouring plates through their weight maps, coverage-weighted reduced copies, and a small PNG reader for the plugin's own plates |
+| `UI/BookShellColours.cs` | The Settings colour rows: swatches, the custom picker, and the reset |
 | `Infrastructure/Media/PortraitPicture.cs`, `Infrastructure/Game/GameCharacter.cs` | The holder's picture (file picker, background decode and copy, texture swap) and the logged-in character, in game only |
 | `StampArt.cs` | A design as a faint square proof or an issued stamp turned as placed, with the procedural motif as fallback |
 | `PostcardArtwork.cs` | Original geometric scenery; no textures or external art |
@@ -59,6 +62,6 @@ Discover presents type, title, creator, imagined location, teaser, stamp motif/n
 
 ## Automated evidence
 
-Run the [native UI checks](../tests/README.md). All checks pass (5083 in Debug, 5205 in Release with previews). The check project compiles the same shell/component/Passport/Discover/Studio/Echoes sources and loads the installed ImGui native library. It verifies geometry across widths/scales/font sizes, rejects invalid geometry, checks selected text/button contrast pairs, exercises wrapping/cursor reservation, mouse release/cancel and keyboard card/Back activation, disabled collection, browse-scroll restoration, and style cleanup. Book checks cover material bounds, assets/fallbacks, font stack/fallback, long-page keyboard activation, complete borderless shell input/layout through viewport and size changes, and Gridania static composition/illustration/narrow-page behavior.
+Run the [native UI checks](../tests/README.md). All checks pass (5209 in Debug, 5329 in Release with previews). The check project compiles the same shell/component/Passport/Discover/Studio/Echoes sources and loads the installed ImGui native library. It verifies geometry across widths/scales/font sizes, rejects invalid geometry, checks selected text/button contrast pairs, exercises wrapping/cursor reservation, mouse release/cancel and keyboard card/Back activation, disabled collection, browse-scroll restoration, and style cleanup. Book checks cover material bounds, assets/fallbacks, font stack/fallback, long-page keyboard activation, complete borderless shell input/layout through viewport and size changes, and Gridania static composition/illustration/narrow-page behavior.
 
 Baseline software previews use ImGui's default font. Material previews add the bundled heading fonts and local Windows Segoe UI as a body-font surrogate; it is not redistributed. The CPU rasterizer supports asset RGBA and multi-page font atlases. These validate real component draw lists, not exact game fonts or GPU appearance. No test renderer/native library is included in the plugin package. The full design system, localization glyph coverage, animations, issued-stamp/passport controls, and broader navigation/overlay controls remain future work.

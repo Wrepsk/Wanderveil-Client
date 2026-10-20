@@ -108,6 +108,7 @@ public sealed class Plugin : IDalamudPlugin
     private void Draw()
     {
         portrait?.Poll();
+        assets?.BeginFrame();
         windowSystem.Draw();
         portrait?.DrawDialog();
     }

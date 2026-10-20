@@ -43,6 +43,24 @@ internal sealed class PreviewTextures : IBookAssets
 
     public bool TryGet(BookAsset asset, out BookImage image, float drawWidth = 0f) => images.TryGetValue(asset, out image);
 
+    // Recoloured plates, made at once (the plugin builds them in the background) from the generated files.
+    private readonly Dictionary<(string, PlateTint, BookAsset), BookImage> recoloured = [];
+    internal int Recolourings { get; private set; }
+
+    public bool TryGet(BookAsset asset, string edition, PlateTint tint, out BookImage image, float drawWidth = 0f)
+    {
+        if (recoloured.TryGetValue((edition, tint, asset), out image)) return true;
+        var plate = EditionRecolour.Plates.First(entry => entry.Asset == asset).Plate;
+        var folder = Path.Combine(AppContext.BaseDirectory, "Assets", "Editions", edition);
+        var full = EditionRecolour.Levels(name => File.Exists(Path.Combine(folder, name)) ? File.OpenRead(Path.Combine(folder, name)) : null, plate, tint)[0];
+        var id = 7000UL + (ulong)recoloured.Count;
+        Register(id, full.Width, full.Height, full.Rgba);
+        image = new BookImage(new ImTextureID(id), full.Width, full.Height);
+        recoloured[(edition, tint, asset)] = image;
+        Recolourings++;
+        return true;
+    }
+
     // Other editions' plates load from disk the first time one is drawn.
     private readonly Dictionary<(string, BookAsset), BookImage> editions = [];
 
