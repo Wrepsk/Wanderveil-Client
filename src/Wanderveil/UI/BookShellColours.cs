@@ -8,9 +8,10 @@ using Wanderveil.UI.Primitives;
 
 namespace Wanderveil.UI;
 
-// The Settings colour rows: for each part (cover cloth, foil, page ink, paper), the edition's own colour, a row
-// of curated swatches, and a custom colour from a picker. A pick is kept at once; the plates are recoloured in
-// the background and the legibility guard (PassportLook) keeps lettering and text readable whatever is picked.
+// The Settings colour rows: for each part (cover cloth, foil, page ink, paper, text), the edition's own colour (for
+// text, Automatic), a row of curated swatches, and a custom colour from a picker, each row named beside its
+// swatches. A pick is kept at once; the plates are recoloured in the background. Keep colours readable (on by
+// default) lets the legibility guard (PassportLook) move picks that would not read; off, every pick is exact.
 internal sealed class BookShellColours(PassportProfile holder)
 {
     private static readonly (ColourPart Part, string Label, (string Name, int Hex)[] Swatches)[] Rows =
@@ -18,11 +19,17 @@ internal sealed class BookShellColours(PassportProfile holder)
         (ColourPart.Cloth, "COVER", [("Forest", 0x1E3A2A), ("Navy", 0x19242E), ("Wine", 0x5A1424), ("Harbour", 0x2B5568), ("Midnight", 0x16213A), ("Plum", 0x3E2440), ("Saddle", 0x6B4226), ("Charcoal", 0x2E2E2E), ("Ivory", 0xEFEBE0)]),
         (ColourPart.Foil, "FOIL", [("Gold", 0xB99662), ("Bright gold", 0xD4A83C), ("Sage", 0xA9C28A), ("Silver", 0xC3CAD6), ("Pearl", 0xDCE6E8), ("Copper", 0xB87333), ("Rose gold", 0xC9967E), ("Black", 0x141414)]),
         (ColourPart.Ink, "PAGE INK", [("Forest", 0x1E3A2A), ("Navy", 0x2A3B52), ("Wine", 0x7A2232), ("Harbour", 0x1F4A60), ("Royal", 0x2B3F6B), ("Crimson", 0x8E1C22), ("Umber", 0x5A3A22), ("Black", 0x19242E)]),
-        (ColourPart.Paper, "PAPER", [("Cream", 0xD8C5A3), ("Ivory", 0xE6DCC6), ("White", 0xECEAE4), ("Aged", 0xCDB38A), ("Grey", 0xD2D0CB), ("Rose", 0xE4D3CA), ("Sage", 0xD5DCC8), ("Sky", 0xD3DCE2)]),
+        (ColourPart.Paper, "PAPER", [("Cream", 0xD8C5A3), ("Ivory", 0xE6DCC6), ("White", 0xECEAE4), ("Aged", 0xCDB38A), ("Grey", 0xD2D0CB), ("Rose", 0xE4D3CA), ("Sage", 0xD5DCC8), ("Sky", 0xD3DCE2), ("Black", 0x141414)]),
+        (ColourPart.Text, "TEXT", [("Ink", 0x19242E), ("Black", 0x000000), ("Sepia", 0x4A3426), ("Navy", 0x1F2A44), ("Forest", 0x1E3A2A), ("Wine", 0x5A1424), ("Parchment", 0xEFE8DA), ("White", 0xFFFFFF)]),
     ];
 
     // The custom swatch's wheel of hues, before anything is picked.
     private static readonly int[] Hues = [0xD98880, 0xD9C27A, 0x8CC48C, 0x7FC4C4, 0x8C9ED9, 0xC48CC4];
+
+    // Where each swatch was drawn last frame (row part, index from the left), for checks that click a given one.
+    private readonly System.Collections.Generic.Dictionary<(ColourPart, int), Vector2> drawn = [];
+
+    internal Vector2? Swatch(ColourPart part, int index) => drawn.TryGetValue((part, index), out var centre) ? centre : null;
 
     // The custom colour being picked, shown live on its swatch and kept when the picker lets go.
     private ColourPart? picking;
@@ -36,40 +43,44 @@ internal sealed class BookShellColours(PassportProfile holder)
         var look = identity.Look;
         ImGui.Dummy(new Vector2(0, 22 * context.Scale));
         UiTypography.Text("COLOURS", TextRole.Caption, context, UiTheme.MutedInk);
+        ImGui.Dummy(new Vector2(0, 4 * context.Scale));
+        // Each row's name sits beside its swatches, in a column as wide as the longest name.
+        var column = Rows.Max(row => UiTypography.Measure(row.Label, TextRole.Caption, context, float.MaxValue, false).X) + 10 * context.Scale;
         foreach (var (part, label, swatches) in Rows)
         {
+            var printed = part == ColourPart.Text ? Rgb.Of(PassportLook.Of(edition, chosen with { Text = null }).Text) : Printed(edition, part);
+            Row(part, label, column, swatches, printed, chosen[part], context);
+        }
+        ImGui.Dummy(new Vector2(0, 6 * context.Scale));
+        if (BookControl.Toggle("Keep colours readable", !chosen.Free, context)) holder.SetReadable(chosen.Free);
+        var note = chosen.Free ? "Colours are used exactly as picked, even where text is hard to read."
+            : look.Adjusted.Length > 0 ? $"Adjusted to stay readable: {string.Join(", ", look.Adjusted.Select(Name))}."
+            : chosen.Text == null && look.LightText ? "On this dark paper, text prints light." : null;
+        if (note != null)
+        {
             ImGui.Dummy(new Vector2(0, 4 * context.Scale));
-            UiTypography.Text(label, TextRole.Caption, context, UiTheme.MutedInk);
-            ImGui.Dummy(new Vector2(0, 3 * context.Scale));
-            Row(part, swatches, Printed(edition, part), chosen[part], context);
+            UiTypography.Text(note, TextRole.Body, context, UiTheme.MutedInk);
         }
-        if (look.LightText)
-        {
-            ImGui.Dummy(new Vector2(0, 8 * context.Scale));
-            UiTypography.Text("On this dark paper, text prints light.", TextRole.Body, context, UiTheme.MutedInk);
-        }
-        if (look.Adjusted.Length > 0)
-        {
-            ImGui.Dummy(new Vector2(0, 8 * context.Scale));
-            var parts = string.Join(", ", look.Adjusted.Select(Name));
-            UiTypography.Text($"Adjusted to stay readable: {parts}.", TextRole.Body, context, UiTheme.MutedInk);
-        }
-        if (chosen.IsEmpty) return;
-        ImGui.Dummy(new Vector2(0, 8 * context.Scale));
+        if (chosen with { Free = false } == PassportColours.None) return;
+        ImGui.Dummy(new Vector2(0, 6 * context.Scale));
         if (BookControl.Link($"Use {edition.Name}'s own colours", context)) holder.ResetColours();
     }
 
-    private void Row(ColourPart part, (string Name, int Hex)[] swatches, Rgb printed, Rgb? current, UiContext context)
+    private void Row(ColourPart part, string label, float column, (string Name, int Hex)[] swatches, Rgb printed, Rgb? current, UiContext context)
     {
-        var size = MathF.Round(20 * context.Scale);
-        var gap = MathF.Round(6 * context.Scale);
-        // The selection ring reaches past a swatch's edge: keep the row in from the page's edge so it is never cut.
+        var size = MathF.Round(18 * context.Scale);
+        var gap = MathF.Round(5 * context.Scale);
+        // The selection ring reaches past a swatch's edge: keep the row in from its edges so it is never cut.
         var ring = MathF.Ceiling(4 * context.Scale);
-        var width = UiLayout.ContentWidth - ring * 2;
-        var origin = ImGui.GetCursorScreenPos() + new Vector2(ring);
+        var start = ImGui.GetCursorScreenPos();
+        var labelSize = UiTypography.Measure(label, TextRole.Caption, context, column, false);
+        UiTypography.Draw(ImGui.GetWindowDrawList(), start + new Vector2(0, ring + (size - labelSize.Y) / 2), label, TextRole.Caption, context, column, UiTheme.MutedInk, false);
+        var width = UiLayout.ContentWidth - column - ring * 2;
+        var origin = start + new Vector2(column + ring, ring);
         var perRow = Math.Max(1, (int)((width + gap) / (size + gap)));
-        // The edition's own colour first, then the curated ones not equal to it, then the custom swatch.
-        var colours = new[] { ($"{holder.Identity.Edition.Name}'s own", printed, (Rgb?)null) }
+        // The edition's own colour (for text, Automatic) first, then the curated ones not equal to it, then custom.
+        var first = part == ColourPart.Text ? "Automatic" : $"{holder.Identity.Edition.Name}'s own";
+        var colours = new[] { (first, printed, (Rgb?)null) }
             .Concat(swatches.Select(swatch => (swatch.Name, Rgb.Hex(swatch.Hex), (Rgb?)Rgb.Hex(swatch.Hex))).Where(entry => entry.Item2 != printed))
             .ToArray();
         var custom = current is { } own && colours.All(entry => entry.Item2 != own);
@@ -79,6 +90,7 @@ internal sealed class BookShellColours(PassportProfile holder)
         {
             var at = origin + new Vector2(index % perRow * (size + gap), index / perRow * (size + gap));
             var center = at + new Vector2(size / 2);
+            drawn[(part, index)] = center;
             ImGui.SetCursorScreenPos(at);
             ImGui.PushID($"{part} swatch {index}");
             var clicked = ImGui.InvisibleButton("##Swatch", new Vector2(size));
@@ -123,8 +135,8 @@ internal sealed class BookShellColours(PassportProfile holder)
             if (hovered) ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
         }
         var rows = (count + perRow - 1) / perRow;
-        ImGui.SetCursorScreenPos(origin - new Vector2(ring));
-        ImGui.Dummy(new Vector2(width + ring * 2, rows * (size + gap) - gap + ring * 2));
+        ImGui.SetCursorScreenPos(start);
+        ImGui.Dummy(new Vector2(UiLayout.ContentWidth, rows * (size + gap) - gap + ring * 2));
     }
 
     // A colour picker on paper: dragging previews on the swatch; letting go (or entering a hex) keeps it.
@@ -167,6 +179,7 @@ internal sealed class BookShellColours(PassportProfile holder)
         ColourPart.Cloth => "Cover",
         ColourPart.Foil => "Foil",
         ColourPart.Ink => "Page ink",
-        _ => "Paper",
+        ColourPart.Paper => "Paper",
+        _ => "Text",
     };
 }

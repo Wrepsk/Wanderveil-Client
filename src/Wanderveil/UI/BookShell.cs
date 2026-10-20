@@ -84,6 +84,8 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
     internal int FixedPageCount => fixedPages.Count;
     internal BookShellStamps Desk => desk;
     internal PassportProfile Identity => holder;
+    // Where a colour swatch was drawn last frame, for checks.
+    internal Vector2? ColourSwatch(ColourPart part, int index) => colours.Swatch(part, index);
     // An edition picked in Settings and waiting for confirmation, or null.
     internal string? PendingEdition => pendingEdition;
     // Whether the identity pages are being written on (the footer's Edit / Done).
@@ -140,6 +142,8 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         solid.Clear();
         var edition = holder.Identity.Edition;
         var look = holder.Identity.Look;
+        // The Settings pages always stay readable, so colours picked with the guard off can always be put right there.
+        if (Section == BookSection.Settings && holder.Identity.Appearance?.Colours is { Free: true } exact) look = PassportLook.Of(edition, exact with { Free = false });
         UiTheme.UseEdition(look.Cloth, look.Foil, look.FoilBright, look.Ink, look.Paper, look.PaperInset, look.Text, look.Caption);
         try { return DrawBook(bounds, context); }
         finally
@@ -771,9 +775,9 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
     {
         var edition = identity.Edition;
         var look = identity.Look;
-        // The paper's guilloche rings are printed black; on a dark paper they turn light, as the text does.
+        // The paper's guilloche rings are printed black; they follow the text (light on a dark paper, or its colour).
         return new PlateTint(new PlateColours(Rgb3(edition.Cloth), Rgb3(edition.Foil), Rgb3(PassportLook.EditionPaper), Vector3.Zero),
-            new PlateColours(Rgb3(look.Cloth), Rgb3(look.Foil), Rgb3(look.Paper), look.LightText ? Vector3.One : Vector3.Zero));
+            new PlateColours(Rgb3(look.Cloth), Rgb3(look.Foil), Rgb3(look.Paper), Rgb3(look.Lines)));
     }
 
     private static Vector3 Rgb3(Vector4 colour) => new(colour.X, colour.Y, colour.Z);

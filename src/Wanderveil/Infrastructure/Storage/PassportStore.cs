@@ -124,6 +124,7 @@ internal sealed class PassportStore(string directory)
             var parts = new JsonObject();
             foreach (var part in Enum.GetValues<ColourPart>())
                 if (colours[part] is { } colour) parts[JsonNamingPolicy.CamelCase.ConvertName(part.ToString())] = colour.ToString();
+            if (colours.Free) parts["readable"] = false;
             node["colours"] = parts;
         }
         return node;
@@ -145,6 +146,8 @@ internal sealed class PassportStore(string directory)
                 if (parts[key] == null) continue;
                 colours = Rgb.TryParse(Text(parts, key), out var colour) ? colours.With(part, colour) : throw new FormatException($"A passport's {key} colour is #RRGGBB.");
             }
+            if (parts["readable"] is JsonValue readable && readable.TryGetValue<bool>(out var guarded)) colours = colours with { Free = !guarded };
+            else if (parts["readable"] != null) throw new FormatException("A passport's readable setting is true or false.");
             if (colours.IsEmpty) colours = null;
         }
         else if (appearance["colours"] != null) throw new FormatException("A passport's colours are a JSON object.");

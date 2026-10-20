@@ -35,16 +35,34 @@ internal static class ColourChecks
         book.Frames(3);
         check(book.Shell.PageOverflow == 0 && book.Shell.PageOverflowX == 0, "The colour rows overflow the Settings page.");
         book.Save(artifacts, "colour-settings.bmp");
-        // Up the right page's second swatch column from its foot, the first control is the paper row's second
-        // swatch: Ivory.
-        var page = book.Page(true);
-        var scale = page.Size.X / 364f;
-        for (var y = page.Size.Y - 20; profile.Identity.Appearance?.Colours == null && y > 40; y -= 3)
-            book.ClickControl(new Vector2(page.Position.X + 36 * scale, page.Position.Y + y));
+        // The paper row's second swatch (after the edition's own) is Ivory.
+        book.Click(book.Shell.ColourSwatch(ColourPart.Paper, 1)!.Value);
         check(profile.Identity.Appearance?.Colours?.Paper == Rgb.Hex(0xE6DCC6) && profile.Identity.Appearance.Edition == "gridania", $"Clicking a paper swatch chose {profile.Identity.Appearance?.Colours}.");
         book.Frames(3);
         check(UiTheme.Paper == Rgb.Hex(0xE6DCC6).Vector && book.Shell.PageOverflow == 0, $"The book does not print on the picked paper ({Rgb.Of(UiTheme.Paper)}, overflow {book.Shell.PageOverflow}).");
         book.Save(artifacts, "colour-settings-picked.bmp");
+        // Black paper (the paper row's last curated swatch), then wine text: on black it does not read, so the guard
+        // moves it; unticking Keep colours readable (the first control under the text row) prints it exactly.
+        book.Click(book.Shell.ColourSwatch(ColourPart.Paper, 8)!.Value);
+        check(profile.Identity.Appearance?.Colours?.Paper == Rgb.Hex(0x141414), $"The paper row's last curated swatch is not black ({profile.Identity.Appearance?.Colours?.Paper}).");
+        book.Frames(2);
+        book.Click(book.Shell.ColourSwatch(ColourPart.Text, 6)!.Value);
+        check(profile.Identity.Appearance?.Colours?.Text == Rgb.Hex(0x5A1424) && profile.Identity.Look.Adjusted.Contains(ColourPart.Text), $"Wine text on black paper is not picked and guarded ({profile.Identity.Appearance?.Colours?.Text}).");
+        book.Frames(2);
+        var page = book.Page(true);
+        var below = book.Shell.ColourSwatch(ColourPart.Text, 0)!.Value;
+        for (var y = below.Y + 12; profile.Identity.Appearance?.Colours?.Free != true && y < page.Max.Y; y += 3)
+            book.ClickControl(new Vector2(page.Position.X + 30, y));
+        check(profile.Identity.Appearance?.Colours?.Free == true && profile.Identity.Look.Adjusted.Length == 0 && Rgb.Of(profile.Identity.Look.Text) == Rgb.Hex(0x5A1424), "Unticking Keep colours readable does not keep the text exactly as picked.");
+        // The Settings pages themselves stay readable, so the checkbox can always be found again.
+        check(PassportLook.Contrast(UiTheme.Ink, UiTheme.Paper) >= 4.5, "With the guard off, the Settings pages become unreadable.");
+        check(book.Shell.PageOverflow == 0, "The colour rows with the checkbox overflow the Settings page.");
+        book.Save(artifacts, "colour-settings-free.bmp");
+        // Elsewhere the book prints the colours exactly.
+        book.Shell.GoBack();
+        book.Frames(3);
+        check(Rgb.Of(UiTheme.Ink) == Rgb.Hex(0x5A1424), "With the guard off, the passport pages do not print the text exactly as picked.");
+        book.Save(artifacts, "colour-free-pages.bmp");
         Console.WriteLine("PASS colour-settings");
     }
 
@@ -70,6 +88,17 @@ internal static class ColourChecks
         check(PassportLook.Contrast(dark.Ink, dark.Paper) >= 4.5 && dark.Adjusted.Contains(ColourPart.Ink), "Ink that does not read on the paper is kept.");
         var fine = PassportLook.Of(PassportEdition.Gridania, new PassportColours(Cloth: Rgb.Hex(0x5A1424), Foil: Rgb.Hex(0xD4A83C)));
         check(fine.Adjusted.Length == 0 && Rgb.Of(fine.Cloth) == Rgb.Hex(0x5A1424) && Rgb.Of(fine.Foil) == Rgb.Hex(0xD4A83C), "Legible colours are moved.");
+        // Text picked: exact when it reads, captions a softer shade of it, the paper's rings following it.
+        var sepia = PassportLook.Of(PassportEdition.Gridania, new PassportColours(Text: Rgb.Hex(0x4A3426)));
+        check(Rgb.Of(sepia.Text) == Rgb.Hex(0x4A3426) && sepia.Lines == sepia.Text && !sepia.LightText && PassportLook.Contrast(sepia.Caption, sepia.Paper) >= 4.5 && sepia.Caption != sepia.Text, "Picked text, its captions, or its rings are not as picked.");
+        var white = PassportLook.Of(PassportEdition.Gridania, new PassportColours(Paper: Rgb.Hex(0x000000), Text: Rgb.Hex(0xFFFFFF)));
+        check(white.LightText && white.Lines == Vector4.One, "White text on black paper does not light the rings.");
+        // A pick that does not read is moved, unless the guard is off; then every colour is exact.
+        var faint = new PassportColours(Foil: Rgb.Hex(0x1E3A2A), Text: Rgb.Hex(0xD0BE9C));
+        var guarded = PassportLook.Of(PassportEdition.Gridania, faint);
+        check(guarded.Adjusted.Contains(ColourPart.Text) && guarded.Adjusted.Contains(ColourPart.Foil) && PassportLook.Contrast(guarded.Text, guarded.Paper) >= 4.5, "An unreadable text or foil pick is kept with the guard on.");
+        var free = PassportLook.Of(PassportEdition.Gridania, faint with { Free = true });
+        check(free.Adjusted.Length == 0 && Rgb.Of(free.Text) == Rgb.Hex(0xD0BE9C) && Rgb.Of(free.Foil) == Rgb.Hex(0x1E3A2A), "With the guard off a pick is still moved.");
         Console.WriteLine("PASS colour-model");
     }
 
@@ -100,6 +129,19 @@ internal static class ColourChecks
         profile.RestorePrevious();
         check(profile.Identity.Appearance?.Colours?.Paper == Rgb.Hex(0xECEAE4), "Change back does not bring the colours back.");
         check(profile.SetColour(ColourPart.Cloth, null) && profile.Identity.Appearance?.Colours?.Cloth == null && profile.ResetColours() && profile.Identity.Appearance?.Colours == null, "Colours do not return to the edition's.");
+        var exact = PassportIdentity.Sample with { Appearance = new PassportAppearance("gridania", new PassportColours(Text: Rgb.Hex(0x4A3426), Free: true)) };
+        var stored = PassportStore.Serialize(exact);
+        check(PassportStore.Parse(stored) == exact.Normalize() && stored.Contains("\"text\": \"#4A3426\"", StringComparison.Ordinal) && stored.Contains("\"readable\": false", StringComparison.Ordinal), "Text colour and the guard being off do not round-trip.");
+        try
+        {
+            PassportStore.Parse("{\"format\":\"wanderveil.passport\",\"version\":2,\"number\":\"EZ 1\",\"appearance\":{\"edition\":\"gridania\",\"colours\":{\"readable\":\"no\"}}}");
+            check(false, "A readable setting that is not true or false was accepted.");
+        }
+        catch (FormatException) { check(true, ""); }
+        var guard = new PassportProfile(PassportIdentity.Sample);
+        check(guard.SetReadable(false) && guard.Identity.Appearance?.Colours?.Free == true && guard.SetColour(ColourPart.Text, Rgb.Hex(0xFFFFFF)), "Turning the guard off is not kept.");
+        check(guard.ResetColours() && guard.Identity.Appearance?.Colours == new PassportColours(Free: true), "Using the edition's own colours turns the guard back on or keeps a colour.");
+        check(guard.SetReadable(true) && guard.Identity.Appearance?.Colours == null, "Turning the guard back on leaves colours behind.");
         Console.WriteLine("PASS colour-storage");
     }
 

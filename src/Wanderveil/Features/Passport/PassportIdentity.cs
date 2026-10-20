@@ -190,7 +190,17 @@ internal sealed class PassportProfile(PassportIdentity identity)
         return Update(Identity with { Appearance = appearance with { Colours = colours.IsEmpty ? null : colours } });
     }
 
-    internal bool ResetColours() => Identity.Appearance is { Colours: not null } appearance && Update(Identity with { Appearance = appearance with { Colours = null } });
+    // Returns every part to the edition's own; whether the guard is on is a preference, kept.
+    internal bool ResetColours() => Identity.Appearance is { Colours: not null } appearance
+        && Update(Identity with { Appearance = appearance with { Colours = appearance.Chosen.Free ? new PassportColours(Free: true) : null } });
+
+    // Turns the legibility guard on or off (off: every colour is used exactly as picked).
+    internal bool SetReadable(bool readable)
+    {
+        var appearance = Identity.Appearance ?? new PassportAppearance(Identity.Edition.Id);
+        var colours = appearance.Chosen with { Free = !readable };
+        return Update(Identity with { Appearance = appearance with { Colours = colours.IsEmpty ? null : colours } });
+    }
 
     // Puts back the appearance the last change replaced (and keeps the one it replaces in turn).
     internal bool RestorePrevious() =>
