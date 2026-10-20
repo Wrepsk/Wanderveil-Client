@@ -13,6 +13,35 @@ Passport sharing ([ADR-0005](https://github.com/Wrepsk/FFXIV-Wanderveil), in the
 - **Visits:** `/v1/visits` looks a passport up by name and world, and `/v1/visits/{accountId}/{part}` reads its parts. Visibility is checked on every read, and a passport that does not exist, is hidden, or is blocked all answer the same `passport_not_visible`.
 - **Safety:** `/v1/blocks` blocks both ways, and `/v1/reports` reports a passport you opened.
 
+## Draft additions (1.2.0, not implemented): invited co-drawing
+
+Invited co-drawing (ADR-0006, in the coordination repository) adds:
+
+- **Invitations:** `/v1/drawing-grants` (the owner invites an approved viewer to draw on chosen stamp pages, changes the pages, or revokes the invitation) and `/v1/drawing-invitations` (the invitations a guest holds).
+- **Guests' marks:** each stroke or line of writing is its own record, with an author and an ID the guest's client makes, so retrying a save is harmless.
+  - `/v1/visits/{accountId}/guest-marks` lists them for anyone who may see the passport; a guest adds one with `PUT …/{markId}` and erases their own with `DELETE …/{markId}`.
+  - `/v1/passport/guest-marks` is the owner's view: it lists them, and removes one, or all by one guest with `?author=`.
+  - Codes: `drawing_not_allowed`, `limit_reached`, `grant_not_found`, `mark_not_found`, and `mark_conflict`.
+
+### The live hub (`/v1/live`, SignalR)
+
+A SignalR hub with the same session: the bearer token goes in the `Authorization` header, and a token in the query string is refused. REST stays the truth: after connecting or reconnecting, a client reads the guest marks and the owner's revisions again, so anything missed arrives that way.
+
+| Direction | Name | Arguments | Meaning |
+| --- | --- | --- | --- |
+| client → hub | `Follow` | `ownerId` | Follow a passport you may see; refused (with `AccessEnded`) otherwise. |
+| client → hub | `Unfollow` | `ownerId` | Stop following. |
+| client → hub | `Progress` | `ownerId, strokeId, sheet, colour, width, points` | The points so far of a stroke being drawn, on a page you may draw on (the owner on any stamp page, a guest on invited ones); at most ten a second. Never stored. |
+| client → hub | `EndStroke` | `ownerId, strokeId` | The stroke was finished (and saved through REST) or abandoned. |
+| hub → client | `StrokeProgress` | `ownerId, author, strokeId, sheet, colour, width, points` | Someone else's stroke in progress. |
+| hub → client | `StrokeEnded` | `ownerId, strokeId` | Drop that stroke in progress. |
+| hub → client | `MarkAdded` | `ownerId, GuestMark` | A guest's mark was saved. |
+| hub → client | `MarkRemoved` | `ownerId, markId` | A guest's mark was erased or removed. |
+| hub → client | `OwnerMarksChanged` | `ownerId, revision` | The owner's own drawing has a new revision; read it again. |
+| hub → client | `AccessEnded` | `ownerId` | You may no longer see this passport (or draw in it); you no longer follow it. |
+
+`colour` is `#rrggbb`, `width` is as in a stored stroke, and `points` are `[x, y, pressure]` triples in page units, as in the marks file.
+
 ## What it covers
 
 - **Sign-in.** Every account is one FFXIV character (global data centres), verified in one of two ways. **Lodestone:** the server issues a code (`WV-` and 8 characters), the player puts it in their Lodestone profile's self-introduction, and verifying reads the profile. **XIVAuth:** a device flow; the player approves in the browser while the plugin polls. Either one returns a session. There are no unverified accounts.

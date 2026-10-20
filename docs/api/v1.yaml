@@ -1,12 +1,13 @@
 openapi: 3.1.0
 info:
   title: Wanderveil API
-  version: 1.1.0-draft.1
+  version: 1.2.0-draft.1
   summary: Sign-in by character verification, sessions, and the holder's private passport.
   description: |
     Version 1, 21 October 2026: implemented by the Wanderveil server and this client, and used in game against a local
     server. The 1.1.0 additions (ADR-0005: the passport's other parts, sharing, view requests, viewers, visits, blocks,
-    and reports) are implemented on the server; the client does not use them yet, so they stay a draft. Compatibility promises begin with the first client release that uses it; until then it may still change.
+    and reports) are implemented on the server and this client. The 1.2.0 additions (ADR-0006: invitations to draw,
+    guests' marks, and the live hub at /v1/live described in README.md) are a draft that nothing implements yet. Compatibility promises begin with the first client release that uses it; until then it may still change.
     See README.md beside this file for the rules every endpoint follows.
 
     Every account is one FFXIV character verified through the Lodestone or XIVAuth. A verification proves control of
@@ -31,6 +32,7 @@ tags:
   - name: Sharing
   - name: Visiting
   - name: Safety
+  - name: Drawing
 paths:
   /v1/auth/lodestone/challenges:
     post:
@@ -650,6 +652,181 @@ paths:
         '400': { $ref: '#/components/responses/InvalidRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/drawing-grants:
+    get:
+      tags: [Drawing]
+      operationId: listDrawingGrants
+      summary: The guests you invited to draw, and on which pages.
+      description: Draft, 1.2.0 (ADR-0006).
+      responses:
+        '200':
+          description: Invitations, oldest first.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/DrawingGrant' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /v1/drawing-grants/{accountId}:
+    put:
+      tags: [Drawing]
+      operationId: setDrawingGrant
+      summary: Invite an approved viewer to draw on these pages (replacing the pages of an earlier invitation).
+      description: Draft, 1.2.0 (ADR-0006). Only a viewer you approved by name; at most 20 guests and 100 pages each.
+      parameters:
+        - $ref: '#/components/parameters/AccountId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DrawingGrantSave' }
+      responses:
+        '200':
+          description: The invitation as saved.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DrawingGrant' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404':
+          description: '`viewer_not_found`: not a viewer you approved by name.'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '422': { $ref: '#/components/responses/LimitReached' }
+    delete:
+      tags: [Drawing]
+      operationId: revokeDrawingGrant
+      summary: Revoke an invitation; the guest stops drawing at once. Their marks stay until you remove them.
+      parameters:
+        - $ref: '#/components/parameters/AccountId'
+      responses:
+        '204': { description: Revoked. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404':
+          description: '`grant_not_found`.'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+  /v1/drawing-invitations:
+    get:
+      tags: [Drawing]
+      operationId: listDrawingInvitations
+      summary: The passports you are invited to draw in, and on which pages.
+      description: Draft, 1.2.0 (ADR-0006).
+      responses:
+        '200':
+          description: Invitations held.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/DrawingInvitation' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /v1/passport/guest-marks:
+    get:
+      tags: [Drawing]
+      operationId: listOwnGuestMarks
+      summary: Every guest's marks on your passport.
+      description: Draft, 1.2.0 (ADR-0006).
+      responses:
+        '200':
+          description: Marks, oldest first.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/GuestMark' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    delete:
+      tags: [Drawing]
+      operationId: removeGuestMarksBy
+      summary: Remove every mark one guest made on your passport.
+      parameters:
+        - name: author
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204': { description: Removed (or there were none). }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /v1/passport/guest-marks/{markId}:
+    delete:
+      tags: [Drawing]
+      operationId: removeGuestMark
+      summary: Remove one guest's mark from your passport.
+      parameters:
+        - $ref: '#/components/parameters/MarkId'
+      responses:
+        '204': { description: Removed. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/MarkNotFound' }
+  /v1/visits/{accountId}/guest-marks:
+    get:
+      tags: [Drawing]
+      operationId: listGuestMarks
+      summary: Guests' marks on a passport you may open (visibility checked, as for its other parts).
+      description: Draft, 1.2.0 (ADR-0006).
+      parameters:
+        - $ref: '#/components/parameters/AccountId'
+      responses:
+        '200':
+          description: Marks, oldest first.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/GuestMark' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/PassportNotVisible' }
+  /v1/visits/{accountId}/guest-marks/{markId}:
+    put:
+      tags: [Drawing]
+      operationId: addGuestMark
+      summary: Add your mark to a page you are invited to draw on.
+      description: |
+        Draft, 1.2.0 (ADR-0006). The mark ID is yours to make (a UUID): saving the same ID again answers the mark
+        already saved, so a retry is harmless. The author is your account, never one sent.
+      parameters:
+        - $ref: '#/components/parameters/AccountId'
+        - $ref: '#/components/parameters/MarkId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GuestMarkSave' }
+      responses:
+        '200':
+          description: The mark as saved.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GuestMark' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403':
+          description: '`drawing_not_allowed`: you are not invited to draw on that page (any more).'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '404': { $ref: '#/components/responses/PassportNotVisible' }
+        '409':
+          description: '`mark_conflict`: that mark ID is someone else''s.'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '422': { $ref: '#/components/responses/LimitReached' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+    delete:
+      tags: [Drawing]
+      operationId: eraseOwnGuestMark
+      summary: Erase (or undo) one of your own marks.
+      parameters:
+        - $ref: '#/components/parameters/AccountId'
+        - $ref: '#/components/parameters/MarkId'
+      responses:
+        '204': { description: Erased. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/MarkNotFound' }
 components:
   securitySchemes:
     session:
@@ -657,6 +834,11 @@ components:
       scheme: bearer
       description: An opaque session token from a sign-in. Never logged.
   parameters:
+    MarkId:
+      name: markId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
     IfMatch:
       name: If-Match
       in: header
@@ -694,6 +876,16 @@ components:
       description: Seconds to wait before trying again.
       schema: { type: integer, minimum: 1 }
   responses:
+    LimitReached:
+      description: '`limit_reached`: over a drawing limit (guests, pages, points, lines of writing).'
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    MarkNotFound:
+      description: '`mark_not_found`: no such mark you may remove.'
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
     PartNotFound:
       description: '`part_not_found`: this account has never saved this part.'
       content:
@@ -767,6 +959,77 @@ components:
         application/problem+json:
           schema: { $ref: '#/components/schemas/Problem' }
   schemas:
+    DrawingGrantSave:
+      type: object
+      required: [pages]
+      additionalProperties: false
+      properties:
+        pages:
+          type: array
+          minItems: 1
+          maxItems: 100
+          uniqueItems: true
+          items: { type: integer, minimum: 0, maximum: 99999 }
+          description: Stamp pages, counted from 0 as the client's stamp sheets.
+    DrawingGrant:
+      type: object
+      required: [guest, pages, since]
+      properties:
+        guest: { $ref: '#/components/schemas/PlayerView' }
+        pages: { type: array, items: { type: integer } }
+        since: { type: string, format: date-time }
+    DrawingInvitation:
+      type: object
+      required: [owner, pages]
+      properties:
+        owner: { $ref: '#/components/schemas/PlayerView' }
+        pages: { type: array, items: { type: integer } }
+    GuestStroke:
+      type: object
+      required: [colour, width, points]
+      additionalProperties: false
+      properties:
+        colour: { type: string, pattern: '^#[0-9a-fA-F]{6}$' }
+        width: { type: number, minimum: 0.001, maximum: 0.05 }
+        points:
+          type: array
+          minItems: 2
+          maxItems: 4000
+          description: Each point as [x, y, pressure], in the page's own units (as the client's marks file).
+          items:
+            type: array
+            minItems: 3
+            maxItems: 3
+            items: { type: number }
+    GuestText:
+      type: object
+      required: [text, x, y, size, colour]
+      additionalProperties: false
+      properties:
+        text: { type: string, minLength: 1, maxLength: 120 }
+        x: { type: number }
+        y: { type: number }
+        size: { type: number, minimum: 0.02, maximum: 0.15 }
+        colour: { type: string, pattern: '^#[0-9a-fA-F]{6}$' }
+    GuestMarkSave:
+      type: object
+      description: A stroke or a line of writing (exactly one) on one page.
+      required: [sheet]
+      additionalProperties: false
+      properties:
+        sheet: { type: integer, minimum: 0, maximum: 99999 }
+        stroke: { $ref: '#/components/schemas/GuestStroke' }
+        text: { $ref: '#/components/schemas/GuestText' }
+    GuestMark:
+      type: object
+      required: [markId, sheet, author, createdAt]
+      properties:
+        markId: { type: string, format: uuid }
+        sheet: { type: integer }
+        author: { $ref: '#/components/schemas/PlayerView' }
+        createdAt: { type: string, format: date-time }
+        stroke: { $ref: '#/components/schemas/GuestStroke' }
+        text: { $ref: '#/components/schemas/GuestText' }
     StampsDocument:
       type: object
       description: The client's local stamps file, format `wanderveil.passport-stamps`, kept as it is.
@@ -1048,6 +1311,11 @@ components:
             - request_not_found
             - viewer_not_found
             - passport_not_visible
+            - drawing_not_allowed
+            - limit_reached
+            - grant_not_found
+            - mark_not_found
+            - mark_conflict
         traceId: { type: string, description: Quote this when reporting a problem. }
         errors:
           type: object
