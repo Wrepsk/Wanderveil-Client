@@ -1,5 +1,8 @@
 using System;
 using System.IO;
+using System.Linq;
+using System.Numerics;
+using Dalamud.Bindings.ImGui;
 using System.Threading;
 using System.Threading.Tasks;
 using Dalamud.Interface.ImGuiFileDialog;
@@ -12,7 +15,8 @@ using Wanderveil.UI.Components;
 
 namespace Wanderveil.Infrastructure.Media;
 
-// The holder's own picture. Choosing one opens Dalamud's file picker; the file is then read, decoded, and
+// The holder's own picture. Taking one captures the game's own view (before any plugin window draws, so none is in it)
+// inside the frame guide, saved as PNG through Dalamud's encoder. Choosing one opens Dalamud's file picker; the file is then read, decoded, and
 // copied beside the passport (portrait-<profile>.image) on a background task, so a large picture never stalls
 // a frame. Pictures taller than ShownHeight are scaled down once on the GPU, since textures have no mipmaps.
 // A new texture is swapped in at the start of a frame (Poll), when no draw list still refers to the old one.
@@ -20,6 +24,7 @@ internal sealed class PortraitPicture : IPassportPortrait, IDisposable
 {
     private const int ShownHeight = 1200;
     private readonly ITextureProvider provider;
+    private readonly ITextureReadbackProvider? readback;
     private readonly PassportStore store;
     private readonly string profileName;
     private readonly PassportProfile profile;
@@ -40,9 +45,10 @@ internal sealed class PortraitPicture : IPassportPortrait, IDisposable
     private volatile string? problem;
     private bool disposed;
 
-    internal PortraitPicture(ITextureProvider provider, PassportStore store, string profileName, PassportProfile profile, Action<Exception>? report = null)
+    internal PortraitPicture(ITextureProvider provider, PassportStore store, string profileName, PassportProfile profile, Action<Exception>? report = null, ITextureReadbackProvider? readback = null)
     {
         this.provider = provider;
+        this.readback = readback;
         this.store = store;
         this.profileName = profileName;
         this.profile = profile;
@@ -50,7 +56,7 @@ internal sealed class PortraitPicture : IPassportPortrait, IDisposable
         if (profile.Identity.Portrait == null) return;
         state = PortraitState.Loading;
         var current = generation;
-        Task.Run(() => Load(current, () => store.ReadPicture(profileName) ?? throw new FileNotFoundException("The saved portrait is missing."), keep: false, recenter: false));
+        Task.Run(() => Load(current, () => Task.FromResult(store.ReadPicture(profileName) ?? throw new FileNotFoundException("The saved portrait is missing.")), keep: false, recenter: false));
     }
 
     public PortraitState State => state;
@@ -75,9 +81,36 @@ internal sealed class PortraitPicture : IPassportPortrait, IDisposable
         Task.Run(() => Load(current, () =>
         {
             if (new FileInfo(path).Length > PassportStore.MaximumPictureBytes) throw new InvalidDataException("That picture is larger than 16 MB.");
-            return File.ReadAllBytes(path);
+            return Task.FromResult(File.ReadAllBytes(path));
         }, keep: true, recenter: true));
     }, 1, null, true);
+
+    public bool CanTake => readback != null;
+
+    public void Take(Vector2 min, Vector2 max)
+    {
+        if (readback is not { } saver) return;
+        var viewport = ImGui.GetMainViewport();
+        var size = Vector2.Max(Vector2.One, viewport.Size);
+        var uv0 = Vector2.Clamp((min - viewport.Pos) / size, Vector2.Zero, Vector2.One);
+        var uv1 = Vector2.Clamp((max - viewport.Pos) / size, Vector2.Zero, Vector2.One);
+        if (uv1.X - uv0.X <= 0 || uv1.Y - uv0.Y <= 0) return;
+        int current;
+        lock (gate) current = ++generation;
+        state = PortraitState.Loading;
+        problem = null;
+        // Started on the draw thread; the capture completes after the next frame renders.
+        var capture = provider.CreateFromImGuiViewportAsync(new ImGuiViewportTextureArgs { ViewportId = viewport.ID, TakeBeforeImGuiRender = true, KeepTransparency = false, Uv0 = uv0, Uv1 = uv1 }, "Wanderveil camera", stopping.Token);
+        Task.Run(() => Load(current, async () =>
+        {
+            using var shot = await capture;
+            var png = saver.GetSupportedImageEncoderInfos().FirstOrDefault(info => info.Extensions.Any(extension => string.Equals(extension, ".png", StringComparison.OrdinalIgnoreCase)))
+                ?? throw new InvalidDataException("The picture could not be saved: no PNG encoder.");
+            using var stream = new MemoryStream();
+            await saver.SaveToStreamAsync(shot, png.ContainerGuid, stream, null, true, true, stopping.Token);
+            return stream.ToArray();
+        }, keep: true, recenter: true));
+    }
 
     public void Remove()
     {
@@ -150,12 +183,12 @@ internal sealed class PortraitPicture : IPassportPortrait, IDisposable
         retired = null;
     }
 
-    private async Task Load(int current, Func<byte[]> read, bool keep, bool recenter)
+    private async Task Load(int current, Func<Task<byte[]>> read, bool keep, bool recenter)
     {
         IDalamudTextureWrap? wrap = null;
         try
         {
-            var bytes = read();
+            var bytes = await read();
             try { wrap = await provider.CreateFromImageAsync(bytes, "Wanderveil portrait", stopping.Token); }
             catch (Exception exception) when (exception is not OperationCanceledException) { throw new InvalidDataException("That file is not a picture Wanderveil can read.", exception); }
             if (wrap.Height > ShownHeight)

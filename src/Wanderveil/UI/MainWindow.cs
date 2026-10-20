@@ -28,11 +28,16 @@ internal sealed class MainWindow : Window
         this.reducedMotion = reducedMotion;
         this.assets = assets;
         shell = new BookShell(assets, PassportIdentity.Sample, settings: settings, stamps: stamps, storage: storage, identity: passport.Profile, portrait: passport.Portrait, character: passport.Character, identityStorage: passport.Storage, marks: marks, marksStorage: marksStorage) { ReadsEscape = false };
+        Camera = new CameraWindow(shell, assets);
         SizeCondition = ImGuiCond.Always;
         // The shell handles Escape so it plays the dismissal sequence instead of hiding at once.
         RespectCloseHotkey = false;
         ForceMainWindow = true;
     }
+
+    // The camera's guide for Take a picture, shown while the book steps aside.
+    internal CameraWindow Camera { get; }
+    internal bool CameraOpen => IsOpen && shell.CameraOpen;
 
     // Whether the book has a use for Escape now; the plugin then takes the key from the game and hands it over.
     internal bool WantsEscape => IsOpen && shell.WantsEscape;
@@ -65,6 +70,7 @@ internal sealed class MainWindow : Window
     {
         shell.ReducedMotion = reducedMotion();
         shell.Advance(ImGui.GetIO().DeltaTime);
+        Camera.IsOpen = shell.CameraOpen;
         // Off the book itself the window lets the mouse through, so clicks around the passport reach the game.
         Flags = shell.HostFlags(ImGui.GetIO().MousePos);
         var context = new UiContext(ShellStyle.Scale, ImGui.GetFontSize());

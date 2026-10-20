@@ -20,6 +20,7 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] private static ICommandManager CommandManager { get; set; } = null!;
     [PluginService] private static IPluginLog Log { get; set; } = null!;
     [PluginService] private static ITextureProvider TextureProvider { get; set; } = null!;
+    [PluginService] private static ITextureReadbackProvider TextureReadbackProvider { get; set; } = null!;
     [PluginService] private static IFramework Framework { get; set; } = null!;
     [PluginService] private static IKeyState KeyState { get; set; } = null!;
     [PluginService] private static IPlayerState PlayerState { get; set; } = null!;
@@ -58,10 +59,11 @@ public sealed class Plugin : IDalamudPlugin
                 report: exception => Log.Error(exception, "Could not save Wanderveil drawing."));
             if (marks.Loaded is not (Features.LoadOutcome.New or Features.LoadOutcome.Loaded))
                 Log.Warning("Wanderveil drawing loaded as {Outcome}; files kept aside: {Kept}", marks.Loaded, string.Join(", ", marks.Kept.Select(System.IO.Path.GetFileName)));
-            portrait = new PortraitPicture(TextureProvider, passportStore, Profile, identity.Profile, exception => Log.Error(exception, "Could not use the Wanderveil portrait."));
+            portrait = new PortraitPicture(TextureProvider, passportStore, Profile, identity.Profile, exception => Log.Error(exception, "Could not use the Wanderveil portrait."), TextureReadbackProvider);
             mainWindow = new MainWindow(() => configuration.ReducedMotion, new ConfigurationSettings(configuration, SaveConfiguration), assets, stamps.Collection, stamps,
                 new Features.Passport.PassportServices(identity.Profile, identity, portrait, new GameCharacter(Framework, PlayerState)), marks.Marks, marks);
             windowSystem.AddWindow(mainWindow);
+            windowSystem.AddWindow(mainWindow.Camera);
 
             commandRegistered = CommandManager.AddHandler(CommandName, new CommandInfo(OnCommand)
             {
@@ -114,6 +116,8 @@ public sealed class Plugin : IDalamudPlugin
     private void Draw()
     {
         portrait?.Poll();
+        // The camera's guide stays visible in group pose, the game's own posing tool.
+        PluginInterface.UiBuilder.DisableGposeUiHide = mainWindow.CameraOpen;
         assets?.BeginFrame();
         windowSystem.Draw();
         portrait?.DrawDialog();

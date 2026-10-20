@@ -51,6 +51,8 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
     private string? swapTo;
     private readonly PassportDocumentView passport = new(assets, identity!, portrait);
     private readonly IdentityEditor editor = new(identity!, portrait, character);
+    // Take a picture: the camera's guide, shown while the book steps aside.
+    private readonly BookShellCamera camera = new(portrait);
     private readonly BookShellColours colours = new(identity!);
     private readonly BookShellSymbols symbols = new(identity!, assets);
     // The holder's drawing and writing on the stamp pages, and Draw mode.
@@ -96,6 +98,10 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
     // Decorating the cover and first pages with symbols.
     internal BookShellSymbols Symbols => symbols;
     internal BookShellDrawing Drawing => drawing;
+    internal BookShellCamera Camera => camera;
+    internal IdentityEditor Editor => editor;
+    // Whether the book has stepped aside for Take a picture (it comes back once the picture is taken or cancelled).
+    internal bool CameraOpen { get; private set; }
     internal PassportProfile Identity => holder;
     // The colours the plates were drawn in last frame (null before the first frame).
     internal PlateTint? PlateTint => editions.Tint;
@@ -181,22 +187,24 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
             holding = pressing || dragging || desk.Busy || symbols.Busy || drawing.Busy || ImGui.IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows) && ImGui.IsAnyItemActive();
             // A field being written in keeps Escape for itself; otherwise the book wants it while it is shown and
             // either holds a stamp or info, or has focus.
-            wantsEscape = motion.Phase != BookPhase.Hidden && !ImGui.IsAnyItemActive()
+            wantsEscape = CameraOpen || motion.Phase != BookPhase.Hidden && !ImGui.IsAnyItemActive()
                 && (desk.Busy || desk.Info != null || EditingIdentity || symbols.Decorating || drawing.Drawing || ImGui.IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows));
         }
     }
 
     private BookShellIntent DrawBook(UiRect bounds, UiContext context)
     {
-        if (motion.Phase == BookPhase.Hidden) return new BookShellIntent(true, Vector2.Zero);
+        // Stepped aside for the camera, the book stays (hidden) until the picture is taken or cancelled.
+        if (motion.Phase == BookPhase.Hidden) return new BookShellIntent(!CameraOpen, Vector2.Zero);
         // Escape plays the dismissal, except while a field is being written in: there it only leaves the field.
         // A carried stamp, an open stamp info page, or editing takes Escape first.
-        var escape = escapeRequested;
-        escapeRequested = false;
+        // While the book steps aside, Escape is the camera's (DrawCamera reads it).
+        var escape = !CameraOpen && escapeRequested;
+        if (!CameraOpen) escapeRequested = false;
         if (ReadsEscape && ImGui.IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows) && !ImGui.IsAnyItemActive() && ImGui.IsKeyPressed(ImGuiKey.Escape, false)) escape = true;
         // An open popup (a colour picker) takes Escape for itself; ImGui closes it before the book draws, so a popup open
         // last frame counts too.
-        if (escape && !ImGui.IsAnyItemActive() && !popupOpen && !ImGui.IsPopupOpen("", ImGuiPopupFlags.AnyPopupId | ImGuiPopupFlags.AnyPopupLevel))
+        if (escape && !CameraOpen && !ImGui.IsAnyItemActive() && !popupOpen && !ImGui.IsPopupOpen("", ImGuiPopupFlags.AnyPopupId | ImGuiPopupFlags.AnyPopupLevel))
         {
             if (desk.Busy) desk.Cancel();
             else if (symbols.Busy) symbols.Cancel();
@@ -325,6 +333,11 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         symbols.Update(bounds, page);
 
         var placeStamp = discover.TakePassportRequest();
+        if (editor.TakeRequested)
+        {
+            editor.TakeRequested = false;
+            if (camera.Available) { CameraOpen = true; camera.Reset(); motion.StepAside(); }
+        }
         if (issued != null) Exchange(issued.Id);
         if (category is { } next && next != Category && !riffle.Active)
         {
@@ -1459,8 +1472,22 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         if (BookControl.Link("Try saving stamps again", context)) storage.Retry();
     }
 
+    // The camera's guide over the screen, while the book has stepped aside; when the picture is taken or cancelled
+    // the book comes back as it was (on the identity pages, still editing). Escape cancels.
+    internal void DrawCamera(UiRect screen, UiContext context)
+    {
+        if (!CameraOpen) return;
+        var escape = escapeRequested || ReadsEscape && ImGui.IsKeyPressed(ImGuiKey.Escape, false);
+        escapeRequested = false;
+        if (camera.Draw(screen, context, ImGui.GetIO().DeltaTime, escape) is null) return;
+        CameraOpen = false;
+        motion.Return();
+    }
+
     internal void BeginSession()
     {
+        CameraOpen = false;
+        camera.Reset();
         Section = ribbonSection = BookSection.Passport;
         VisiblePage = 0;
         turn.Reset(0);
@@ -1480,10 +1507,16 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
     // Summoning while an exchange is under way keeps the new edition: it is applied at once.
     internal void Summon()
     {
+        if (CameraOpen) { CameraOpen = false; camera.Reset(); motion.Return(); return; }
         if (swapTo != null) { holder.ChangeEdition(swapTo); swapTo = null; }
         motion.Summon();
     }
-    internal void RequestDismiss() => motion.Dismiss();
+    internal void RequestDismiss()
+    {
+        CameraOpen = false;
+        camera.Reset();
+        motion.Dismiss();
+    }
 
     // The open size is used from the moment opening is requested until the cover has fully closed.
     internal Vector2 FitSize(Vector2 room, UiContext context) => BookShellLayout.Fit(PreferredWidth, room, context, !(motion.WantsOpen || motion.Cover > 0f));

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Numerics;
 using System.Text;
 using System.Threading.Tasks;
@@ -71,28 +72,51 @@ internal sealed class IdentityEditor
     }
 
     // Choosing, replacing, or removing the holder's own picture, and what came of the last choice.
+    // The book asks the host's camera when the holder chooses Take a picture (the book steps aside for it).
+    internal bool TakeRequested { get; set; }
+    // For checks: where each picture link was drawn last, by its label.
+    internal System.Collections.Generic.Dictionary<string, Vector2> PictureLinkCentres { get; } = new(StringComparer.Ordinal);
+
     internal void PictureLinks(ref PageFlow flow)
     {
         if (picture == null) return;
         flow.Gap(8);
         var own = profile.Identity.Portrait != null;
-        var choose = own ? "Choose another picture" : "Choose a picture";
         var context = flow.Context;
-        var first = Measure(choose, context);
-        var second = own ? Measure("Remove picture", context) : Vector2.Zero;
+        // Choose, Take (where the host has a camera), and Remove, side by side as far as they fit, then on the next line.
+        var links = new List<(string Label, Action Act)> { (own ? "Choose another picture" : "Choose a picture", picture.Choose) };
+        if (picture.CanTake) links.Add(("Take a picture", () => TakeRequested = true));
+        if (own) links.Add(("Remove picture", picture.Remove));
         var gap = 18 * context.Scale;
-        var row = flow.Reserve(MathF.Max(first.Y, second.Y));
-        if (flow.IsDrawing)
+        var index = 0;
+        while (index < links.Count)
         {
-            ImGui.SetCursorScreenPos(row.Position);
-            if (BookControl.Link(choose, context)) picture.Choose();
-            if (own && row.Size.X >= first.X + gap + second.X)
+            var width = 0f;
+            var count = 0;
+            var height = 0f;
+            while (index + count < links.Count)
             {
-                ImGui.SetCursorScreenPos(row.Position + new Vector2(first.X + gap, 0));
-                if (BookControl.Link("Remove picture", context)) picture.Remove();
+                var size = Measure(links[index + count].Label, context);
+                if (count > 0 && width + gap + size.X > flow.Width) break;
+                width += (count > 0 ? gap : 0) + size.X;
+                height = MathF.Max(height, size.Y);
+                count++;
             }
+            if (count > 0 && index > 0) flow.Gap(4);
+            var row = flow.Reserve(height);
+            if (flow.IsDrawing)
+            {
+                var x = row.Position.X;
+                for (var at = index; at < index + count; at++)
+                {
+                    ImGui.SetCursorScreenPos(new Vector2(x, row.Position.Y));
+                    if (BookControl.Link(links[at].Label, context)) links[at].Act();
+                    PictureLinkCentres[links[at].Label] = (ImGui.GetItemRectMin() + ImGui.GetItemRectMax()) / 2;
+                    x += Measure(links[at].Label, context).X + gap;
+                }
+            }
+            index += count;
         }
-        if (own && row.Size.X < first.X + gap + second.X && Link(ref flow, "Remove picture")) picture.Remove();
         var status = picture.State switch
         {
             PortraitState.Loading => "Reading your picture",

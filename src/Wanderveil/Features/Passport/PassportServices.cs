@@ -1,3 +1,4 @@
+using System.Numerics;
 using System.Threading.Tasks;
 using Wanderveil.UI.Components;
 
@@ -18,6 +19,11 @@ internal interface IPassportPortrait
     void Choose();
     // Takes the picture out of the passport (and its copy off this PC); the placeholder returns.
     void Remove();
+    // Whether the host can take a picture of the game's own view (the game can; the checks' stand-ins cannot).
+    bool CanTake => false;
+    // Takes a picture of the game's own view, without any plugin windows, inside the screen rectangle min..max; it
+    // arrives as a chosen picture does, centred in the frame. Call it from the draw thread.
+    void Take(Vector2 min, Vector2 max) { }
 }
 
 // Name, home world, and data center as the game shows them for the logged-in character: copied once into the

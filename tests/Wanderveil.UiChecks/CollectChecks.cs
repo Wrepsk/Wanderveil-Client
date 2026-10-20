@@ -516,6 +516,12 @@ internal static class CollectChecks
         internal void Frame()
         {
             Shell.Advance(1f / 60f);
+            if (Shell.CameraOpen && Shell.Phase == BookPhase.Hidden)
+            {
+                // As the camera window: the guide over the whole screen while the book has stepped aside.
+                host.BookFrame(room - new Vector2(16), () => Shell.DrawCamera(new UiRect(ImGui.GetWindowPos(), ImGui.GetWindowSize()), context));
+                return;
+            }
             host.BookFrame(Shell.FitSize(room - new Vector2(32), context), () =>
             {
                 root = new UiRect(ImGui.GetWindowPos(), ImGui.GetWindowSize());
