@@ -1,11 +1,12 @@
 openapi: 3.1.0
 info:
   title: Wanderveil API
-  version: 1.0.0
+  version: 1.1.0-draft.1
   summary: Sign-in by character verification, sessions, and the holder's private passport.
   description: |
     Version 1, 21 October 2026: implemented by the Wanderveil server and this client, and used in game against a local
-    server. Compatibility promises begin with the first client release that uses it; until then it may still change.
+    server. The 1.1.0 additions (the passport's other parts, sharing, view requests, viewers, visits, blocks, and
+    reports; ADR-0005) are a draft that nothing implements yet. Compatibility promises begin with the first client release that uses it; until then it may still change.
     See README.md beside this file for the rules every endpoint follows.
 
     Every account is one FFXIV character verified through the Lodestone or XIVAuth. A verification proves control of
@@ -27,6 +28,9 @@ tags:
   - name: Sign-in
   - name: Session
   - name: Passport
+  - name: Sharing
+  - name: Visiting
+  - name: Safety
 paths:
   /v1/auth/lodestone/challenges:
     post:
@@ -251,6 +255,400 @@ paths:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
         '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/passport/stamps:
+    get:
+      tags: [Passport]
+      operationId: getStamps
+      summary: The holder's stamps and their placements.
+      description: Draft, 1.1.0 (ADR-0005); not implemented yet.
+      responses:
+        '200':
+          description: The record. `ETag` carries its revision.
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StampsRecord' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/PartNotFound' }
+        '426': { $ref: '#/components/responses/ClientOutdated' }
+    put:
+      tags: [Passport]
+      operationId: putStamps
+      summary: Save the holder's stamps, with the same revision rules as the passport.
+      description: Draft, 1.1.0 (ADR-0005). Needs `If-None-Match` `*` or `If-Match`, as `PUT /v1/passport`; at most 4 MiB.
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IfNoneMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StampsSave' }
+      responses:
+        '200':
+          description: Saved (or already this).
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StampsRecord' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '412': { $ref: '#/components/responses/RevisionConflict' }
+        '413': { $ref: '#/components/responses/DocumentTooLarge' }
+        '422': { $ref: '#/components/responses/DocumentInvalid' }
+        '426': { $ref: '#/components/responses/ClientOutdated' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/passport/marks:
+    get:
+      tags: [Passport]
+      operationId: getMarks
+      summary: The holder's drawing and writing on stamp pages.
+      description: Draft, 1.1.0 (ADR-0005). The response may be gzip-compressed when the request accepts it.
+      responses:
+        '200':
+          description: The record. `ETag` carries its revision.
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MarksRecord' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/PartNotFound' }
+        '426': { $ref: '#/components/responses/ClientOutdated' }
+    put:
+      tags: [Passport]
+      operationId: putMarks
+      summary: Save the holder's drawing and writing, with the same revision rules as the passport.
+      description: |
+        Draft, 1.1.0 (ADR-0005). Sent with `Content-Encoding: gzip`: at most 4 MiB as sent and 16 MiB of JSON once
+        expanded. Needs `If-None-Match` `*` or `If-Match`, as `PUT /v1/passport`.
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IfNoneMatch'
+        - name: Content-Encoding
+          in: header
+          required: true
+          schema: { type: string, const: gzip }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MarksSave' }
+      responses:
+        '200':
+          description: Saved (or already this).
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MarksRecord' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '412': { $ref: '#/components/responses/RevisionConflict' }
+        '413': { $ref: '#/components/responses/DocumentTooLarge' }
+        '422': { $ref: '#/components/responses/DocumentInvalid' }
+        '426': { $ref: '#/components/responses/ClientOutdated' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/passport/picture:
+    get:
+      tags: [Passport]
+      operationId: getPicture
+      summary: The holder's picture, as saved.
+      description: Draft, 1.1.0 (ADR-0005).
+      responses:
+        '200':
+          description: The picture. `ETag` carries its revision.
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            image/png:
+              schema: { type: string, format: binary }
+            image/jpeg:
+              schema: { type: string, format: binary }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/PartNotFound' }
+        '426': { $ref: '#/components/responses/ClientOutdated' }
+    put:
+      tags: [Passport]
+      operationId: putPicture
+      summary: Save the holder's picture (a copy re-encoded by the client).
+      description: |
+        Draft, 1.1.0 (ADR-0005). PNG or JPEG, at most 4 MiB and 2048 px on its longer side; the server checks the type
+        from the first bytes, whatever the Content-Type says. Needs `If-None-Match` `*` or `If-Match`.
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IfNoneMatch'
+      requestBody:
+        required: true
+        content:
+          image/png:
+            schema: { type: string, format: binary }
+          image/jpeg:
+            schema: { type: string, format: binary }
+      responses:
+        '200':
+          description: Saved (or already this).
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PictureInfo' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '412': { $ref: '#/components/responses/RevisionConflict' }
+        '413': { $ref: '#/components/responses/DocumentTooLarge' }
+        '422':
+          description: '`picture_invalid`: not a PNG or JPEG, or larger than 2048 px on its longer side.'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '426': { $ref: '#/components/responses/ClientOutdated' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+    delete:
+      tags: [Passport]
+      operationId: deletePicture
+      summary: Remove the holder's picture.
+      description: Draft, 1.1.0 (ADR-0005). Needs `If-Match` with the picture's revision.
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      responses:
+        '204': { description: Removed. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/PartNotFound' }
+        '412': { $ref: '#/components/responses/RevisionConflict' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+  /v1/sharing:
+    get:
+      tags: [Sharing]
+      operationId: getSharing
+      summary: Who may open the holder's passport.
+      description: Draft, 1.1.0 (ADR-0005). `approved` until changed.
+      responses:
+        '200':
+          description: The setting.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Sharing' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    put:
+      tags: [Sharing]
+      operationId: putSharing
+      summary: Change who may open the holder's passport; it takes effect on the next read.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Sharing' }
+      responses:
+        '200':
+          description: The setting, as saved.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Sharing' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /v1/view-requests:
+    post:
+      tags: [Sharing]
+      operationId: askToView
+      summary: Ask a character's owner to let you view their passport.
+      description: |
+        Draft, 1.1.0 (ADR-0005). Always `202` for a valid name and world, whether or not the character uses Wanderveil,
+        has blocked you, or already approved you: the answer never says. At most 20 a day and one pending per pair.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CharacterRequest' }
+      responses:
+        '202': { description: 'Asked, or quietly not where the answer must not say why.' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+    get:
+      tags: [Sharing]
+      operationId: listViewRequests
+      summary: Requests to view your passport (incoming), or the ones you sent (outgoing).
+      parameters:
+        - name: direction
+          in: query
+          required: true
+          schema: { type: string, enum: [incoming, outgoing] }
+      responses:
+        '200':
+          description: Pending requests, newest first. Outgoing ones are `pending` until approved, withdrawn, or expired; a declined one looks pending until it expires.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ViewRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /v1/view-requests/{requestId}/approve:
+    post:
+      tags: [Sharing]
+      operationId: approveViewRequest
+      summary: Approve a request to view your passport; the sender becomes a viewer.
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+      responses:
+        '204': { description: Approved. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/RequestNotFound' }
+  /v1/view-requests/{requestId}/decline:
+    post:
+      tags: [Sharing]
+      operationId: declineViewRequest
+      summary: Decline a request to view your passport. The sender is not told.
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+      responses:
+        '204': { description: Declined. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/RequestNotFound' }
+  /v1/view-requests/{requestId}:
+    delete:
+      tags: [Sharing]
+      operationId: withdrawViewRequest
+      summary: Withdraw a request you sent.
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+      responses:
+        '204': { description: Withdrawn. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/RequestNotFound' }
+  /v1/viewers:
+    get:
+      tags: [Sharing]
+      operationId: listViewers
+      summary: The players you approved to view your passport.
+      responses:
+        '200':
+          description: Approved viewers.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Viewer' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /v1/viewers/{accountId}:
+    delete:
+      tags: [Sharing]
+      operationId: removeViewer
+      summary: Remove an approved viewer; their next read is refused.
+      parameters:
+        - $ref: '#/components/parameters/AccountId'
+      responses:
+        '204': { description: Removed. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404':
+          description: '`viewer_not_found`.'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+  /v1/visits:
+    get:
+      tags: [Visiting]
+      operationId: lookUpPassport
+      summary: Find a passport you may open, by character name and home world.
+      parameters:
+        - name: name
+          in: query
+          required: true
+          schema: { type: string, minLength: 3, maxLength: 21 }
+        - name: world
+          in: query
+          required: true
+          schema: { type: string, minLength: 2, maxLength: 16 }
+      responses:
+        '200':
+          description: The passport, its owner, and its parts' revisions.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Visit' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/PassportNotVisible' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/visits/{accountId}/{part}:
+    get:
+      tags: [Visiting]
+      operationId: readVisitedPart
+      summary: Read one part of a passport you may open; visibility is checked again on every read.
+      description: |
+        Draft, 1.1.0 (ADR-0005). `passport`, `stamps`, and `marks` answer as the owner's own record (JSON); `picture`
+        answers the image. `If-None-Match` with a revision answers `304` when unchanged. Keep what you read in memory
+        only.
+      parameters:
+        - $ref: '#/components/parameters/AccountId'
+        - name: part
+          in: path
+          required: true
+          schema: { type: string, enum: [passport, stamps, marks, picture] }
+        - name: If-None-Match
+          in: header
+          schema: { type: string, example: '"7"' }
+      responses:
+        '200': { description: The part. `ETag` carries its revision. }
+        '304': { description: Unchanged since the revision named. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404':
+          description: '`passport_not_visible`, or `part_not_found` when the passport is visible but has no such part.'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+  /v1/blocks:
+    get:
+      tags: [Safety]
+      operationId: listBlocks
+      summary: The players you blocked.
+      responses:
+        '200':
+          description: Blocked players.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Viewer' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /v1/blocks/{accountId}:
+    put:
+      tags: [Safety]
+      operationId: block
+      summary: Block a player (from a request, a viewer, or a visited passport).
+      description: Neither of you can then see or ask to see the other's passport; their approval and every pending request between you are removed.
+      parameters:
+        - $ref: '#/components/parameters/AccountId'
+      responses:
+        '204': { description: Blocked (or already). }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    delete:
+      tags: [Safety]
+      operationId: unblock
+      summary: Unblock a player. Approvals removed by the block do not return.
+      parameters:
+        - $ref: '#/components/parameters/AccountId'
+      responses:
+        '204': { description: Unblocked (or was not blocked). }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /v1/reports:
+    post:
+      tags: [Safety]
+      operationId: report
+      summary: Report a passport you opened. Reviewed by people; the owner is not told who reported.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Report' }
+      responses:
+        '202': { description: Received. }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
 components:
   securitySchemes:
     session:
@@ -258,6 +656,24 @@ components:
       scheme: bearer
       description: An opaque session token from a sign-in. Never logged.
   parameters:
+    IfMatch:
+      name: If-Match
+      in: header
+      schema: { type: string, example: '"7"' }
+    IfNoneMatch:
+      name: If-None-Match
+      in: header
+      schema: { type: string, const: '*' }
+    RequestId:
+      name: requestId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    AccountId:
+      name: accountId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
     ChallengeId:
       name: challengeId
       in: path
@@ -277,6 +693,41 @@ components:
       description: Seconds to wait before trying again.
       schema: { type: integer, minimum: 1 }
   responses:
+    PartNotFound:
+      description: '`part_not_found`: this account has never saved this part.'
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    RevisionConflict:
+      description: '`revision_conflict`: the part changed since that revision, or one exists already for `If-None-Match: *`.'
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    DocumentTooLarge:
+      description: '`document_too_large`: over the part''s limit.'
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    DocumentInvalid:
+      description: '`document_invalid`: not a document of this part, or a version this server does not accept.'
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    PreconditionRequired:
+      description: '`precondition_required`: neither `If-Match` nor `If-None-Match: *` was sent.'
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    RequestNotFound:
+      description: '`request_not_found`: no such pending request of yours.'
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    PassportNotVisible:
+      description: '`passport_not_visible`: there is no passport you may open there. The same whether the character does not use Wanderveil, has not approved you, has blocked you, or was deleted.'
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
     InvalidRequest:
       description: '`invalid_request`: a malformed body or parameter; `errors` names the fields.'
       content:
@@ -315,6 +766,121 @@ components:
         application/problem+json:
           schema: { $ref: '#/components/schemas/Problem' }
   schemas:
+    StampsDocument:
+      type: object
+      description: The client's local stamps file, format `wanderveil.passport-stamps`, kept as it is.
+      required: [format, version]
+      properties:
+        format: { const: wanderveil.passport-stamps }
+        version: { type: integer, minimum: 1, maximum: 2 }
+      additionalProperties: true
+    StampsSave:
+      type: object
+      required: [document]
+      additionalProperties: false
+      properties:
+        document: { $ref: '#/components/schemas/StampsDocument' }
+    StampsRecord:
+      type: object
+      required: [revision, updatedAt, document]
+      properties:
+        revision: { type: integer, minimum: 1 }
+        updatedAt: { type: string, format: date-time }
+        document: { $ref: '#/components/schemas/StampsDocument' }
+    MarksDocument:
+      type: object
+      description: The client's local drawing file, format `wanderveil.passport-marks`, kept as it is.
+      required: [format, version]
+      properties:
+        format: { const: wanderveil.passport-marks }
+        version: { type: integer, minimum: 1, maximum: 1 }
+      additionalProperties: true
+    MarksSave:
+      type: object
+      required: [document]
+      additionalProperties: false
+      properties:
+        document: { $ref: '#/components/schemas/MarksDocument' }
+    MarksRecord:
+      type: object
+      required: [revision, updatedAt, document]
+      properties:
+        revision: { type: integer, minimum: 1 }
+        updatedAt: { type: string, format: date-time }
+        document: { $ref: '#/components/schemas/MarksDocument' }
+    PictureInfo:
+      type: object
+      required: [revision, updatedAt, contentType, width, height, bytes]
+      properties:
+        revision: { type: integer, minimum: 1 }
+        updatedAt: { type: string, format: date-time }
+        contentType: { type: string, enum: [image/png, image/jpeg] }
+        width: { type: integer, minimum: 1, maximum: 2048 }
+        height: { type: integer, minimum: 1, maximum: 2048 }
+        bytes: { type: integer, minimum: 1, maximum: 4194304 }
+    Sharing:
+      type: object
+      required: [visibility]
+      additionalProperties: false
+      properties:
+        visibility:
+          type: string
+          enum: [approved, anyone]
+          description: '`approved`: only approved viewers (none at first). `anyone`: any signed-in player. Blocks override both.'
+    PlayerView:
+      type: object
+      description: Another player as Wanderveil knows them, by their verified character.
+      required: [accountId, character, verifiedBy]
+      properties:
+        accountId: { type: string, format: uuid }
+        character: { $ref: '#/components/schemas/Character' }
+        verifiedBy: { type: string, enum: [lodestone, xivauth] }
+    ViewRequest:
+      type: object
+      required: [requestId, state, createdAt, expiresAt]
+      properties:
+        requestId: { type: string, format: uuid }
+        state:
+          type: string
+          enum: [pending, approved]
+          description: Outgoing requests become `approved` once approved; incoming ones are always `pending` (approved ones are viewers).
+        from:
+          description: For incoming requests, who is asking.
+          allOf: [{ $ref: '#/components/schemas/PlayerView' }]
+        to:
+          description: For outgoing requests, the character asked for, as typed (it may not use Wanderveil).
+          allOf: [{ $ref: '#/components/schemas/CharacterRequest' }]
+        createdAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+    Viewer:
+      allOf:
+        - $ref: '#/components/schemas/PlayerView'
+        - type: object
+          required: [since]
+          properties:
+            since: { type: string, format: date-time }
+    Visit:
+      type: object
+      required: [owner, revisions]
+      properties:
+        owner: { $ref: '#/components/schemas/PlayerView' }
+        revisions:
+          type: object
+          description: The revision of each part saved, absent for a part never saved.
+          properties:
+            passport: { type: integer }
+            stamps: { type: integer }
+            marks: { type: integer }
+            picture: { type: integer }
+    Report:
+      type: object
+      required: [accountId, part, reason]
+      additionalProperties: false
+      properties:
+        accountId: { type: string, format: uuid, description: The passport's owner. }
+        part: { type: string, enum: [identity, picture, marks, stamps, other] }
+        reason: { type: string, enum: [harassment, hateful, sexual, spam, impersonation, other] }
+        note: { type: string, maxLength: 1000 }
     Secret:
       type: string
       description: 128 random bits, base64url without padding.
@@ -476,6 +1042,11 @@ components:
             - document_invalid
             - precondition_required
             - internal_error
+            - part_not_found
+            - picture_invalid
+            - request_not_found
+            - viewer_not_found
+            - passport_not_visible
         traceId: { type: string, description: Quote this when reporting a problem. }
         errors:
           type: object
