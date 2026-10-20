@@ -6,8 +6,9 @@ info:
   description: |
     Version 1, 21 October 2026: implemented by the Wanderveil server and this client, and used in game against a local
     server. The 1.1.0 additions (ADR-0005: the passport's other parts, sharing, view requests, viewers, visits, blocks,
-    and reports) are implemented on the server and this client. The 1.2.0 additions (ADR-0006: invitations to draw,
-    guests' marks, and the live hub at /v1/live described in README.md) are a draft that nothing implements yet. Compatibility promises begin with the first client release that uses it; until then it may still change.
+    and reports) are implemented on the server and this client. Of the 1.2.0 additions (ADR-0006), invitations to draw
+    and guests' marks are implemented on the server; the live hub at /v1/live (described in README.md) and the client
+    are still a draft. Compatibility promises begin with the first client release that uses it; until then it may still change.
     See README.md beside this file for the rules every endpoint follows.
 
     Every account is one FFXIV character verified through the Lodestone or XIVAuth. A verification proves control of
@@ -657,7 +658,7 @@ paths:
       tags: [Drawing]
       operationId: listDrawingGrants
       summary: The guests you invited to draw, and on which pages.
-      description: Draft, 1.2.0 (ADR-0006).
+      description: 1.2.0 (ADR-0006); implemented on the server.
       responses:
         '200':
           description: Invitations, oldest first.
@@ -672,7 +673,7 @@ paths:
       tags: [Drawing]
       operationId: setDrawingGrant
       summary: Invite an approved viewer to draw on these pages (replacing the pages of an earlier invitation).
-      description: Draft, 1.2.0 (ADR-0006). Only a viewer you approved by name; at most 20 guests and 100 pages each.
+      description: 1.2.0 (ADR-0006); implemented on the server. Only a viewer you approved by name; at most 20 guests and 100 pages each.
       parameters:
         - $ref: '#/components/parameters/AccountId'
       requestBody:
@@ -713,7 +714,7 @@ paths:
       tags: [Drawing]
       operationId: listDrawingInvitations
       summary: The passports you are invited to draw in, and on which pages.
-      description: Draft, 1.2.0 (ADR-0006).
+      description: 1.2.0 (ADR-0006); implemented on the server.
       responses:
         '200':
           description: Invitations held.
@@ -728,7 +729,7 @@ paths:
       tags: [Drawing]
       operationId: listOwnGuestMarks
       summary: Every guest's marks on your passport.
-      description: Draft, 1.2.0 (ADR-0006).
+      description: 1.2.0 (ADR-0006); implemented on the server.
       responses:
         '200':
           description: Marks, oldest first.
@@ -766,7 +767,7 @@ paths:
       tags: [Drawing]
       operationId: listGuestMarks
       summary: Guests' marks on a passport you may open (visibility checked, as for its other parts).
-      description: Draft, 1.2.0 (ADR-0006).
+      description: 1.2.0 (ADR-0006); implemented on the server.
       parameters:
         - $ref: '#/components/parameters/AccountId'
       responses:
@@ -785,7 +786,7 @@ paths:
       operationId: addGuestMark
       summary: Add your mark to a page you are invited to draw on.
       description: |
-        Draft, 1.2.0 (ADR-0006). The mark ID is yours to make (a UUID): saving the same ID again answers the mark
+        1.2.0 (ADR-0006); implemented on the server. The mark ID is yours to make (a UUID): saving the same ID again answers the mark
         already saved, so a retry is harmless. The author is your account, never one sent.
       parameters:
         - $ref: '#/components/parameters/AccountId'
