@@ -5,8 +5,8 @@ info:
   summary: Sign-in by character verification, sessions, and the holder's private passport.
   description: |
     Version 1, 21 October 2026: implemented by the Wanderveil server and this client, and used in game against a local
-    server. Of the 1.1.0 additions (ADR-0005), the passport's other parts are implemented on the server; sharing,
-    view requests, viewers, visits, blocks, and reports are still a draft. Compatibility promises begin with the first client release that uses it; until then it may still change.
+    server. The 1.1.0 additions (ADR-0005: the passport's other parts, sharing, view requests, viewers, visits, blocks,
+    and reports) are implemented on the server; the client does not use them yet, so they stay a draft. Compatibility promises begin with the first client release that uses it; until then it may still change.
     See README.md beside this file for the rules every endpoint follows.
 
     Every account is one FFXIV character verified through the Lodestone or XIVAuth. A verification proves control of
@@ -427,7 +427,7 @@ paths:
       tags: [Sharing]
       operationId: getSharing
       summary: Who may open the holder's passport.
-      description: Draft, 1.1.0 (ADR-0005). `approved` until changed.
+      description: 1.1.0 (ADR-0005); implemented on the server. `approved` until changed.
       responses:
         '200':
           description: The setting.
@@ -458,7 +458,7 @@ paths:
       operationId: askToView
       summary: Ask a character's owner to let you view their passport.
       description: |
-        Draft, 1.1.0 (ADR-0005). Always `202` for a valid name and world, whether or not the character uses Wanderveil,
+        1.1.0 (ADR-0005); implemented on the server. Always `202` for a valid name and world, whether or not the character uses Wanderveil,
         has blocked you, or already approved you: the answer never says. At most 20 a day and one pending per pair.
       requestBody:
         required: true
@@ -580,7 +580,7 @@ paths:
       operationId: readVisitedPart
       summary: Read one part of a passport you may open; visibility is checked again on every read.
       description: |
-        Draft, 1.1.0 (ADR-0005). `passport`, `stamps`, and `marks` answer as the owner's own record (JSON); `picture`
+        1.1.0 (ADR-0005); implemented on the server. `passport`, `stamps`, and `marks` answer as the owner's own record (JSON); `picture`
         answers the image. `If-None-Match` with a revision answers `304` when unchanged. Keep what you read in memory
         only.
       parameters:

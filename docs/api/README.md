@@ -2,7 +2,7 @@
 
 Status: **v1** (`1.0.0`), 21 October 2026. [`v1.yaml`](v1.yaml) (OpenAPI 3.1) describes signing in by character verification, the session, account deletion, and the holder's private passport record. The Wanderveil server and this client implement all of it ([how](../online.md)), and both sign-ins and passport sync have been used in game against a local server. No hosted server exists yet. Until the first client release that uses it, v1 may still change; afterwards, changes within `v1` only add things.
 
-## Additions in 1.1.0 (the parts are implemented on the server; the rest is a draft)
+## Additions in 1.1.0 (implemented on the server; not yet used by this client)
 
 Passport sharing ([ADR-0005](https://github.com/Wrepsk/FFXIV-Wanderveil), in the coordination repository) adds, only adding endpoints and codes:
 
