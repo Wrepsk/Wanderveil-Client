@@ -1180,7 +1180,16 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
             left -= spacing + width;
             return BookControl.Draw(id, label, new UiRect(new Vector2(left, top), new Vector2(width, height)), stamp, BookControlStyle.Foil, hint: hint);
         }
-        if (holder.Identity.Appearance != null && !symbols.Decorating && CoverMark("Decorate", "Decorate", "Place symbols on the cover (and the first pages)")) symbols.Start();
+        if (holder.Identity.Appearance != null && !symbols.Decorating)
+        {
+            // A small sparkle as quiet as the −, +, and × beside it; hovering names it.
+            left -= spacing + small;
+            var mark = new UiRect(new Vector2(left, top), new Vector2(small, height));
+            if (BookControl.Draw("Decorate", "", mark, stamp, BookControlStyle.Foil, hint: "Decorate: place symbols on the cover (and the first pages)")) symbols.Start();
+            var ink = ImGui.IsItemHovered() ? UiTheme.FoilBright : UiTheme.Foil;
+            if (moving) ink.W *= 0.45f;
+            Sparkle(ImGui.GetWindowDrawList(), mark.Position + mark.Size / 2, MathF.Min(mark.Size.X, mark.Size.Y) * 0.2f, ImGui.GetColorU32(ink with { W = ink.W * 0.85f }));
+        }
         else if (symbols.Decorating)
         {
             if (CoverMark("Decorate", "Done", "Stop decorating (Escape)")) symbols.Stop();
@@ -1205,6 +1214,14 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         if (click > 0) OpenBook();
         else if (!ImGui.IsAnyItemFocused() && (Keys(ImGuiKey.Space) || Keys(ImGuiKey.Enter) || Keys(ImGuiKey.KeypadEnter) || Keys(ImGuiKey.PageDown))) OpenBook();
         return new BookShellIntent(motion.Phase == BookPhase.Hidden, drag);
+    }
+
+    // A four-point sparkle: two slim diamonds crossed.
+    private static void Sparkle(ImDrawListPtr list, Vector2 center, float radius, uint colour)
+    {
+        var waist = radius * 0.2f;
+        list.AddQuadFilled(center + new Vector2(0, -radius), center + new Vector2(waist, 0), center + new Vector2(0, radius), center + new Vector2(-waist, 0), colour);
+        list.AddQuadFilled(center + new Vector2(-radius, 0), center + new Vector2(0, -waist), center + new Vector2(radius, 0), center + new Vector2(0, waist), colour);
     }
 
     // The cover swinging open on its spine (or closed again), with no page content or input until it lands.
