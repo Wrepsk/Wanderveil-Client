@@ -13,7 +13,7 @@ Passport sharing ([ADR-0005](https://github.com/Wrepsk/FFXIV-Wanderveil), in the
 - **Visits:** `/v1/visits` looks a passport up by name and world, and `/v1/visits/{accountId}/{part}` reads its parts. Visibility is checked on every read, and a passport that does not exist, is hidden, or is blocked all answer the same `passport_not_visible`.
 - **Safety:** `/v1/blocks` blocks both ways, and `/v1/reports` reports a passport you opened.
 
-## Additions in 1.2.0: invited co-drawing (REST implemented on the server; the hub and the client not yet)
+## Additions in 1.2.0: invited co-drawing (implemented on the server, the hub included; not yet used by this client)
 
 Invited co-drawing (ADR-0006, in the coordination repository) adds:
 
