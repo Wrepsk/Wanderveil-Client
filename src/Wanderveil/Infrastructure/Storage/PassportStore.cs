@@ -135,6 +135,7 @@ internal sealed class PassportStore(string directory)
             }
             node["colours"] = parts;
         }
+        if (appearance.Background != PageBackground.Guilloche) node["background"] = JsonNamingPolicy.CamelCase.ConvertName(appearance.Background.ToString());
         if (appearance.Symbols is { IsEmpty: false } symbols)
         {
             var list = new JsonArray();
@@ -189,7 +190,12 @@ internal sealed class PassportStore(string directory)
             symbols = SymbolLayer.Of(read) is { IsEmpty: false } layer ? layer : null;
         }
         else if (appearance["symbols"] != null) throw new FormatException("A passport's symbols are a list.");
-        return new PassportAppearance(edition, colours, symbols);
+        // A background this version does not draw falls back to the rings rather than losing the passport.
+        var background = PageBackground.Guilloche;
+        if (appearance["background"] is JsonValue backgroundValue && backgroundValue.TryGetValue<string>(out var backgroundName))
+            background = Enum.TryParse<PageBackground>(backgroundName, true, out var parsed) && Enum.IsDefined(parsed) && !char.IsDigit(backgroundName[0]) ? parsed : PageBackground.Guilloche;
+        else if (appearance["background"] != null) throw new FormatException("A passport's background is a name.");
+        return new PassportAppearance(edition, colours, symbols, background);
     }
 
     private static string Key(IdentityField field) => JsonNamingPolicy.CamelCase.ConvertName(field.ToString());

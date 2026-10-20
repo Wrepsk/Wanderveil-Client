@@ -22,10 +22,13 @@ internal static class UiTheme
     internal static Vector4 Foil { get; private set; } = Rgb(169, 194, 138);
     internal static Vector4 FoilBright { get; private set; } = Rgb(205, 222, 180);
     internal static Vector4 EditionInk { get; private set; } = Rgb(30, 58, 42);
+    // The paper's printed pattern (the guilloche rings, or the background drawn in their place).
+    internal static Vector4 Lines { get; private set; } = new(0f, 0f, 0f, 1f);
 
     // Drawing is single-threaded, so the edition being drawn sets these for everything drawn after it.
-    internal static void UseEdition(Vector4 cloth, Vector4 foil, Vector4 foilBright, Vector4 ink, Vector4? paper = null, Vector4? paperInset = null, Vector4? text = null, Vector4? caption = null)
+    internal static void UseEdition(Vector4 cloth, Vector4 foil, Vector4 foilBright, Vector4 ink, Vector4? paper = null, Vector4? paperInset = null, Vector4? text = null, Vector4? caption = null, Vector4? lines = null)
     {
+        Lines = lines ?? new Vector4(0f, 0f, 0f, 1f);
         Ink = text ?? Rgb(25, 36, 46);
         MutedInk = caption ?? Rgb(67, 80, 90);
         Paper = paper ?? Rgb(216, 197, 163);

@@ -18,7 +18,7 @@ namespace Wanderveil.UI;
 internal enum BookSection { Passport, Discover, Echoes, Studio, Settings }
 internal readonly record struct BookShellIntent(bool Close, Vector2 Drag);
 // The Settings pages' categories, chosen by icon tabs that take the section tabs' place while Settings are open.
-internal enum SettingsCategory { General, Customization, Saved }
+internal enum SettingsCategory { General, Customization, Layout, Saved }
 
 // The book itself is the control surface: press-and-drag anywhere moves it, a click on its right side
 // opens it or turns forward, and a click on its left side turns back (from the first page, to the cover).
@@ -138,7 +138,7 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
     // rise in their place; leaving Settings reverses it.
     internal SettingsCategory Category { get; private set; }
     internal float TabSwap { get; private set; }
-    private static readonly string[] CategoryNames = ["General", "Customization", "Saved data"];
+    private static readonly string[] CategoryNames = ["General", "Customization", "Layout", "Saved data"];
 
     // Advances motion; the host calls it before sizing the window so size and drawing agree each frame.
     internal void Advance(float seconds)
@@ -163,8 +163,8 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         var look = holder.Identity.Look;
         // The Settings pages always stay readable, so colours picked with the guard off can always be put right there.
         if (Section == BookSection.Settings && holder.Identity.Appearance?.Colours is { } chosen && (chosen.Free || chosen.Exact != 0)) look = PassportLook.Of(edition, chosen with { Free = false, Exact = 0 });
-        UiTheme.UseEdition(look.Cloth, look.Foil, look.FoilBright, look.Ink, look.Paper, look.PaperInset, look.Text, look.Caption);
-        editions.Tint = Tint(edition, look);
+        UiTheme.UseEdition(look.Cloth, look.Foil, look.FoilBright, look.Ink, look.Paper, look.PaperInset, look.Text, look.Caption, look.Lines);
+        editions.Tint = Tint(edition, look, Background);
         try { return DrawBook(bounds, context); }
         finally
         {
@@ -248,7 +248,11 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         solid.Add(BookSurface.Board(layout.Book, layout.IsSpread ? BookFace.Spread : Section == BookSection.Passport && VisiblePage % 2 == 1 ? BookFace.Right : BookFace.Left));
         for (var index = 0; index < TabCount; index++) solid.Add(layout.Bookmark(index).Union(BookControl.RibbonBounds(layout.Bookmark(index), context)));
         var surfacePage = turning && !layout.IsSpread ? turn.Last + 1 : VisiblePage;
-        BookSurface.Draw(layout.Book, layout.IsSpread ? BookFace.Spread : Section == BookSection.Passport && surfacePage % 2 == 1 ? BookFace.Right : BookFace.Left, assets, context);
+        var surfaceFace = layout.IsSpread ? BookFace.Spread : Section == BookSection.Passport && surfacePage % 2 == 1 ? BookFace.Right : BookFace.Left;
+        BookSurface.Draw(layout.Book, surfaceFace, assets, context);
+        // The pages' background pattern, on the paper beneath everything (the rings are part of the plate).
+        foreach (var right in layout.IsSpread ? new[] { false, true } : [false])
+            PagePattern.Draw(ImGui.GetWindowDrawList(), Background, BookSurface.Paper(layout.Book, surfaceFace, right), UiTheme.Lines, holder.Identity.Edition, assets);
         Ribbon(layout, context);
 
         // Page contents scale with the paper like printed matter: a smaller book shows smaller text,
@@ -431,6 +435,10 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
                             if (side != Side.Right) { ImGui.Dummy(new Vector2(0, 16 * type.Scale)); EditionOptions(type); if (pendingEdition == null) colours.Preview(type); }
                             if (side == Side.Single) ImGui.Dummy(new Vector2(0, 24 * type.Scale));
                             if (side != Side.Left && pendingEdition == null) { colours.Draw(type); SymbolOptions(type); }
+                            break;
+                        case SettingsCategory.Layout:
+                            if (side == Side.Single) ImGui.Dummy(new Vector2(0, 24 * type.Scale));
+                            if (side != Side.Left) BackgroundOptions(type);
                             break;
                         default:
                             if (side == Side.Single) ImGui.Dummy(new Vector2(0, 24 * type.Scale));
@@ -717,6 +725,9 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
                     // Without the plate the leaf is plain paper, so its content never turns through the air.
                     else list.AddQuadFilled(leaf.Project(0, 0), leaf.Project(1, 0), leaf.Project(1, 1), leaf.Project(0, 1), LeafProjection.Tint(UiTheme.Paper with { W = alpha }, leaf.Light));
                     var start = list.VtxBuffer.Size;
+                    // The background pattern turns with the leaf, across its whole paper.
+                    PagePattern.Draw(list, Background, face, UiTheme.Lines, holder.Identity.Edition, assets, alpha);
+                    var contentStart = list.VtxBuffer.Size;
                     var startIndex = list.IdxBuffer.Size;
                     if (content != null)
                     {
@@ -727,7 +738,7 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
                         finally { BookSurface.Strips = 1; }
                     }
                     // Only what shows in the page's window turns with the leaf, never what is scrolled out of it.
-                    LeafProjection.Crop(list, start, startIndex, region);
+                    LeafProjection.Crop(list, contentStart, startIndex, region);
                     leaf.Warp(list, start, face, back, alpha);
                     var viewport = ImGui.GetMainViewport();
                     LeafProjection.Unclip(list, new Vector4(viewport.Pos, viewport.Pos.X + viewport.Size.X, viewport.Pos.Y + viewport.Size.Y));
@@ -891,11 +902,11 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
     private PassportPage PageAt(int index) => index < fixedPages.Count ? fixedPages[index] : PassportPage.StampPage(index - fixedPages.Count);
 
     // The recolouring the passport's plates need: from the edition's printed colours to the holder's.
-    private static PlateTint Tint(PassportEdition edition, PassportLook look)
+    private static PlateTint Tint(PassportEdition edition, PassportLook look, PageBackground background)
     {
         // The paper's guilloche rings are printed black; they follow the text (light on a dark paper, or its colour).
         return new PlateTint(new PlateColours(Rgb3(edition.Cloth), Rgb3(edition.Foil), Rgb3(PassportLook.EditionPaper), Vector3.Zero, Rgb3(edition.Accent)),
-            new PlateColours(Rgb3(look.Cloth), Rgb3(look.Foil), Rgb3(look.Paper), Rgb3(look.Lines), Rgb3(look.Accent)));
+            new PlateColours(Rgb3(look.Cloth), Rgb3(look.Foil), Rgb3(look.Paper), Rgb3(background == PageBackground.Guilloche ? look.Lines : look.Paper), Rgb3(look.Accent)));
     }
 
     private static Vector3 Rgb3(Vector4 colour) => new(colour.X, colour.Y, colour.Z);
@@ -1001,6 +1012,71 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         if (BookControl.Link("Remove all symbols", context)) confirmClearSymbols = true;
     }
 
+    // The pages' background: a small sheet of paper for each, printed with it; the one in use is outlined.
+    private void BackgroundOptions(UiContext context)
+    {
+        UiTypography.Text("PAGE BACKGROUND", TextRole.Caption, context, UiTheme.MutedInk);
+        ImGui.Dummy(new Vector2(0, 10 * context.Scale));
+        var look = holder.Identity.Look;
+        var chosen = Background;
+        var width = UiLayout.ContentWidth;
+        const int Columns = 4;
+        var gap = 12 * context.Scale;
+        var tile = new Vector2((width - gap * (Columns - 1)) / Columns, 0);
+        tile.Y = MathF.Round(tile.X * 0.72f);
+        var label = UiTypography.Size(TextRole.Caption, context) + 6 * context.Scale;
+        var origin = ImGui.GetCursorScreenPos();
+        var list = ImGui.GetWindowDrawList();
+        var all = Enum.GetValues<PageBackground>();
+        for (var index = 0; index < all.Length; index++)
+        {
+            var background = all[index];
+            var at = origin + new Vector2(index % Columns * (tile.X + gap), index / Columns * (tile.Y + label + gap));
+            var paper = new UiRect(at, tile);
+            ImGui.SetCursorScreenPos(at);
+            var picked = ImGui.InvisibleButton("Background " + background, tile + new Vector2(0, label));
+            var hovered = ImGui.IsItemHovered();
+            list.AddRectFilled(paper.Position + new Vector2(1, 2) * context.Scale, paper.Max + new Vector2(1, 2) * context.Scale, ImGui.GetColorU32(new Vector4(0, 0, 0, 0.15f)), 2 * context.Scale);
+            list.AddRectFilled(paper.Position, paper.Max, ImGui.GetColorU32(look.Paper), 2 * context.Scale);
+            // A preview prints its pattern a little stronger than a page does, so it shows at this size.
+            if (background == PageBackground.Guilloche) PagePattern.Rings(list, paper, look.Lines);
+            else PagePattern.Draw(list, background, paper, look.Lines, holder.Identity.Edition, assets, 2.4f, tile.X / 7f);
+            var selected = background == chosen;
+            if (selected || hovered) list.AddRect(paper.Position - new Vector2(2), paper.Max + new Vector2(2), ImGui.GetColorU32(selected ? UiTheme.Ink : UiTheme.MutedInk), 3 * context.Scale, ImDrawFlags.None, MathF.Max(1, (selected ? 2f : 1f) * context.Scale));
+            var name = BackgroundName(background);
+            var measured = UiTypography.Measure(name, TextRole.Caption, context, tile.X + gap, false);
+            UiTypography.Draw(list, new Vector2(at.X + (tile.X - measured.X) / 2, paper.Max.Y + 4 * context.Scale), name, TextRole.Caption, context, tile.X + gap, selected ? UiTheme.Ink : UiTheme.MutedInk, false);
+            if (hovered) ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);
+            if (picked) holder.SetBackground(background);
+            backgroundTiles[background] = paper.Position + paper.Size / 2;
+        }
+        var rows = (all.Length + Columns - 1) / Columns;
+        ImGui.SetCursorScreenPos(origin);
+        ImGui.Dummy(new Vector2(width, rows * (tile.Y + label) + (rows - 1) * gap));
+        ImGui.Dummy(new Vector2(0, 8 * context.Scale));
+        UiTypography.Text("Every page, stamp pages included, is printed on it, in the rings' colour (Customization). It is part of the edition's look, so changing edition returns to the rings.", TextRole.Body, context, UiTheme.MutedInk);
+    }
+
+    private readonly Dictionary<PageBackground, Vector2> backgroundTiles = [];
+
+    // Where a background's tile was drawn last frame, for checks.
+    internal Vector2? BackgroundTile(PageBackground background) => backgroundTiles.TryGetValue(background, out var at) ? at : null;
+
+    private static string BackgroundName(PageBackground background) => background switch
+    {
+        PageBackground.Guilloche => "Rings",
+        PageBackground.Plain => "Plain",
+        PageBackground.Lined => "Lined",
+        PageBackground.Grid => "Grid",
+        PageBackground.Dots => "Dots",
+        PageBackground.Zigzag => "Zigzag",
+        PageBackground.Waves => "Waves",
+        _ => "Emblems",
+    };
+
+    // The pages' background now.
+    internal PageBackground Background => holder.Identity.Appearance?.Background ?? PageBackground.Guilloche;
+
     // Changes edition by exchanging the book itself: the old passport is put away (its dismissal) and the new
     // one is summoned closed, showing its cover. With reduced motion it simply appears.
     private void Exchange(string edition)
@@ -1025,13 +1101,15 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         {
             SettingsCategory.General => "How your passport moves. Changes are saved as you make them.",
             SettingsCategory.Customization => "Your passport's edition and colours.",
+            SettingsCategory.Layout => "How your pages are laid out, starting with the paper's background. Layouts for the identity and nation pages come next.",
             _ => "What your passport keeps on this PC, and whether it is saved.",
         }, TextRole.Body, context, UiTheme.Ink);
         ImGui.Dummy(new Vector2(0, 20 * context.Scale));
         return BookControl.Link("« Back to " + Labels[(int)ReturnSection], context);
     }
 
-    // The category tabs' symbols: a gear (General), a painter's palette (Customization), a storage box (Saved data).
+    // The category tabs' symbols: a gear (General), a painter's palette (Customization), a laid-out page (Layout), a
+    // storage box (Saved data).
     private static void CategoryIcon(ImDrawListPtr list, Vector2 centre, float size, SettingsCategory category, Vector4 ink, UiContext context)
     {
         var colour = ImGui.GetColorU32(ink);
@@ -1054,6 +1132,13 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
                 list.AddCircleFilled(centre + new Vector2(r * 0.32f, r * 0.38f), r * 0.2f, colour, 12);
                 foreach (var (x, y) in new[] { (-0.42f, -0.12f), (-0.12f, -0.48f), (0.32f, -0.36f) })
                     list.AddCircleFilled(centre + new Vector2(x, y) * r, r * 0.15f, colour, 10);
+                break;
+            case SettingsCategory.Layout:
+                var sheet = new UiRect(centre - new Vector2(r * 0.7f, r * 0.9f), new Vector2(r * 1.4f, r * 1.8f));
+                list.AddRect(sheet.Position, sheet.Max, colour, 1.5f * context.Scale, ImDrawFlags.None, line);
+                list.AddRectFilled(sheet.Position + new Vector2(r * 0.28f, r * 0.3f), sheet.Position + new Vector2(r * 0.72f, r * 0.82f), colour);
+                foreach (var y in new[] { 0.42f, 0.66f, 1.1f, 1.34f })
+                    list.AddLine(sheet.Position + new Vector2(y < 1f ? r * 0.88f : r * 0.28f, r * y), sheet.Position + new Vector2(r * 1.12f, r * y), colour, line);
                 break;
             default:
                 var lid = new UiRect(centre + new Vector2(-r * 0.92f, -r * 0.72f), new Vector2(r * 1.84f, r * 0.42f));

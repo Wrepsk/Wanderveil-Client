@@ -65,11 +65,15 @@ internal sealed record PassportEdition(string Id, string Name, string Code, stri
     private static Vector4 Rgb(int hex) => new(((hex >> 16) & 0xFF) / 255f, ((hex >> 8) & 0xFF) / 255f, (hex & 0xFF) / 255f, 1f);
 }
 
+// The paper's background on every page: the edition's printed guilloche rings, plain paper, or a pattern drawn in the
+// rings' place (ruled lines, a grid, dots, zigzags, waves, or the edition's own emblem repeated).
+internal enum PageBackground { Guilloche, Plain, Lined, Grid, Dots, Zigzag, Waves, Edition }
+
 // How the passport looks, apart from what its holder wrote: its edition, the holder's colours over it, and the
-// symbols they placed on the cover and first pages; later also structure. Changing edition replaces the whole
-// appearance (the colours return to the new edition's own, the symbols are cleared), and the one before is kept
-// so it can be restored.
-internal sealed record PassportAppearance(string Edition, PassportColours? Colours = null, SymbolLayer? Symbols = null)
+// symbols they placed on the cover and first pages, and its structure (so far, the pages' background). Changing
+// edition replaces the whole appearance (the colours return to the new edition's own, the symbols are cleared, the
+// background is the rings again), and the one before is kept so it can be restored.
+internal sealed record PassportAppearance(string Edition, PassportColours? Colours = null, SymbolLayer? Symbols = null, PageBackground Background = PageBackground.Guilloche)
 {
     internal static readonly PassportAppearance Gridania = new(PassportEdition.Gridania.Id);
 

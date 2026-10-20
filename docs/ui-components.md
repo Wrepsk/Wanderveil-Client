@@ -38,6 +38,7 @@ Status: implemented foundations for static Passport and Discover previews, 18 Oc
 | `Infrastructure/Storage/SafeFile.cs`, `BackgroundSaver.cs` | Shared atomic save with backup and recovery, profile names, and coalesced background saving |
 | `UI/Components/PlateRecolour.cs` | Recolouring plates through their weight maps, coverage-weighted reduced copies, and a small PNG reader for the plugin's own plates |
 | `UI/BookShellColours.cs` | The Settings colour rows (swatches, custom picker, May adjust boxes, reset) and the How it looks preview |
+| `UI/Components/PagePattern.cs` | The pages' background patterns, drawn flat over the paper in the rings' colour (and so warped with a turning leaf), and the rings for a preview |
 | `UI/BookShellSymbols.cs`, `Components/SymbolArt.cs` | Decorating the cover and first pages: the symbol sheet, a symbol in hand, knobs that turn and resize, × to take one off; and drawing a symbol tinted, turned, and carried on a turning leaf |
 | `Infrastructure/Media/PortraitPicture.cs`, `Infrastructure/Game/GameCharacter.cs` | The holder's picture (file picker, background decode and copy, texture swap) and the logged-in character, in game only |
 | `StampArt.cs` | A design as a faint square proof or an issued stamp turned as placed, with the procedural motif as fallback |

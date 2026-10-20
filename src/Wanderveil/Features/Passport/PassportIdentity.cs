@@ -226,6 +226,10 @@ internal sealed class PassportProfile(PassportIdentity identity)
 
     internal bool RemoveSymbol(int index) => SetSymbols(Appearance().Placed.Remove(index));
 
+    // Prints every page on another background; part of the appearance, so a change of edition resets it.
+    internal bool SetBackground(PageBackground background) =>
+        Enum.IsDefined(background) && Update(Identity with { Appearance = Appearance() with { Background = background } });
+
     // Takes every symbol off the cover and pages.
     internal bool ClearSymbols() => Identity.Appearance is { Symbols: not null } && SetSymbols(SymbolLayer.Empty);
 

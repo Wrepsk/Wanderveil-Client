@@ -20,7 +20,7 @@ Status: Phase 02 in progress, 19 October 2026. The passport book holds Passport,
 
 1. Review the Gridania cover/colorway, banner/map introduction, portrait/signature versus information identity spread, and stamp collection targets; refine the artwork/material model before broader customization.
 2. Review the connected static runtime prototype, then add closed bottom-center arrival and close-to-cover dismissal motion; separately evaluate a bounded 2.5D page turn. Review previews between milestones; do not introduce CrystalRenderer without a separate decision.
-3. Phase 1 is complete; Phase 2's collect loop, local saving, free stamp placement, and identity/cover preferences work. Edition choice, colours, and symbols work too. Next: structure, then drawing on pages (Phase 2).
+3. Phase 1 is complete; Phase 2's collect loop, local saving, free stamp placement, and identity/cover preferences work. Edition choice, colours, symbols, and page backgrounds work too. Next: identity and nation page layouts, then drawing on pages (Phase 2).
 
 No account, private repository, production backend, or advanced renderer is needed for those product steps. Unresolved online contracts, identity proof, and renderer delivery require explicit decisions before implementation.
 

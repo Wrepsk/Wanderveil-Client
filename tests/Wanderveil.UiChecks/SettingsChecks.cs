@@ -29,12 +29,15 @@ internal static class SettingsChecks
             }
             for (var frame = 0; frame < 120 && (book.Shell.TabSwap < 1f || book.Shell.IsRiffling); frame++) book.Frame();
             check(book.Shell.TabSwap == 1f && book.Shell.Section == BookSection.Settings && book.Shell.Category == SettingsCategory.General, "Settings do not open on General with the category tabs.");
-            // The third tab's place now holds Saved data, not Echoes.
+            // The third tab's place now holds Layout, not Echoes; the fourth, Saved data.
             book.Click(book.Tab(2));
             for (var frame = 0; frame < 120 && book.Shell.IsRiffling; frame++) book.Frame();
-            check(book.Shell.Section == BookSection.Settings && book.Shell.Category == SettingsCategory.Saved, "The third category tab does not open Saved data, or reaches a section.");
+            check(book.Shell.Section == BookSection.Settings && book.Shell.Category == SettingsCategory.Layout, "The third category tab does not open Layout, or reaches a section.");
+            book.Click(book.Tab(3));
+            for (var frame = 0; frame < 120 && book.Shell.IsRiffling; frame++) book.Frame();
+            check(book.Shell.Section == BookSection.Settings && book.Shell.Category == SettingsCategory.Saved, "The fourth category tab does not open Saved data.");
             if (!motion)
-                foreach (var (index, name) in new[] { (0, "general"), (1, "customization"), (2, "saved") })
+                foreach (var (index, name) in new[] { (0, "general"), (1, "customization"), (2, "layout"), (3, "saved") })
                 {
                     book.Click(book.Tab(index));
                     book.Frames(3);
@@ -56,7 +59,7 @@ internal static class SettingsChecks
             narrow.Open();
             narrow.Shell.ShowSettings();
             narrow.Frames(3);
-            foreach (var index in new[] { 0, 1, 2 })
+            foreach (var index in new[] { 0, 1, 2, 3 })
             {
                 narrow.Click(narrow.Tab(index));
                 narrow.Frames(3);
