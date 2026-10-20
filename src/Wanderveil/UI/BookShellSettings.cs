@@ -65,4 +65,22 @@ internal interface IBookShellSharing
     void Block(Guid player);
     void Unblock(Guid player);
     void Ask(string name, string world);
+    // Opens a passport this holder may see, by its character, read-only in a book of its own.
+    void Visit(string name, string world);
+    // Whether a passport is being opened.
+    bool Opening { get; }
+}
+
+// Someone else's passport, opened to look at (ADR-0005): whose it is, and reporting or blocking them. The book shows
+// it read-only, with no settings, editing, stamps to place, drawing, or other sections.
+internal interface IBookShellVisit
+{
+    string Name { get; }
+    string World { get; }
+    string VerifiedBy { get; }
+    // What the last report or block did, or why not.
+    string? Message { get; }
+    // part: identity, picture, marks, stamps, or other; reason: harassment, hateful, sexual, spam, impersonation, or other.
+    void Report(string part, string reason);
+    void Block();
 }

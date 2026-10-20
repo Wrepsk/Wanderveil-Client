@@ -51,8 +51,13 @@ internal sealed class CharacterBook : IDisposable
             new PicturePart(portrait, identity.Loaded == LoadOutcome.New),
         ], directory);
         Sharing = new SharingCenter(account, session);
+        Visits = new VisitCenter(account, session);
+        this.textures = textures;
+        this.assets = assets;
+        this.configuration = configuration;
+        this.saveConfiguration = saveConfiguration;
         Window = new MainWindow(() => configuration.ReducedMotion, new ConfigurationSettings(configuration, saveConfiguration), assets, stamps.Collection, stamps,
-            new PassportServices(identity.Profile, identity, portrait, new GameCharacter(framework, player)), marks.Marks, marks, new BookAccount(account, session, Sync), new BookSharing(Sharing, target));
+            new PassportServices(identity.Profile, identity, portrait, new GameCharacter(framework, player)), marks.Marks, marks, new BookAccount(account, session, Sync), new BookSharing(Sharing, Visits, target));
         windows.AddWindow(Window);
         windows.AddWindow(Window.Camera);
         Sync.Start();
@@ -62,18 +67,55 @@ internal sealed class CharacterBook : IDisposable
     internal MainWindow Window { get; }
     internal PassportSync Sync { get; }
     internal SharingCenter Sharing { get; }
+    internal VisitCenter Visits { get; }
+    // The passport being visited, if any: its window and picture, in memory only.
+    private (MainWindow Window, VisitPicture Picture)? visiting;
+    private readonly ITextureProvider textures;
+    private readonly PassportAssets assets;
+    private readonly Configuration configuration;
+    private readonly Func<bool> saveConfiguration;
 
     // Each frame, before the windows draw.
     internal void Poll()
     {
         portrait.Poll();
         Sync.Poll();
+        // A visited passport arrives: it opens in its own read-only book (replacing one already open).
+        if (Visits.Take() is { } visited)
+        {
+            CloseVisit();
+            var picture = new VisitPicture(textures, visited.Picture);
+            var profile = new PassportProfile(visited.Identity);
+            var stamps = new Features.Stamps.StampCollection(null, visited.Stamps.Stamps, visited.Stamps.Placements);
+            var marks = new Features.Drawing.PageMarks(visited.Marks.Strokes, visited.Marks.Texts);
+            var window = new MainWindow(() => configuration.ReducedMotion, new ConfigurationSettings(configuration, saveConfiguration), assets, stamps, NoSaving.Instance,
+                new PassportServices(profile, NoSaving.Instance, picture, NoCharacter.Instance), marks, NoSaving.Instance, visit: new BookVisit(Visits, visited.Owner),
+                id: "Wanderveil visit###Wanderveil.Visit");
+            windows.AddWindow(window);
+            window.Summon();
+            visiting = (window, picture);
+        }
+        if (visiting is { } open)
+        {
+            open.Picture.Poll();
+            if (Visits.Blocked || !open.Window.IsOpen) CloseVisit();
+        }
+    }
+
+    private void CloseVisit()
+    {
+        if (visiting is not { } open) return;
+        windows.RemoveWindow(open.Window);
+        open.Picture.Dispose();
+        visiting = null;
     }
 
     internal void DrawDialog() => portrait.DrawDialog();
 
     public void Dispose()
     {
+        CloseVisit();
+        Visits.Dispose();
         windows.RemoveWindow(Window.Camera);
         windows.RemoveWindow(Window);
         Sync.Dispose();
@@ -90,13 +132,41 @@ internal sealed class CharacterBook : IDisposable
             log.Warning("Wanderveil {Part} loaded as {Outcome}; files kept aside: {Kept}", part, outcome, string.Join(", ", kept.Select(System.IO.Path.GetFileName)));
     }
 
+    // Nothing to save: a visited passport is in memory only.
+    private sealed class NoSaving : ISavedState
+    {
+        internal static readonly NoSaving Instance = new();
+        public LoadOutcome Loaded => LoadOutcome.Loaded;
+        public SaveState State => SaveState.Saved;
+        public void Retry() { }
+    }
+
+    private sealed class NoCharacter : ICharacterSource
+    {
+        internal static readonly NoCharacter Instance = new();
+        public System.Threading.Tasks.Task<CharacterDetails?> Read() => System.Threading.Tasks.Task.FromResult<CharacterDetails?>(null);
+    }
+
+    // A visited passport's owner, and reporting or blocking them.
+    private sealed class BookVisit(VisitCenter visits, Player owner) : IBookShellVisit
+    {
+        public string Name => owner.Character.Name;
+        public string World => owner.Character.World;
+        public string VerifiedBy => owner.VerifiedBy;
+        public string? Message => visits.Message ?? visits.Problem;
+        public void Report(string part, string reason) => visits.Report(owner.AccountId, part, reason);
+        public void Block() => visits.Block(owner.AccountId);
+    }
+
     // Sharing, as the passport's Settings pages show it.
-    private sealed class BookSharing(SharingCenter center, Func<(string Name, string World)?> target) : IBookShellSharing
+    private sealed class BookSharing(SharingCenter center, VisitCenter visits, Func<(string Name, string World)?> target) : IBookShellSharing
     {
         public bool Loaded => center.Loaded;
         public bool Busy => center.Busy;
-        public string? Problem => center.Problem;
-        public string? Message => center.Message;
+        public string? Problem => visits.Problem ?? center.Problem;
+        public string? Message => visits.Opening ? "Opening their passport." : center.Message;
+        public bool Opening => visits.Opening;
+        public void Visit(string name, string world) => visits.Open(name, world);
         public bool Anyone => center.Snapshot.Anyone;
         public IReadOnlyList<SharingRequest> Incoming => center.Snapshot.Incoming.Select(r => new SharingRequest(r.RequestId, r.From?.AccountId, r.From?.Character.Name ?? "", r.From?.Character.World ?? "", false, r.ExpiresAt)).ToList();
         public IReadOnlyList<SharingRequest> Outgoing => center.Snapshot.Outgoing.Select(r => new SharingRequest(r.RequestId, null, r.To?.Name ?? "", r.To?.World ?? "", r.State == "approved", r.ExpiresAt)).ToList();

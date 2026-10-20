@@ -66,8 +66,21 @@ A change is sent two seconds after the last edit. With no answer, it waits and t
 - **You asked to see:** your requests, *waiting* or *approved*, with **Withdraw** while waiting. A decline looks like waiting until the request expires.
 - **Blocked:** with **Unblock**. Unblocking does not restore an approval the block removed.
 
-Each list shows its first five and how many more, with each entry's actions on its line. The page reads everything again when it opens and every half minute while it shows, and after each action. Reading and changing run in the background. Without the server, the page says so and keeps what it last read. Opening a passport you may see comes next. Previews: [the page](previews/online/settings-sharing.png), [after asking](previews/online/settings-sharing-asked.png).
+Each list shows its first five and how many more, with each entry's actions on its line. The page reads everything again when it opens and every half minute while it shows, and after each action. Reading and changing run in the background. Without the server, the page says so and keeps what it last read. **Open it** (beside **Ask to see it**) and **Open** (on an approved request) open a passport you may see. Previews: [the page](previews/online/settings-sharing.png), [after asking](previews/online/settings-sharing-asked.png).
+
+## Visiting a passport
+
+A passport you may see opens in a book of its own, beside yours: the owner's edition, colours, symbols, identity pages and picture, stamps where they placed them, and drawing and writing.
+
+- **Read-only:** no section tabs, no Settings, no editing, no stamps to place, no drawing or decorating, and no way out to Discover.
+- **Its footer:** says whose it is (*Visiting Name, World*), with **Report** and **Block**.
+  - **Report** asks what (their picture, drawing and writing, details and other text, stamps, or something else) and why (harassment, hateful, sexual, spam, impersonating someone, or something else). People at Wanderveil review reports, and the owner is not told who reported.
+  - **Block** asks first, then closes the visit.
+- **Kept in memory only:** the visited passport is read part by part and never written to disk, so losing access leaves no copy behind (beyond what was on screen). Opening another passport replaces it, and closing it frees it.
+- **When it cannot open:** a character without Wanderveil, one that has not shared with you, and one that blocked you all give the same answer: no passport you may open there.
+
+Previews: [a visited passport](previews/online/visit-book.png), [reporting it](previews/online/visit-report.png).
 
 ## What is not covered yet
 
-There is no sharing yet. XIVAuth works live: on 21 October 2026, with Wanderveil's XIVAuth application registered (scope `character`, device code flow, confidential client) and configured on a local server, the user signed in from the game through XIVAuth. The passport saved earlier through the Lodestone sign-in loaded correctly, because both sign-ins identify the character by its Lodestone ID. The live test ran on Windows against a local server. Not yet observed: a hosted server over HTTPS, DPAPI under Wine, and other players' characters.
+Sharing has not been tried between two players in game yet. XIVAuth works live: on 21 October 2026, with Wanderveil's XIVAuth application registered (scope `character`, device code flow, confidential client) and configured on a local server, the user signed in from the game through XIVAuth. The passport saved earlier through the Lodestone sign-in loaded correctly, because both sign-ins identify the character by its Lodestone ID. The live test ran on Windows against a local server. Not yet observed: a hosted server over HTTPS, DPAPI under Wine, and other players' characters.

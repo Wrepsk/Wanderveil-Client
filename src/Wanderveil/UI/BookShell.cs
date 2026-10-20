@@ -30,7 +30,8 @@ internal enum SettingsCategory { General, Customization, Layout, Saved, Sharing 
 // and identityStorage are the host's picture, logged-in character, and identity file, each optional.
 internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IReadOnlyList<PassportPage>? pages = null, IBookShellSettings? settings = null, BookShellContent? content = null, StampCollection? stamps = null, ISavedState? storage = null,
     PassportProfile? identity = null, IPassportPortrait? portrait = null, ICharacterSource? character = null, ISavedState? identityStorage = null,
-    PageMarks? marks = null, ISavedState? marksStorage = null, IBookShellAccount? account = null, IBookShellSharing? sharing = null)
+    PageMarks? marks = null, ISavedState? marksStorage = null, IBookShellAccount? account = null, IBookShellSharing? sharing = null,
+    IBookShellVisit? visit = null)
 {
     internal const ImGuiWindowFlags WindowFlags = ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.NoBackground | ImGuiWindowFlags.NoCollapse |
         ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse | ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoMove | ImGuiWindowFlags.NoDocking;
@@ -239,7 +240,8 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         SettingsCategory? category = null;
         // Far enough down that a tab hides behind the board.
         var hide = layout.Bookmark(TabCount - 1).Max.Y - layout.Bookmark(0).Position.Y + 6 * context.Scale;
-        if (TabSwap < 0.5f)
+        if (visit != null) { }
+        else if (TabSwap < 0.5f)
         {
             var drop = new Vector2(0, UiMotion.Ease(TabSwap * 2) * hide);
             ImGui.BeginDisabled(TabSwap > 0f);
@@ -298,7 +300,7 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         drawing.Interact(page, UiTheme.EditionInk);
         symbols.DrawSheet(layout.IsSpread ? layout.RightPage : layout.LeftPage, page, ImGui.GetIO().DeltaTime, ReducedMotion);
 
-        var openSettings = Section != BookSection.Settings && !drawing.Drawing && BookControl.Draw("Settings", "Settings", layout.Settings(context), page, BookControlStyle.Ink, hint: "Wanderveil settings");
+        var openSettings = visit == null && Section != BookSection.Settings && !drawing.Drawing && BookControl.Draw("Settings", "Settings", layout.Settings(context), page, BookControlStyle.Ink, hint: "Wanderveil settings");
         if (BookControl.Draw("Smaller", "-", layout.Tool(0, context), page, BookControlStyle.Ink, hint: "Smaller passport")) PreferredWidth = MathF.Max(420, PreferredWidth / 1.15f);
         if (BookControl.Draw("Larger", "+", layout.Tool(1, context), page, BookControlStyle.Ink, hint: "Larger passport")) PreferredWidth = MathF.Min(1400, PreferredWidth * 1.15f);
         var close = BookControl.Draw("Close", "×", layout.Tool(2, context), page, BookControlStyle.Ink, hint: "Close passport (Escape)");
@@ -307,7 +309,8 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         // identity pages it offers Edit; on the stamp pages, the whole stamp control).
         var nationShown = Section == BookSection.Passport && IsNation(VisiblePage) && (!layout.IsSpread || IsNation(VisiblePage + 1));
         UiRect? lastFooter = null;
-        if (resting && symbols.Decorating) DecorateControls();
+        if (visit != null) { if (resting) VisitorControls(layout, context, page, Footer); }
+        else if (resting && symbols.Decorating) DecorateControls();
         else if (resting && drawing.Drawing) DrawControls();
         else
         {
@@ -332,7 +335,8 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         var edgeTurn = desk.Update(bounds, layout.Book, layout.LeftPage.Size.X, page, ImGui.GetIO().DeltaTime);
         symbols.Update(bounds, page);
 
-        var placeStamp = discover.TakePassportRequest();
+        var placeStamp = visit == null ? discover.TakePassportRequest() : null;
+        if (visit != null) explore = false;
         if (editor.TakeRequested)
         {
             editor.TakeRequested = false;
@@ -616,7 +620,7 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
                 return;
             }
             passport.Compose(entry, type, live && EditingIdentity ? editor : null);
-            if (passport.EndsIdentity(entry) && !(live && EditingIdentity))
+            if (passport.EndsIdentity(entry) && !(live && EditingIdentity) && visit == null)
             {
                 ImGui.Dummy(new Vector2(0, 10 * type.Scale));
                 explore |= BookControl.Link("Explore discoveries »", type);
@@ -1471,6 +1475,63 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         AccountControls["Stay signed in"] = (ImGui.GetItemRectMin() + ImGui.GetItemRectMax()) / 2;
     }
 
+    // A visited passport's footer (ADR-0005): whose it is, and Report and Block, each asking first.
+    private string? reportPart;
+    // For checks: where the visitor's controls were drawn last, by label.
+    internal Dictionary<string, Vector2> VisitControls { get; } = new(StringComparer.Ordinal);
+    private static readonly (string Part, string Label)[] ReportParts =
+        [("picture", "Their picture"), ("marks", "Their drawing and writing"), ("identity", "Their details and other text"), ("stamps", "Their stamps"), ("other", "Something else")];
+    private static readonly (string Reason, string Label)[] ReportReasons =
+        [("harassment", "Harassment"), ("hateful", "Hateful"), ("sexual", "Sexual"), ("spam", "Spam"), ("impersonation", "Impersonating someone"), ("other", "Something else")];
+
+    private void VisitorControls(BookShellLayout layout, UiContext context, UiContext page, Func<string, UiRect> Footer)
+    {
+        var label = visit!.Message ?? $"Visiting {visit.Name}, {visit.World}";
+        var at = layout.Settings(context).Position + new Vector2(0, (layout.ControlHeight - UiTypography.Size(TextRole.Caption, page)) / 2);
+        var report = Footer("Report");
+        var room = MathF.Max(40, report.Position.X - at.X - 12 * page.Scale);
+        // A message may be longer than the line; it is cut to the room left of the controls.
+        ImGui.GetWindowDrawList().PushClipRect(at, at + new Vector2(room, layout.ControlHeight), true);
+        UiTypography.Draw(ImGui.GetWindowDrawList(), at, label, TextRole.Caption, page, room, UiTheme.MutedInk, false);
+        ImGui.GetWindowDrawList().PopClipRect();
+        if (visit.Message != null && ImGui.IsMouseHoveringRect(at, at + new Vector2(room, layout.ControlHeight))) ImGui.SetTooltip(visit.Message);
+        if (BookControl.Draw("Report", "Report", report, page, BookControlStyle.Ink, hint: "Report this passport to Wanderveil")) { reportPart = null; ImGui.OpenPopup("Report passport"); }
+        VisitControls["Report"] = report.Position + report.Size / 2;
+        var block = Footer("Block");
+        if (BookControl.Draw("Block", "Block", block, page, BookControlStyle.Ink, hint: "Block this player")) ImGui.OpenPopup("Block player");
+        VisitControls["Block"] = block.Position + block.Size / 2;
+
+        if (PaperColours.Begin("Report passport", context))
+        {
+            try
+            {
+                ImGui.TextUnformatted(reportPart == null ? "What do you want to report?" : "Why?");
+                foreach (var (key, text) in reportPart == null ? ReportParts.Select(entry => (entry.Part, entry.Label)) : ReportReasons.Select(entry => (entry.Reason, entry.Label)))
+                {
+                    if (ImGui.Selectable(text, false, ImGuiSelectableFlags.DontClosePopups))
+                    {
+                        if (reportPart == null) reportPart = key;
+                        else { visit.Report(reportPart, key); reportPart = null; ImGui.CloseCurrentPopup(); }
+                    }
+                    VisitControls["Report " + text] = ImGui.GetItemRectMin() + ImGui.GetItemRectSize() / 2;
+                }
+                ImGui.TextDisabled("People at Wanderveil review reports. They do not tell the owner who reported.");
+            }
+            finally { PaperColours.End(); }
+        }
+        if (PaperColours.Begin("Block player", context))
+        {
+            try
+            {
+                ImGui.TextUnformatted($"Block {visit.Name}? Neither of you can see or ask to see the other's passport, and this one closes.");
+                if (ImGui.Selectable($"Block {visit.Name}")) { visit.Block(); ImGui.CloseCurrentPopup(); }
+                VisitControls["Confirm block"] = ImGui.GetItemRectMin() + ImGui.GetItemRectSize() / 2;
+                if (ImGui.Selectable("Keep looking")) ImGui.CloseCurrentPopup();
+            }
+            finally { PaperColours.End(); }
+        }
+    }
+
     // The sharing page (ADR-0005). The left side: who may open the passport, and asking to see another's.
     private string askName = "";
     private string askWorld = "";
@@ -1502,6 +1563,9 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         ImGui.BeginDisabled(!ready || sharing.Busy);
         if (BookControl.Link("Ask to see it", context)) sharing.Ask(askName, askWorld);
         SharingControls["Ask"] = (ImGui.GetItemRectMin() + ImGui.GetItemRectMax()) / 2;
+        ImGui.SameLine(0, 18 * context.Scale);
+        if (BookControl.Link(sharing.Opening ? "Opening" : "Open it", context) && !sharing.Opening) sharing.Visit(askName, askWorld);
+        SharingControls["Open"] = (ImGui.GetItemRectMin() + ImGui.GetItemRectMax()) / 2;
         ImGui.EndDisabled();
         if (sharing.Problem is { } problem)
         {
@@ -1589,8 +1653,12 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         List("WHO CAN OPEN YOURS", sharing.Anyone ? "Anyone signed in, and no one approved by name." : "No one yet.", sharing.Viewers, person => person.AccountId, person => $"{person.Name}, {person.World}", _ => ["Remove", "Block"],
             person => Actions(person.Name, ("Remove", () => sharing.RemoveViewer(person.AccountId)), ("Block", () => sharing.Block(person.AccountId))));
         List("YOU ASKED TO SEE", "You have not asked anyone.", sharing.Outgoing, request => request.Id,
-            request => $"{request.Name}, {request.World}: " + (request.Approved ? "approved" : "waiting"), request => request.Approved ? [] : ["Withdraw"],
-            request => { if (!request.Approved) Actions(request.Name, ("Withdraw", () => sharing.Withdraw(request.Id))); });
+            request => $"{request.Name}, {request.World}: " + (request.Approved ? "approved" : "waiting"), request => request.Approved ? ["Open"] : ["Withdraw"],
+            request =>
+            {
+                if (request.Approved) Actions(request.Name, ("Open", () => sharing.Visit(request.Name, request.World)));
+                else Actions(request.Name, ("Withdraw", () => sharing.Withdraw(request.Id)));
+            });
         List("BLOCKED", "No one.", sharing.Blocked, person => person.AccountId, person => $"{person.Name}, {person.World}", _ => ["Unblock"],
             person => Actions(person.Name, ("Unblock", () => sharing.Unblock(person.AccountId))));
     }

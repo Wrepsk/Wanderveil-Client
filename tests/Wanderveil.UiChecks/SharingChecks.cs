@@ -17,7 +17,9 @@ internal static class SharingChecks
         try
         {
             Center(check, directory);
+            Visits(check, directory);
             Page(check, artifacts);
+            Visitor(check, artifacts);
         }
         finally { Directory.Delete(directory, recursive: true); }
         Console.WriteLine("PASS sharing");
@@ -95,6 +97,95 @@ internal static class SharingChecks
         check(owner.Flush(TimeSpan.FromSeconds(5)) && OnlineChecks.Until(() => ownerAccount.State == AccountState.SignedOut), "A refused session while sharing did not sign out.");
     }
 
+    // Opening someone else's passport: refused alike when it is hidden or no one's, read whole when shared, and
+    // reporting and blocking from it.
+    private static void Visits(Action<bool, string> check, string directory)
+    {
+        var server = new OnlineChecks.FakeServer();
+        server.Add(1001, "Owner Self", "Ravana");
+        server.Add(2002, "Visitor Self", "Ravana");
+        using var ownerStore = new SessionStore(Path.Combine(directory, "visit-owner"));
+        using var visitorStore = new SessionStore(Path.Combine(directory, "visit-visitor"));
+        using var ownerAccount = new OnlineAccount(ownerStore, server.Client(), "0.0.0.1", () => OnlineChecks.FakeServer.Address);
+        using var visitorAccount = new OnlineAccount(visitorStore, server.Client(), "0.0.0.1", () => OnlineChecks.FakeServer.Address);
+        ownerAccount.SetCharacter(1, "Owner Self", "Ravana");
+        visitorAccount.SetCharacter(2, "Visitor Self", "Ravana");
+        OnlineChecks.SignIn(server, ownerAccount, 1001);
+        OnlineChecks.SignIn(server, visitorAccount, 2002);
+        var api = ownerAccount.Api!;
+        var token = ownerAccount.Session!.Token;
+        var design = new StampDesign("demo-design-1", 1, "Demo stamp", 0, StampProvenance.LocalDemo);
+        var stamps = new StampCollection();
+        stamps.Place(stamps.Collect("demo-1", design).Stamp!, new StampPlacement(0, 0.5f, 0.5f, 0));
+        api.PutPassport(token, Wanderveil.Infrastructure.Storage.PassportStore.Serialize(PassportIdentity.Sample with { Number = "VISIT 0001" }), null, default).Wait();
+        api.PutDocument(token, "v1/passport/stamps", Wanderveil.Infrastructure.Storage.StampStore.Serialize(Wanderveil.Infrastructure.Storage.StampBook.Of(stamps)), null, false, default).Wait();
+        var picture = new byte[48];
+        new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 13, (byte)'I', (byte)'H', (byte)'D', (byte)'R', 0, 0, 1, 0, 0, 0, 1, 0 }.CopyTo(picture, 0);
+        api.PutPicture(token, picture, "image/png", null, default).Wait();
+        using var visits = new VisitCenter(visitorAccount, visitorAccount.Session!);
+
+        bool Open(string name)
+        {
+            visits.Open(name, "Ravana");
+            return OnlineChecks.Until(() => !visits.Opening);
+        }
+        check(Open("Owner Self") && visits.Problem == VisitCenter.NotVisible && visits.Take() == null, "A passport not shared was opened, or its refusal said more.");
+        check(Open("No Body") && visits.Problem == VisitCenter.NotVisible, "A character without Wanderveil was refused differently.");
+
+        using var owner = new SharingCenter(ownerAccount, ownerAccount.Session!);
+        owner.SetAnyone(true);
+        owner.Flush(TimeSpan.FromSeconds(5));
+        check(Open("Owner Self") && visits.Problem == null, $"A shared passport did not open ({visits.Problem}).");
+        var visited = visits.Take();
+        check(visited?.Identity.Number == "VISIT 0001" && visited.Stamps.Placements.Count == 1 && visited.Marks.Strokes.Count == 0 &&
+              visited.Picture?.SequenceEqual(picture) == true && visited.Owner.Character.Name == "Owner Self" && visits.Take() == null,
+            "A visited passport did not arrive whole, once (identity, stamps, no drawing, picture).");
+
+        visits.Report(visited!.Owner.AccountId, "picture", "harassment");
+        check(OnlineChecks.Until(() => visits.Message?.StartsWith("Reported", StringComparison.Ordinal) == true) &&
+              server.Reports.Single() == (visitorAccount.Session!.Account.AccountId, visited.Owner.AccountId, "picture", "harassment"), "Reporting from a visit did not reach the server.");
+        visits.Block(visited.Owner.AccountId);
+        check(OnlineChecks.Until(() => visits.Blocked) && Open("Owner Self") && visits.Problem == VisitCenter.NotVisible, "Blocking from a visit did not close it to the visitor.");
+    }
+
+    // The visited book: read-only (no tabs, settings, editing, stamps to place, or drawing), with Report and Block.
+    private static void Visitor(Action<bool, string> check, string? artifacts)
+    {
+        var visit = new StubVisit();
+        var stamps = new StampCollection();
+        stamps.Place(stamps.Collect("demo-1", new StampDesign("demo-design-1", 1, "Demo stamp", 0, StampProvenance.LocalDemo, "Wanderveil / Demo curator")).Stamp!, new StampPlacement(0, 0.4f, 0.4f, 0));
+        using var book = new CollectChecks.Book(new Vector2(1200, 820), stamps, identity: new PassportProfile(PassportIdentity.Sample), visit: visit);
+        book.Open();
+        book.Frames(10);
+        check(book.Shell.VisitControls.ContainsKey("Report") && book.Shell.VisitControls.ContainsKey("Block"), "A visited passport does not offer Report and Block.");
+        book.Save(artifacts, "visit-book.bmp");
+        book.Click(book.Tab(1));
+        book.Click(book.Shell.VisitControls["Block"] - new Vector2(260, 0));
+        book.Click(book.StampControl());
+        check(book.Shell.Section == BookSection.Passport && !book.Shell.EditingIdentity, "A visited passport left its pages for another section or settings, or opened its editor.");
+
+        book.Click(book.Shell.VisitControls["Report"]);
+        book.Frames(2);
+        book.Save(artifacts, "visit-report.bmp");
+        book.Click(book.Shell.VisitControls["Report Their picture"]);
+        book.Click(book.Shell.VisitControls["Report Harassment"]);
+        check(visit.Calls.SequenceEqual(["report picture harassment"]), $"Reporting did not ask what and why ({string.Join(", ", visit.Calls)}).");
+        book.Click(book.Shell.VisitControls["Block"]);
+        book.Click(book.Shell.VisitControls["Confirm block"]);
+        check(visit.Calls.Last() == "block", "Blocking did not ask first, or did not block.");
+    }
+
+    private sealed class StubVisit : IBookShellVisit
+    {
+        internal List<string> Calls { get; } = [];
+        public string Name => "Mira Vale";
+        public string World => "Ravana";
+        public string VerifiedBy => "lodestone";
+        public string? Message => null;
+        public void Report(string part, string reason) => Calls.Add($"report {part} {reason}");
+        public void Block() => Calls.Add("block");
+    }
+
     private static void Page(Action<bool, string> check, string? artifacts)
     {
         var sharing = new StubSharing();
@@ -120,6 +211,10 @@ internal static class SharingChecks
         book.Click(book.Shell.SharingControls["Use target"]);
         book.Click(book.Shell.SharingControls["Ask"]);
         check(sharing.Calls.Last() == "ask Lux Arden@Sophia", $"Asking from the target did not send its name and world ({sharing.Calls.Last()}).");
+        book.Click(book.Shell.SharingControls["Open"]);
+        check(sharing.Calls.Last() == "visit Lux Arden@Sophia", "Open it did not open the passport named.");
+        book.Click(book.Shell.SharingControls["Kel Doran Open"]);
+        check(sharing.Calls.Last() == "visit Kel Doran@Ravana", "An approved request did not offer to open the passport.");
         sharing.Message = "Asked to see the passport of Lux Arden (Sophia). If they use Wanderveil they will see your request; it waits for their answer, up to 14 days.";
         book.Frames(2);
         book.Save(artifacts, "settings-sharing-asked.bmp");
@@ -149,5 +244,7 @@ internal static class SharingChecks
         public void Block(Guid player) => Calls.Add("block " + player);
         public void Unblock(Guid player) => Calls.Add("unblock");
         public void Ask(string name, string world) => Calls.Add($"ask {name}@{world}");
+        public bool Opening => false;
+        public void Visit(string name, string world) => Calls.Add($"visit {name}@{world}");
     }
 }
