@@ -131,6 +131,7 @@ EchoesChecks.Run(Check, artifacts);
 StatesChecks.Run(Check, artifacts);
 CollectChecks.Run(Check, artifacts);
 StorageChecks.Run(Check);
+OnlineChecks.Run(Check);
 IdentityChecks.Run(Check, artifacts);
 EditionChecks.Run(Check, artifacts);
 ColourChecks.Run(Check, artifacts);

@@ -37,5 +37,6 @@
     <Compile Include="../../src/Wanderveil/Features/Stamps/*.cs" Link="Stamps/%(Filename)%(Extension)" />
     <Compile Include="../../src/Wanderveil/Features/Drawing/*.cs" Link="Drawing/%(Filename)%(Extension)" />
     <Compile Include="../../src/Wanderveil/Infrastructure/Storage/*.cs" Link="Storage/%(Filename)%(Extension)" />
+    <Compile Include="../../src/Wanderveil/Infrastructure/Online/*.cs" Link="Online/%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>
