@@ -97,7 +97,7 @@ internal sealed record PassportLook(Vector4 Cloth, Vector4 Foil, Vector4 Ink, Ve
     }
 
     // How far the holder's colours differ from the edition's on the plates that are recoloured.
-    internal bool Recoloured(PassportEdition edition) => !Near(Cloth, edition.Cloth) || !Near(Foil, edition.Foil) || !Near(Paper, EditionPaper);
+    internal bool Recoloured(PassportEdition edition) => !Near(Cloth, edition.Cloth) || !Near(Foil, edition.Foil) || !Near(Paper, EditionPaper) || LightText;
 
     // Hovered foil: a little nearer white, or for dark foil, nearer its ink.
     internal Vector4 FoilBright => Vector4.Lerp(Foil, Luminance(Foil) > 0.2f ? Vector4.One : Ink, 0.35f) with { W = 1f };

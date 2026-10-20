@@ -183,8 +183,9 @@ internal static class PlatePng
     }
 }
 
-// An edition's plates as printed and as the holder recoloured them (cloth, foil, paper; 0 to 1 per channel).
-internal readonly record struct PlateColours(System.Numerics.Vector3 Cloth, System.Numerics.Vector3 Foil, System.Numerics.Vector3 Paper);
+// An edition's plates as printed and as the holder recoloured them (cloth, foil, paper, and the paper's guilloche
+// lines; 0 to 1 per channel).
+internal readonly record struct PlateColours(System.Numerics.Vector3 Cloth, System.Numerics.Vector3 Foil, System.Numerics.Vector3 Paper, System.Numerics.Vector3 Lines = default);
 
 internal readonly record struct PlateTint(PlateColours Printed, PlateColours Wanted)
 {
@@ -192,7 +193,7 @@ internal readonly record struct PlateTint(PlateColours Printed, PlateColours Wan
 }
 
 // Recolours an edition's own plates and makes their reduced copies, from files named as tools/passport-art writes
-// them: <plate>.png and <plate>.w-<colour>.png (colour cover, foil, or paper; a plate without a map for a colour
+// them: <plate>.png and <plate>.w-<colour>.png (colour cover, foil, paper, or lines; a plate without a map for a colour
 // does not carry it).
 internal static class EditionRecolour
 {
@@ -208,6 +209,7 @@ internal static class EditionRecolour
         Add("cover", tint.Printed.Cloth, tint.Wanted.Cloth);
         Add("foil", tint.Printed.Foil, tint.Wanted.Foil);
         Add("paper", tint.Printed.Paper, tint.Wanted.Paper);
+        Add("lines", tint.Printed.Lines, tint.Wanted.Lines);
         if (shifts.Count > 0) pixels = PlateRecolour.Apply(pixels, shifts);
         var levels = new List<PlatePixels> { pixels };
         while (System.Math.Min(levels[^1].Width, levels[^1].Height) / 2 >= 96 && levels.Count < 4) levels.Add(PlateRecolour.Halve(levels[^1]));

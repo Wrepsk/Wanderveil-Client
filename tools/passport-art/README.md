@@ -39,7 +39,7 @@ where the script nests another template.
 
 ## Colour weight maps
 
-Each edition plate also gets `<plate>.w-<colour>.png` for the colours the client recolours (`cover`, `foil`, `paper`) where that colour reaches the plate: a grey map of how much of the colour reaches each pixel (the plate rendered with the colour white, minus with it black). The client recolours a plate as plate + weight × (new − printed). `node generate.mjs --verify` checks this for every edition against rendering other colours directly and fails past 2 / 255 on average or 32 at worst (filters work in 8-bit linear light, so soft filtered edges differ by a few levels). Weight maps are full size only; the client makes reduced copies after recolouring.
+Each edition plate also gets `<plate>.w-<colour>.png` for the colours the client recolours (`cover`, `foil`, `paper`, and `lines`, the paper's guilloche rings, printed black) where that colour reaches the plate: a grey map of how much of the colour reaches each pixel (the plate rendered with the colour white, minus with it black). The client recolours a plate as plate + weight × (new − printed). `node generate.mjs --verify` checks this for every edition against rendering other colours directly and fails past 2 / 255 on average or 32 at worst (filters work in 8-bit linear light, so soft filtered edges differ by a few levels). Weight maps are full size only; the client makes reduced copies after recolouring.
 
 ## Size copies
 

@@ -771,7 +771,9 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
     {
         var edition = identity.Edition;
         var look = identity.Look;
-        return new PlateTint(new PlateColours(Rgb3(edition.Cloth), Rgb3(edition.Foil), Rgb3(PassportLook.EditionPaper)), new PlateColours(Rgb3(look.Cloth), Rgb3(look.Foil), Rgb3(look.Paper)));
+        // The paper's guilloche rings are printed black; on a dark paper they turn light, as the text does.
+        return new PlateTint(new PlateColours(Rgb3(edition.Cloth), Rgb3(edition.Foil), Rgb3(PassportLook.EditionPaper), Vector3.Zero),
+            new PlateColours(Rgb3(look.Cloth), Rgb3(look.Foil), Rgb3(look.Paper), look.LightText ? Vector3.One : Vector3.Zero));
     }
 
     private static Vector3 Rgb3(Vector4 colour) => new(colour.X, colour.Y, colour.Z);

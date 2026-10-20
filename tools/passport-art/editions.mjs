@@ -3,6 +3,8 @@
 export const shared = {
   paper: "#D8C5A3",
   ink: "#19242E",
+  // The paper's guilloche rings; the client turns them light on a dark paper (a recoloured colour).
+  lines: "#000000",
 };
 
 export const editions = {

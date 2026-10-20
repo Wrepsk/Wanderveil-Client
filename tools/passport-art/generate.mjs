@@ -71,8 +71,9 @@ async function emit(svg, path, w, h) {
 //   plate(c) = plate(c0) + sum over tokens k of weight_k * (c_k - c0_k),
 // where weight_k is how much of token k reaches each pixel: the difference between the plate rendered with k
 // white and with k black (everything else as the edition prints it). Weights are grey, full size only; the
-// client makes its own reduced copies after recolouring. Only cloth (cover), foil, and paper are recoloured.
-export const RECOLOURED = ["cover", "foil", "paper"];
+// client makes its own reduced copies after recolouring. Cloth (cover), foil, paper, and the paper's guilloche
+// lines are recoloured.
+export const RECOLOURED = ["cover", "foil", "paper", "lines"];
 const plates = (id, tokens) => ({
   cover: [cover(id, tokens), COVER.w, COVER.h],
   crest: [crest(id, tokens), CREST, CREST],
@@ -147,7 +148,7 @@ for (const [id, palette] of Object.entries(editions)) {
   await emit(fill(read("book-open.svg"), tokens), `editions/${id}/book-open.png`, 1536, 1024);
   await weights(id, tokens);
   if (process.argv.includes("--verify")) {
-    const { worst, mean } = await verify(id, tokens, { cover: "#5A1424", foil: "#DCE6E8", paper: "#ECEAE4" });
+    const { worst, mean } = await verify(id, tokens, { cover: "#5A1424", foil: "#DCE6E8", paper: "#141414", lines: "#FFFFFF" });
     console.log(`${id}: recoloured through weights within ${worst.toFixed(1)} / 255 of a direct render, ${mean.toFixed(2)} on average`);
     if (worst > 32 || mean > 2) throw new Error(`${id}: recolouring through weights is ${worst} / 255 off`);
   }

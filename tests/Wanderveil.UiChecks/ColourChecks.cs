@@ -179,6 +179,21 @@ internal static class ColourChecks
             dark.Key(ImGuiKey.PageDown);
             check(UiTheme.Paper == Rgb.Hex(0x141414).Vector && PassportLook.Contrast(UiTheme.Ink, UiTheme.Paper) >= 4.5 && dark.Shell.PageOverflow == 0, "Black paper does not print light, readable text.");
             dark.Save(artifacts, "colour-dark-paper.bmp");
+            // The guilloche rings turn light on it: the open page plate is lighter than plain black paper where
+            // its rings run, not darker.
+            var plate = EditionRecolour.Levels(name => File.Exists(Path.Combine(AppContext.BaseDirectory, "Assets", "Editions", "ishgard", name)) ? File.OpenRead(Path.Combine(AppContext.BaseDirectory, "Assets", "Editions", "ishgard", name)) : null, "book-open",
+                new PlateTint(new PlateColours(PassportEdition.Find("ishgard").Cloth.AsVector3(), PassportEdition.Find("ishgard").Foil.AsVector3(), PassportLook.EditionPaper.AsVector3(), Vector3.Zero),
+                    new PlateColours(PassportEdition.Find("ishgard").Cloth.AsVector3(), PassportEdition.Find("ishgard").Foil.AsVector3(), new Vector3(0x14 / 255f), Vector3.One)))[0];
+            var lighter = 0;
+            var darker = 0;
+            // Along a row through the right page's rings (centre 1119, 601), away from the gutter shadow.
+            for (var x = 1200; x < 1440; x++)
+            {
+                var value = plate.Rgba[(601 * plate.Width + x) * 4];
+                if (value > 0x14 + 2) lighter++;
+                if (value < 0x14 - 2) darker++;
+            }
+            check(lighter > 20 && darker == 0, $"The rings do not turn light on dark paper ({lighter} lighter, {darker} darker).");
         }
         Console.WriteLine("PASS colour-drawn");
     }
