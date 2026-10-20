@@ -1,6 +1,6 @@
 # Signing in and the passport online
 
-Status: implemented, 21 October 2026, and checked headless against an in-memory server that follows the [v1 contract](api/README.md). Not yet run against a real Wanderveil server or in game.
+Status: implemented, 21 October 2026, and checked headless against an in-memory server that follows the [v1 contract](api/README.md). On 21 October 2026 the user signed in from the game against a local server (Development, `http://127.0.0.1:5080`) with a real Lodestone code, and reported that everything looked good; the server then held one account verified via the Lodestone and a passport record synced through revision 9.
 
 Every Wanderveil passport belongs to one FFXIV character that has signed in. A sign-in proves that you control the character's Lodestone profile, and nothing more. There are no unverified accounts. Once a character is signed in, the passport works from this PC even when the server cannot be reached.
 
@@ -45,4 +45,4 @@ A change is sent two seconds after the last edit. With no answer, it waits and t
 
 ## What is not covered yet
 
-There is no XIVAuth, and no sharing. The headless checks stand in for the server and the game. Live behaviour (the game's player state at login and logout, opening the Lodestone, DPAPI under Wine) is not observed yet.
+There is no XIVAuth, and no sharing. The live test ran on Windows against a local server. Not yet observed: a hosted server over HTTPS, DPAPI under Wine, and other players' characters.
