@@ -40,8 +40,15 @@ internal sealed class CharacterBook : IDisposable
         marks = new MarksPersistence(new MarksStore(directory), profile, report: exception => log.Error(exception, "Could not save Wanderveil drawing."));
         Warn(log, "drawing", marks.Loaded, marks.Kept);
         portrait = new PortraitPicture(textures, passportStore, profile, identity.Profile, exception => log.Error(exception, "Could not use the Wanderveil portrait."), readback);
-        // Only a passport issued just now takes the server's copy; one that could not be read is never replaced.
-        Sync = new PassportSync(account, session, identity.Profile, directory, fresh: identity.Loaded == LoadOutcome.New);
+        // Every part online (ADR-0005). Only a part new on this PC takes the server's copy; one that could not be read
+        // is never replaced.
+        Sync = new PassportSync(account, session,
+        [
+            new IdentityPart(identity.Profile, identity.Loaded == LoadOutcome.New),
+            new StampsPart(stamps.Collection, stamps.Loaded == LoadOutcome.New),
+            new MarksPart(marks.Marks, marks.Loaded == LoadOutcome.New),
+            new PicturePart(portrait, identity.Loaded == LoadOutcome.New),
+        ], directory);
         Window = new MainWindow(() => configuration.ReducedMotion, new ConfigurationSettings(configuration, saveConfiguration), assets, stamps.Collection, stamps,
             new PassportServices(identity.Profile, identity, portrait, new GameCharacter(framework, player)), marks.Marks, marks, new BookAccount(account, session, Sync));
         windows.AddWindow(Window);
@@ -92,7 +99,7 @@ internal sealed class CharacterBook : IDisposable
         {
             SyncState.Checking => "Comparing your passport with the server.",
             SyncState.Saving => "Saving your passport to the server.",
-            SyncState.Synced => "Your passport details are saved online too. Stamps, drawing, and your picture stay on this PC for now.",
+            SyncState.Synced => "Your whole passport is saved online too: details, stamps, drawing, and picture. It works from this PC either way.",
             SyncState.Offline => "The server cannot be reached right now. Your passport works from this PC and catches up later.",
             SyncState.Held => "Your passport online is from a newer Wanderveil; update the plugin to keep it in step.",
             _ => "Your passport is kept on this PC.",

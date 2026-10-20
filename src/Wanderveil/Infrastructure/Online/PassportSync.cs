@@ -1,13 +1,13 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
-using System.Security.Cryptography;
+using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
-using Wanderveil.Features;
 using Wanderveil.Features.Passport;
 using Wanderveil.Infrastructure.Storage;
 
@@ -15,17 +15,18 @@ namespace Wanderveil.Infrastructure.Online;
 
 // Off: not running. Checking: comparing with the server. Saving: sending this PC's changes. Synced: the server has
 // what this PC has. Offline: the server could not be reached; changes wait and are sent later. Held: the server
-// has a passport from a newer Wanderveil, so this version leaves it alone.
+// has a part from a newer Wanderveil, so this version leaves it alone.
 internal enum SyncState { Off, Checking, Saving, Synced, Offline, Held }
 
-// What was last agreed with the server: its revision and the hash of the document both sides then had.
+// What was last agreed with the server for a part: its revision and the hash of what both sides then had (empty
+// right after this PC took the server's copy, until the copy is hashed as this PC writes it).
 internal sealed record SyncMark(int Revision, string Hash);
 
-// Keeps one character's passport identity (the identity file's document, no picture) in step with the server's
-// private record. This PC's file stays the source of truth and works offline. On start and after each change it
-// compares: a side that changed since the last agreement wins; if both changed, this PC's copy wins and replaces
-// the server's. A passport new on this PC takes the server's when there is one. Network and disk work run on one
-// background task; the identity is read and changed only on the UI thread (Snapshot, Poll).
+// Keeps one character's passport in step with the server's private record, part by part (identity, stamps, drawing
+// and writing, picture; ADR-0005). This PC's files stay the source of truth and work offline. For each part, on start
+// and after each change: a side that changed since the last agreement wins; if both changed, this PC's copy wins and
+// replaces the server's. A part new on this PC takes the server's when there is one. Network and disk work run on one
+// background task; parts are read and changed only on the UI thread (Start, change events, Poll).
 internal sealed class PassportSync : IDisposable
 {
     private static readonly TimeSpan Settle = TimeSpan.FromSeconds(2);
@@ -33,63 +34,113 @@ internal sealed class PassportSync : IDisposable
     private static readonly TimeSpan LastRetry = TimeSpan.FromMinutes(5);
     private readonly OnlineAccount account;
     private readonly SavedSession session;
-    private readonly PassportProfile profile;
+    private readonly IReadOnlyList<SyncPart> parts;
     private readonly string markPath;
     private readonly CancellationTokenSource closing = new();
     private readonly object gate = new();
     private readonly TimeSpan settle;
-    private bool fresh;
-    private SyncMark? mark;
-    private string document;
+    private readonly Dictionary<string, SyncMark> marks;
+    private readonly Dictionary<string, object?> snapshots = [];
+    private readonly Dictionary<string, SyncState> states = [];
+    private readonly HashSet<string> dirty = [];
+    // Parts that took the server's copy, with a snapshot of the copy as applied, waiting to be hashed.
+    private readonly Dictionary<string, object?> rehash = [];
+    private readonly List<(SyncPart Part, object? Prepared, int Revision)> adopt = [];
+    private readonly HashSet<string> fresh = [];
     private Task worker = Task.CompletedTask;
     private bool running;
-    private bool again;
     private TimeSpan retry;
-    // A server passport to take, handed to the UI thread.
-    private (PassportIdentity Identity, SyncMark Mark)? adopt;
-    private bool profileChanging;
 
+    // Only the identity, as before stamps, drawing, and the picture were online.
     internal PassportSync(OnlineAccount account, SavedSession session, PassportProfile profile, string directory, bool fresh, TimeSpan? settle = null)
+        : this(account, session, [new IdentityPart(profile, fresh)], directory, settle)
+    {
+    }
+
+    internal PassportSync(OnlineAccount account, SavedSession session, IReadOnlyList<SyncPart> parts, string directory, TimeSpan? settle = null)
     {
         this.account = account;
         this.session = session;
-        this.profile = profile;
-        this.fresh = fresh;
+        this.parts = parts;
         this.settle = settle ?? Settle;
         retry = FirstRetry;
         markPath = Path.Combine(directory, $"passport-sync-{StorageProfile.Checked(session.Profile)}.json");
-        mark = ReadMark(markPath);
-        document = PassportStore.Serialize(profile.Identity);
-        profile.Changed += Changed;
+        marks = ReadMarks(markPath);
+        foreach (var part in parts)
+        {
+            if (part.Fresh) fresh.Add(part.Name);
+            states[part.Name] = SyncState.Off;
+            snapshots[part.Name] = part.Capture();
+            part.Changed += () => Changed(part);
+        }
     }
 
-    internal SyncState State { get; private set; } = SyncState.Off;
+    internal SyncState State
+    {
+        get
+        {
+            lock (gate)
+            {
+                var all = states.Values.ToList();
+                if (all.Contains(SyncState.Held)) return SyncState.Held;
+                if (all.Contains(SyncState.Offline)) return SyncState.Offline;
+                if (all.Contains(SyncState.Saving)) return SyncState.Saving;
+                if (all.Contains(SyncState.Checking)) return SyncState.Checking;
+                return all.All(state => state == SyncState.Synced) ? SyncState.Synced : SyncState.Off;
+            }
+        }
+    }
+
+    internal SyncState StateOf(string part)
+    {
+        lock (gate) return states.GetValueOrDefault(part);
+    }
+
     // Something the holder should know about the last comparison, or null.
     internal string? Notice { get; private set; }
-    internal int? Revision => mark?.Revision;
 
-    // Begins: compares with the server now. From the UI thread.
-    internal void Start() => Kick(TimeSpan.Zero);
+    // The identity's agreed revision.
+    internal int? Revision => RevisionOf("passport");
 
-    // Each frame, on the UI thread: takes a server passport the comparison chose.
-    internal void Poll()
+    internal int? RevisionOf(string part)
     {
-        (PassportIdentity Identity, SyncMark Mark)? taken;
-        lock (gate) { taken = adopt; adopt = null; }
-        if (taken is not { } value) return;
-        profileChanging = true;
-        try { profile.Update(value.Identity); }
-        finally { profileChanging = false; }
+        lock (gate) return marks.TryGetValue(part, out var mark) ? mark.Revision : null;
+    }
+
+    // Begins: compares every part with the server now. From the UI thread.
+    internal void Start()
+    {
         lock (gate)
         {
-            document = PassportStore.Serialize(profile.Identity);
-            // The document as this PC writes it, so taking it is not mistaken for a change here.
-            mark = value.Mark with { Hash = Hash(document) };
-            fresh = false;
+            foreach (var part in parts) { snapshots[part.Name] = part.Capture(); dirty.Add(part.Name); }
         }
-        // Off the UI thread: a small file, but still disk work.
-        var written = mark;
-        _ = Task.Run(() => WriteMark(written));
+        Kick(TimeSpan.Zero);
+    }
+
+    // Each frame, on the UI thread: takes the server's copies the comparisons chose.
+    internal void Poll()
+    {
+        List<(SyncPart Part, object? Prepared, int Revision)> taken;
+        lock (gate)
+        {
+            if (adopt.Count == 0) return;
+            taken = [.. adopt];
+            adopt.Clear();
+        }
+        foreach (var (part, prepared, revision) in taken)
+        {
+            part.Apply(prepared);
+            lock (gate)
+            {
+                marks[part.Name] = new SyncMark(revision, "");
+                fresh.Remove(part.Name);
+                // The copy as this PC now holds it, hashed on the worker, so taking it is not mistaken for a change.
+                rehash[part.Name] = part.Capture();
+                snapshots[part.Name] = rehash[part.Name];
+                dirty.Add(part.Name);
+            }
+        }
+        Kick(TimeSpan.Zero);
     }
 
     // For checks: waits until the worker is idle.
@@ -100,35 +151,38 @@ internal sealed class PassportSync : IDisposable
         {
             Task current;
             lock (gate) { if (!running) return true; current = worker; }
-            current.Wait(deadline - DateTime.UtcNow > TimeSpan.Zero ? deadline - DateTime.UtcNow : TimeSpan.Zero);
+            var left = deadline - DateTime.UtcNow;
+            current.Wait(left > TimeSpan.Zero ? left : TimeSpan.Zero);
         }
         lock (gate) return !running;
     }
 
     public void Dispose()
     {
-        profile.Changed -= Changed;
         closing.Cancel();
         try { worker.Wait(TimeSpan.FromSeconds(3)); }
         catch (AggregateException) { }
         closing.Dispose();
     }
 
-    private void Changed()
+    private void Changed(SyncPart part)
     {
-        var text = PassportStore.Serialize(profile.Identity);
-        lock (gate) document = text;
-        if (!profileChanging) Kick(settle);
+        // The picture changes off the UI thread and has no snapshot to take.
+        var snapshot = part.IsPicture ? null : part.Capture();
+        lock (gate)
+        {
+            snapshots[part.Name] = snapshot;
+            dirty.Add(part.Name);
+        }
+        Kick(settle);
     }
 
     private void Kick(TimeSpan delay)
     {
         lock (gate)
         {
-            if (closing.IsCancellationRequested) return;
-            if (running) { again = true; return; }
+            if (closing.IsCancellationRequested || running) return;
             running = true;
-            again = false;
             worker = Task.Run(() => Work(delay));
         }
     }
@@ -141,107 +195,234 @@ internal sealed class PassportSync : IDisposable
             if (delay > TimeSpan.Zero) await Task.Delay(delay, token).ConfigureAwait(false);
             while (true)
             {
-                var done = await Compare(token).ConfigureAwait(false);
+                SyncPart? next;
                 lock (gate)
                 {
-                    if (!done) { running = false; break; }
-                    if (!again) { running = false; return; }
-                    again = false;
+                    next = parts.FirstOrDefault(part => dirty.Contains(part.Name));
+                    if (next == null) { running = false; return; }
+                    dirty.Remove(next.Name);
                 }
+                if (await Compare(next, token).ConfigureAwait(false)) continue;
+                // Offline: everything waits, tried again later, waiting longer each time.
+                TimeSpan wait;
+                lock (gate)
+                {
+                    dirty.Add(next.Name);
+                    wait = retry;
+                    retry = retry * 2 > LastRetry ? LastRetry : retry * 2;
+                    running = false;
+                }
+                await Task.Delay(wait, token).ConfigureAwait(false);
+                Kick(TimeSpan.Zero);
+                return;
             }
-            // Not done (offline): try again later, waiting longer each time.
-            TimeSpan wait;
-            lock (gate) { wait = retry; retry = retry * 2 > LastRetry ? LastRetry : retry * 2; }
-            await Task.Delay(wait, token).ConfigureAwait(false);
-            Kick(TimeSpan.Zero);
         }
         catch (OperationCanceledException) { lock (gate) running = false; }
+        catch (Exception)
+        {
+            // Never leave the worker marked running; the next change or start tries again.
+            lock (gate) running = false;
+        }
     }
 
-    // One comparison and whatever it calls for. False when it should be tried again later.
-    private async Task<bool> Compare(CancellationToken token)
+    // One part's comparison and whatever it calls for. False when it should be tried again later (offline).
+    private async Task<bool> Compare(SyncPart part, CancellationToken token)
     {
         var api = account.Api;
-        if (api == null || api.Server != session.Server) { State = SyncState.Off; return true; }
-        State = SyncState.Checking;
-        var read = await api.GetPassport(session.Token, token).ConfigureAwait(false);
-        if (Settled(read) is { } stop) return stop;
+        if (api == null || api.Server != session.Server) { SetState(part, SyncState.Off); return true; }
+        SetState(part, SyncState.Checking);
 
-        string local;
+        object? snapshot;
         SyncMark? agreed;
         bool isFresh;
-        lock (gate) { local = document; agreed = mark; isFresh = fresh; }
-        var localHash = Hash(local);
-        if (read.Status == 404) return await Send(api, local, null, token).ConfigureAwait(false);
-
-        var record = read.Value!;
-        var remote = record.Document.GetRawText();
-        var remoteHash = Hash(remote);
-        var localChanged = agreed == null ? !isFresh : localHash != agreed.Hash;
-        var remoteChanged = agreed == null || record.Revision != agreed.Revision;
-        if (agreed != null && !localChanged && !remoteChanged) { State = SyncState.Synced; return true; }
-        if (localHash == remoteHash || !localChanged && remoteChanged)
+        lock (gate)
         {
-            // Take the server's (or note the agreement when both already match).
-            PassportIdentity identity;
-            try { identity = PassportStore.Parse(remote); }
-            catch (NotSupportedException) { State = SyncState.Held; Notice = "Your passport was last saved online by a newer Wanderveil. Update the plugin to keep it in step."; return true; }
-            catch (FormatException) { return await Send(api, local, record.Revision, token).ConfigureAwait(false); }
-            lock (gate) adopt = (identity, new SyncMark(record.Revision, remoteHash));
-            State = SyncState.Synced;
+            snapshot = snapshots.GetValueOrDefault(part.Name);
+            if (rehash.Remove(part.Name, out var applied) && marks.TryGetValue(part.Name, out var pending))
+                marks[part.Name] = pending with { Hash = part.Encode(applied)?.Hash ?? "" };
+            agreed = marks.GetValueOrDefault(part.Name);
+            isFresh = fresh.Contains(part.Name);
+        }
+        WriteMarks();
+        var local = part.Encode(snapshot);
+
+        int revision;
+        byte[] remote;
+        if (part.IsPicture)
+        {
+            var read = await api.GetPicture(session.Token, token).ConfigureAwait(false);
+            if (Settled(part, read) is { } stop) return stop;
+            if (read.Status == 404) return await Absent(api, part, local, token).ConfigureAwait(false);
+            (revision, remote) = (read.Value!.Revision, read.Value.Bytes);
+        }
+        else
+        {
+            var read = await api.GetDocument(session.Token, Route(part), token).ConfigureAwait(false);
+            if (Settled(part, read) is { } stop) return stop;
+            if (read.Status == 404) return await Absent(api, part, local, token).ConfigureAwait(false);
+            (revision, remote) = (read.Value!.Revision, Encoding.UTF8.GetBytes(read.Value.Document.GetRawText()));
+        }
+
+        var remoteHash = SyncPart.Hash(remote);
+        var localChanged = agreed == null ? !isFresh && local != null : (local?.Hash ?? "") != agreed.Hash;
+        var remoteChanged = agreed == null || revision != agreed.Revision;
+        if (agreed != null && !localChanged && !remoteChanged) { SetState(part, SyncState.Synced); return true; }
+        if (local != null && local.Hash == remoteHash)
+        {
+            Agree(part, new SyncMark(revision, local.Hash));
+            SetState(part, SyncState.Synced);
             return true;
         }
-        if (remoteChanged && agreed != null) Notice = "This passport was also changed on another PC; the version on this PC was kept.";
-        return await Send(api, local, record.Revision, token).ConfigureAwait(false);
+        if (!localChanged && remoteChanged)
+        {
+            object prepared;
+            try { prepared = part.Prepare(remote); }
+            catch (NotSupportedException)
+            {
+                SetState(part, SyncState.Held);
+                Notice = "Your passport was last saved online by a newer Wanderveil. Update the plugin to keep it in step.";
+                return true;
+            }
+            catch (FormatException) { return local == null || await Send(api, part, local, revision, token).ConfigureAwait(false); }
+            lock (gate) adopt.Add((part, prepared, revision));
+            SetState(part, SyncState.Synced);
+            return true;
+        }
+        if (remoteChanged && agreed != null) Notice = "Your passport was also changed on another PC; the version on this PC was kept.";
+        if (local == null) return await Remove(api, part, revision, token).ConfigureAwait(false);
+        return await Send(api, part, local, revision, token).ConfigureAwait(false);
     }
 
-    private async Task<bool> Send(WanderveilApi api, string local, int? over, CancellationToken token)
+    // The server has none of this part: send this PC's, or agree there is none.
+    private async Task<bool> Absent(WanderveilApi api, SyncPart part, LocalPart? local, CancellationToken token)
     {
-        State = SyncState.Saving;
-        var saved = await api.PutPassport(session.Token, local, over, token).ConfigureAwait(false);
-        if (saved.Status == 412) { lock (gate) again = true; return true; }
-        if (Settled(saved) is { } stop) return stop;
-        var agreed = new SyncMark(saved.Value!.Revision, Hash(local));
-        lock (gate) { mark = agreed; fresh = false; }
-        WriteMark(agreed);
-        State = SyncState.Synced;
+        if (local != null) return await Send(api, part, local, null, token).ConfigureAwait(false);
+        lock (gate) marks.Remove(part.Name);
+        WriteMarks();
+        SetState(part, SyncState.Synced);
         return true;
     }
 
-    // What an answer that is not a record means, or null to carry on.
-    private bool? Settled<T>(ApiResult<T> result)
+    private async Task<bool> Send(WanderveilApi api, SyncPart part, LocalPart local, int? over, CancellationToken token)
+    {
+        SetState(part, SyncState.Saving);
+        byte[] bytes;
+        string contentType;
+        try { (bytes, contentType) = await local.Payload(token).ConfigureAwait(false); }
+        catch (InvalidDataException exception)
+        {
+            // Not something to retry (a picture that cannot be made small enough): kept on this PC, and said so.
+            SetState(part, SyncState.Offline);
+            Notice = "Your picture stays on this PC only: " + exception.Message;
+            return true;
+        }
+        int? saved;
+        if (part.IsPicture)
+        {
+            var result = await api.PutPicture(session.Token, bytes, contentType, over, token).ConfigureAwait(false);
+            if (result.Status == 412) { Again(part); return true; }
+            if (Settled(part, result) is { } stop) return stop;
+            saved = result.Value?.Revision;
+        }
+        else
+        {
+            var result = await api.PutDocument(session.Token, Route(part), Encoding.UTF8.GetString(bytes), over, part is MarksPart, token).ConfigureAwait(false);
+            if (result.Status == 412) { Again(part); return true; }
+            if (Settled(part, result) is { } stop) return stop;
+            saved = result.Value?.Revision;
+        }
+        if (saved is { } revision) Agree(part, new SyncMark(revision, local.Hash));
+        SetState(part, SyncState.Synced);
+        return true;
+    }
+
+    // The holder removed this part here (only the picture can be removed): remove it online too.
+    private async Task<bool> Remove(WanderveilApi api, SyncPart part, int over, CancellationToken token)
+    {
+        SetState(part, SyncState.Saving);
+        var result = await api.DeletePicture(session.Token, over, token).ConfigureAwait(false);
+        if (result.Status == 412) { Again(part); return true; }
+        if (result.Status != 404 && Settled(part, result) is { } stop) return stop;
+        lock (gate) marks.Remove(part.Name);
+        WriteMarks();
+        SetState(part, SyncState.Synced);
+        return true;
+    }
+
+    // What an answer that is not a usable one means, or null to carry on.
+    private bool? Settled<T>(SyncPart part, ApiResult<T> result)
     {
         account.ReportOffline(result.Offline);
-        if (result.Offline) { State = SyncState.Offline; return false; }
+        if (result.Offline) { SetState(part, SyncState.Offline); return false; }
         lock (gate) retry = FirstRetry;
-        if (result.SignedOut) { account.SessionRefused(session); State = SyncState.Off; return true; }
-        if (result.Ok && result.Value != null || result.Status is 404 or 412) return null;
+        if (result.SignedOut) { account.SessionRefused(session); SetState(part, SyncState.Off); return true; }
+        // Success, with a body or (a removal) without one.
+        if (result.Ok || result.Status is 404 or 412) return null;
         // Refused for a reason that retrying will not change (too large, invalid): keep this PC's copy and say so.
-        State = SyncState.Offline;
+        SetState(part, SyncState.Offline);
         Notice = OnlineAccount.Explain(result);
         return result.Status is 429 or >= 500 ? false : true;
     }
 
-    private static string Hash(string text) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text)));
-
-    private static SyncMark? ReadMark(string path)
+    private void Again(SyncPart part)
     {
-        try
-        {
-            if (!File.Exists(path)) return null;
-            if (JsonNode.Parse(File.ReadAllText(path, Encoding.UTF8)) is not JsonObject file) return null;
-            var revision = file["revision"] is JsonValue r && r.TryGetValue<int>(out var number) ? number : 0;
-            var hash = file["hash"] is JsonValue h && h.TryGetValue<string>(out var text) ? text : null;
-            return revision > 0 && hash is { Length: 64 } ? new SyncMark(revision, hash) : null;
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException) { return null; }
+        lock (gate) dirty.Add(part.Name);
     }
 
-    private void WriteMark(SyncMark agreed)
+    private void Agree(SyncPart part, SyncMark mark)
     {
+        lock (gate)
+        {
+            marks[part.Name] = mark;
+            fresh.Remove(part.Name);
+        }
+        WriteMarks();
+    }
+
+    private void SetState(SyncPart part, SyncState state)
+    {
+        lock (gate) states[part.Name] = state;
+    }
+
+    private static string Route(SyncPart part) => part.Name == "passport" ? "v1/passport" : "v1/passport/" + part.Name;
+
+    // The agreement file: version 2 keeps every part; version 1 held only the identity.
+    private static Dictionary<string, SyncMark> ReadMarks(string path)
+    {
+        var result = new Dictionary<string, SyncMark>(StringComparer.Ordinal);
         try
         {
-            var file = new JsonObject { ["format"] = "wanderveil.passport-sync", ["version"] = 1, ["revision"] = agreed.Revision, ["hash"] = agreed.Hash, ["at"] = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture) };
+            if (!File.Exists(path) || JsonNode.Parse(File.ReadAllText(path, Encoding.UTF8)) is not JsonObject file) return result;
+            static SyncMark? Read(JsonNode? node)
+            {
+                if (node is not JsonObject entry) return null;
+                var revision = entry["revision"] is JsonValue r && r.TryGetValue<int>(out var number) ? number : 0;
+                var hash = entry["hash"] is JsonValue h && h.TryGetValue<string>(out var text) ? text : null;
+                return revision > 0 && hash is { Length: 64 } ? new SyncMark(revision, hash) : null;
+            }
+            if (file["parts"] is JsonObject saved)
+            {
+                foreach (var (name, node) in saved)
+                    if (Read(node) is { } mark) result[name] = mark;
+            }
+            else if (Read(file) is { } identity) result["passport"] = identity;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException) { }
+        return result;
+    }
+
+    private void WriteMarks()
+    {
+        JsonObject saved;
+        lock (gate)
+        {
+            saved = new JsonObject();
+            foreach (var (name, mark) in marks.Where(entry => entry.Value.Hash.Length == 64))
+                saved[name] = new JsonObject { ["revision"] = mark.Revision, ["hash"] = mark.Hash };
+        }
+        try
+        {
+            var file = new JsonObject { ["format"] = "wanderveil.passport-sync", ["version"] = 2, ["parts"] = saved, ["at"] = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture) };
             SafeFile.Write(markPath, Encoding.UTF8.GetBytes(file.ToJsonString()));
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) { }

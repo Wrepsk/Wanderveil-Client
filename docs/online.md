@@ -36,12 +36,20 @@ Each signed-in character has its own local files, named by Lodestone ID: `stamps
 
 ## Passport sync
 
-The passport's identity document (the `passport-*.json` file, which holds details, signature, picture placement, and appearance, but not the picture) is kept in step with the holder's private record on the server. Stamps, drawing, and the picture stay on this PC for now. `passport-sync-lodestone-<id>.json` remembers the server revision last agreed and a hash of the document both sides had then. The rule:
+The whole passport is kept in step with the holder's private record on the server, part by part (ADR-0005), each part with its own revision:
+
+- **The identity:** details, signature, picture placement, and appearance (`passport-*.json`).
+- **The stamps:** with their places (`stamps-*.json`).
+- **The drawing and writing:** `marks-*.json`, sent gzip-compressed.
+- **The picture.** The stored file is sent as it is when it is already a PNG or JPEG within 4 MiB and 2048 px. Otherwise it is re-encoded through Dalamud's texture tools: scaled to fit, as PNG, or JPEG when the PNG is still too large. A picture that cannot be made small enough stays on this PC, and Settings says so.
+
+`passport-sync-lodestone-<id>.json` remembers, for each part, the server revision last agreed and a hash of what both sides had then; the identity-only file written before this change is still read. The rule, for each part:
 
 - **Nothing changed on either side:** nothing to do.
 - **Changed here only:** sent, over the agreed revision.
-- **Changed on the server only** (on another PC): taken, when the passport opens.
+- **Changed on the server only** (on another PC): taken, when the passport opens. Stamps and drawing are replaced whole, and the drawing's undo history is cleared, since undoing past another PC's copy would mix the two. A picture taken from online does not move the picture in its frame: that placement comes with the identity.
 - **Changed on both sides:** this PC's copy wins and replaces the server's, and Settings says so.
+- **Removed here** (only the picture can be): removed online too.
 - **A passport new on this PC:** takes the server's copy if there is one. A passport that could not be read is never replaced by the server's.
 - **The server's copy is from a newer Wanderveil:** it is left alone, and Settings asks you to update.
 

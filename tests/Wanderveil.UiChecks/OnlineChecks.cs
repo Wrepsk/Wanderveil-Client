@@ -1,9 +1,12 @@
+using System.IO.Compression;
 using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Wanderveil.Features;
+using Wanderveil.Features.Drawing;
 using Wanderveil.Features.Passport;
+using Wanderveil.Features.Stamps;
 using Wanderveil.Infrastructure.Online;
 using Wanderveil.Infrastructure.Storage;
 
@@ -28,6 +31,7 @@ internal static class OnlineChecks
             CheckSignIn(check, Path.Combine(directory, "sign-in"));
             CheckXivAuth(check, Path.Combine(directory, "xivauth"));
             CheckSync(check, Path.Combine(directory, "sync"));
+            CheckPartSync(check, Path.Combine(directory, "parts"));
         }
         finally { Directory.Delete(directory, recursive: true); }
         Console.WriteLine("PASS online");
@@ -376,6 +380,121 @@ internal static class OnlineChecks
         }
     }
 
+    // Every part of the passport kept in step: stamps, drawing (sent compressed), and the picture, each with its own
+    // revision, alongside the identity.
+    private static void CheckPartSync(Action<bool, string> check, string directory)
+    {
+        var server = new FakeServer();
+        server.Add(1001, "Wander Veil", "Ravana");
+        using var store = new SessionStore(directory);
+        using var account = new OnlineAccount(store, server.Client(), "0.0.0.1", () => FakeServer.Address);
+        account.SetCharacter(Content, "Wander Veil", "Ravana");
+        SignIn(server, account, 1001);
+        var session = account.Session!;
+        var owner = session.Account.AccountId;
+        var settle = TimeSpan.FromMilliseconds(20);
+        var design = new StampDesign("demo-design-1", 1, "Demo stamp", 0, StampProvenance.LocalDemo);
+        var picture = Picture(320, 400);
+
+        // A passport new on this PC, none online: every part is sent, the drawing compressed.
+        var profile = new PassportProfile(PassportIdentity.Sample with { Number = "EZ 0002 0002" });
+        var stamps = new StampCollection();
+        var stamp = stamps.Collect("demo-1", design).Stamp!;
+        stamps.Place(stamp, new StampPlacement(0, 0.5f, 0.5f, 0f));
+        var marks = new PageMarks([new InkStroke(0, new Rgb(20, 20, 20), 0.006f, [new InkPoint(0.1f, 0.1f, 1f), new InkPoint(0.4f, 0.3f, 1f)])]);
+        var host = new FakePicture(picture);
+        SyncPart[] Parts(PassportProfile identity, StampCollection collection, PageMarks drawing, FakePicture pictureHost, bool isNew) =>
+            [new IdentityPart(identity, isNew), new StampsPart(collection, isNew), new MarksPart(drawing, isNew), new PicturePart(pictureHost, isNew)];
+        using (var sync = new PassportSync(account, session, Parts(profile, stamps, marks, host, true), directory, settle))
+        {
+            sync.Start();
+            check(sync.Flush(TimeSpan.FromSeconds(5)) && sync.State == SyncState.Synced, $"Syncing every part did not settle ({sync.State}).");
+            check(server.Passport(owner) != null && server.Part(owner, "stamps")?.Document.Contains("demo-1", StringComparison.Ordinal) == true &&
+                  server.Part(owner, "marks") != null && server.Picture(owner)?.Bytes.SequenceEqual(picture) == true, "Not every part was sent.");
+            check(server.CompressedPaths.SetEquals(["/v1/passport/marks"]), $"The drawing was not the only part sent compressed ({string.Join(", ", server.CompressedPaths)}).");
+
+            // A change to one part sends only that part.
+            var writes = server.PartWrites;
+            stamps.Place(stamp, new StampPlacement(1, 0.2f, 0.3f, 10f));
+            check(Until(() => server.Part(owner, "stamps")?.Revision == 2) && sync.Flush(TimeSpan.FromSeconds(5)) && server.PartWrites == writes + 1, "Moving a stamp did not send only the stamps.");
+
+            // Removing the picture here removes it online.
+            host.Remove();
+            check(Until(() => server.Picture(owner) == null) && sync.Flush(TimeSpan.FromSeconds(5)), "Removing the picture here did not remove it online.");
+        }
+
+        // Changes made on another PC are taken here, without being sent back.
+        server.EditPart(owner, "marks", document => document.Replace("0.4", "0.9", StringComparison.Ordinal));
+        server.SetPicture(owner, Picture(200, 200));
+        using (var sync = new PassportSync(account, session, Parts(profile, stamps, marks, host, false), directory, settle))
+        {
+            var writes = server.PartWrites;
+            sync.Start();
+            sync.Flush(TimeSpan.FromSeconds(5));
+            sync.Poll();
+            sync.Flush(TimeSpan.FromSeconds(5));
+            check(host.Stored?.Length == Picture(200, 200).Length && host.Replaced == 1, $"A picture added on another PC was not taken here ({string.Join(", ", new[] { "passport", "stamps", "marks", "picture" }.Select(name => name + "=" + sync.StateOf(name)))}; {sync.Notice}; replaced {host.Replaced}).");
+            check(Math.Abs(marks.Strokes.Single().Points[1].X - 0.9f) < 0.001f, "Drawing changed on another PC was not taken here.");
+            check(server.PartWrites == writes, $"Taking parts from another PC sent something back ({server.PartWrites - writes} writes).");
+        }
+
+        // A new PC (every part new) takes everything online.
+        var newPc = Path.Combine(directory, "new-pc");
+        Directory.CreateDirectory(newPc);
+        var newProfile = new PassportProfile(PassportIdentity.Sample with { Number = "EZ 9999 9999" });
+        var newStamps = new StampCollection();
+        var newMarks = new PageMarks();
+        var newHost = new FakePicture(null);
+        using (var sync = new PassportSync(account, session, Parts(newProfile, newStamps, newMarks, newHost, true), newPc, settle))
+        {
+            sync.Start();
+            sync.Flush(TimeSpan.FromSeconds(5));
+            sync.Poll();
+            sync.Flush(TimeSpan.FromSeconds(5));
+            check(newProfile.Identity.Number == "EZ 0002 0002" && newStamps.Stamps.Count == 1 && newStamps.Placed.Single().Placement.Sheet == 1 &&
+                  newMarks.Strokes.Count == 1 && !newMarks.CanUndo && newHost.Stored != null, "A new PC did not take every part from online.");
+        }
+
+        // An agreement file from before (identity only) is still read.
+        var oldFile = Path.Combine(directory, "old");
+        Directory.CreateDirectory(oldFile);
+        File.WriteAllText(Path.Combine(oldFile, $"passport-sync-{session.Profile}.json"), $$"""{"format":"wanderveil.passport-sync","version":1,"revision":7,"hash":"{{new string('A', 64)}}"}""");
+        using (var sync = new PassportSync(account, session, profile, oldFile, fresh: false, settle))
+            check(sync.RevisionOf("passport") == 7 && sync.RevisionOf("stamps") == null, "An agreement file from before was not read.");
+    }
+
+    // A PNG's signature and IHDR chunk; enough for the size checks, never decoded here.
+    private static byte[] Picture(int width, int height)
+    {
+        var bytes = new byte[48];
+        new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 13, (byte)'I', (byte)'H', (byte)'D', (byte)'R' }.CopyTo(bytes, 0);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(bytes.AsSpan(16), (uint)width);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(bytes.AsSpan(20), (uint)height);
+        return bytes;
+    }
+
+    // The picture as the plugin keeps it, in memory.
+    private sealed class FakePicture(byte[]? stored) : IPictureHost
+    {
+        internal byte[]? Stored { get; private set; } = stored;
+        internal int Replaced { get; private set; }
+        public event Action? Changed;
+        public byte[]? ReadStored() => Stored;
+        public Task<(byte[] Bytes, string ContentType)> ForUpload(byte[] bytes, CancellationToken cancellationToken) => Task.FromResult((bytes, "image/png"));
+
+        public void Replace(byte[]? bytes)
+        {
+            Stored = bytes;
+            Replaced++;
+        }
+
+        internal void Remove()
+        {
+            Stored = null;
+            Changed?.Invoke();
+        }
+    }
+
     internal static void SignIn(FakeServer server, OnlineAccount account, long id)
     {
         account.Restart();
@@ -406,7 +525,13 @@ internal static class OnlineChecks
         private readonly Dictionary<string, (long Id, string Code)> challenges = [];
         private readonly Dictionary<string, Guid> sessions = [];
         private readonly Dictionary<long, Guid> accounts = [];
-        private readonly Dictionary<Guid, (int Revision, string Document)> passports = [];
+        // Every document part by account and part name, and pictures by account.
+        private readonly Dictionary<(Guid, string), (int Revision, string Document)> parts = [];
+        private readonly Dictionary<Guid, (int Revision, byte[] Bytes)> pictures = [];
+        internal int PartWrites { get; private set; }
+        internal bool LastPutCompressed { get; private set; }
+        // The paths that arrived gzip-compressed.
+        internal HashSet<string> CompressedPaths { get; } = [];
         private readonly Dictionary<string, (long Id, string Name)> flows = [];
         internal bool XivAuthEnabled { get; set; } = true;
         // What XIVAuth answers each poll, in turn (pending, approve, deny, unverified, expire, slow, down); pending once empty.
@@ -427,11 +552,26 @@ internal static class OnlineChecks
         internal void EndSessions() { lock (gate) sessions.Clear(); }
         internal bool HasSession(string token) { lock (gate) return sessions.ContainsKey(token); }
         internal bool HasAccount(long id) { lock (gate) return accounts.ContainsKey(id); }
-        internal (int Revision, string Document)? Passport(Guid account) { lock (gate) return passports.TryGetValue(account, out var p) ? p : null; }
+        internal (int Revision, string Document)? Passport(Guid account) => Part(account, "passport");
+        internal (int Revision, string Document)? Part(Guid account, string part) { lock (gate) return parts.TryGetValue((account, part), out var p) ? p : null; }
+        internal (int Revision, byte[] Bytes)? Picture(Guid account) { lock (gate) return pictures.TryGetValue(account, out var p) ? p : null; }
+        internal void SetPicture(Guid account, byte[]? bytes)
+        {
+            lock (gate)
+            {
+                if (bytes == null) pictures.Remove(account);
+                else pictures[account] = ((pictures.TryGetValue(account, out var old) ? old.Revision : 0) + 1, bytes);
+            }
+        }
+
+        internal void EditPart(Guid account, string part, Func<string, string> change)
+        {
+            lock (gate) { var (revision, document) = parts[(account, part)]; parts[(account, part)] = (revision + 1, change(document)); }
+        }
 
         internal void Edit(Guid account, Func<string, string> change)
         {
-            lock (gate) { var (revision, document) = passports[account]; passports[account] = (revision + 1, change(document)); }
+            EditPart(account, "passport", change);
         }
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
@@ -441,11 +581,22 @@ internal static class OnlineChecks
             if (Gateway) return new HttpResponseMessage(HttpStatusCode.BadGateway);
             LastClientHeader = request.Headers.TryGetValues(WanderveilApi.ClientHeader, out var values) ? values.Single() : null;
             var path = request.RequestUri!.AbsolutePath;
-            var body = request.Content == null ? "" : await request.Content.ReadAsStringAsync(cancellationToken);
-            lock (gate) return Route(request, path, body);
+            var raw = request.Content == null ? [] : await request.Content.ReadAsByteArrayAsync(cancellationToken);
+            if (request.Content?.Headers.ContentEncoding.Contains("gzip") == true)
+            {
+                using var expanded = new MemoryStream();
+                using (var stream = new GZipStream(new MemoryStream(raw), CompressionMode.Decompress)) stream.CopyTo(expanded);
+                raw = expanded.ToArray();
+            }
+            lock (gate)
+            {
+                LastPutCompressed = request.Content?.Headers.ContentEncoding.Contains("gzip") == true;
+                if (LastPutCompressed) CompressedPaths.Add(path);
+                return Route(request, path, Encoding.UTF8.GetString(raw), raw);
+            }
         }
 
-        private HttpResponseMessage Route(HttpRequestMessage request, string path, string body)
+        private HttpResponseMessage Route(HttpRequestMessage request, string path, string body, byte[] raw)
         {
             if (request.Method == HttpMethod.Post && path == "/v1/auth/lodestone/challenges")
             {
@@ -512,26 +663,55 @@ internal static class OnlineChecks
                 case ("DELETE", "/v1/account"):
                     foreach (var held in sessions.Where(s => s.Value == owner).Select(s => s.Key).ToList()) sessions.Remove(held);
                     accounts.Remove(lodestone);
-                    passports.Remove(owner);
+                    foreach (var key in parts.Keys.Where(k => k.Item1 == owner).ToList()) parts.Remove(key);
+                    pictures.Remove(owner);
                     return new HttpResponseMessage(HttpStatusCode.NoContent);
                 case ("DELETE", "/v1/session"):
                     sessions.Remove(bearer);
                     return new HttpResponseMessage(HttpStatusCode.NoContent);
-                case ("GET", "/v1/passport"):
-                    return passports.TryGetValue(owner, out var stored) ? Record(stored) : Problem(404, "passport_not_found");
-                case ("PUT", "/v1/passport"):
+                case ("GET", "/v1/passport/picture"):
+                    if (!pictures.TryGetValue(owner, out var shown)) return Problem(404, "part_not_found");
+                    var image = new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(shown.Bytes) };
+                    image.Content.Headers.ContentType = new("image/png");
+                    image.Headers.ETag = new($"\"{shown.Revision}\"");
+                    return image;
+                case ("PUT", "/v1/passport/picture"):
+                    LastIfMatch = request.Headers.IfMatch.SingleOrDefault()?.ToString();
+                    var hasPicture = pictures.TryGetValue(owner, out var oldPicture);
+                    if (request.Headers.IfNoneMatch.Any() ? hasPicture : !hasPicture || LastIfMatch != $"\"{oldPicture.Revision}\"") return Problem(412, "revision_conflict");
+                    if (PictureCheck.Inspect(raw) == null) return Problem(422, "picture_invalid");
+                    PartWrites++;
+                    pictures[owner] = ((hasPicture ? oldPicture.Revision : 0) + 1, raw);
+                    return Json(200, new { revision = pictures[owner].Revision, updatedAt = DateTimeOffset.UtcNow, contentType = "image/png", width = 1, height = 1, bytes = raw.Length });
+                case ("DELETE", "/v1/passport/picture"):
+                    if (!pictures.TryGetValue(owner, out var gone)) return Problem(404, "part_not_found");
+                    if (request.Headers.IfMatch.SingleOrDefault()?.ToString() != $"\"{gone.Revision}\"") return Problem(412, "revision_conflict");
+                    PartWrites++;
+                    pictures.Remove(owner);
+                    return new HttpResponseMessage(HttpStatusCode.NoContent);
+            }
+            if (path is "/v1/passport" or "/v1/passport/stamps" or "/v1/passport/marks")
+            {
+                var part = path == "/v1/passport" ? "passport" : path["/v1/passport/".Length..];
+                if (request.Method == HttpMethod.Get)
+                    return parts.TryGetValue((owner, part), out var stored) ? Record(stored) : Problem(404, part == "passport" ? "passport_not_found" : "part_not_found");
+                if (request.Method == HttpMethod.Put)
+                {
                     var document = JsonNode.Parse(body)!["document"]!.ToJsonString();
                     LastIfMatch = request.Headers.IfMatch.SingleOrDefault()?.ToString();
-                    var exists = passports.TryGetValue(owner, out var current);
+                    var exists = parts.TryGetValue((owner, part), out var current);
                     if (request.Headers.IfNoneMatch.Any())
                     {
                         if (exists) return Problem(412, "revision_conflict");
-                        passports[owner] = (1, document);
-                        return Record(passports[owner]);
+                        PartWrites++;
+                        parts[(owner, part)] = (1, document);
+                        return Record(parts[(owner, part)]);
                     }
                     if (!exists || LastIfMatch != $"\"{current.Revision}\"") return Problem(412, "revision_conflict");
-                    passports[owner] = (current.Revision + 1, document);
-                    return Record(passports[owner]);
+                    PartWrites++;
+                    parts[(owner, part)] = (current.Revision + 1, document);
+                    return Record(parts[(owner, part)]);
+                }
             }
             return Problem(404, "not_found");
         }

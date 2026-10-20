@@ -191,7 +191,7 @@ internal static class SignInChecks
         public string World => "Ravana";
         public string VerifiedBy => "lodestone";
         public DateTimeOffset VerifiedAt => new(2026, 10, 20, 12, 0, 0, TimeSpan.Zero);
-        public string Sync => "Your passport details are saved online too. Stamps, drawing, and your picture stay on this PC for now.";
+        public string Sync => "Your whole passport is saved online too: details, stamps, drawing, and picture. It works from this PC either way.";
         public string? Notice => null;
         public void SignOut() => SignedOut = true;
     }

@@ -124,6 +124,18 @@ internal sealed class PageMarks
     // Takes every mark off one page (one step of undo).
     internal bool ClearSheet(int sheet) => Change(strokes.RemoveAll(stroke => stroke.Sheet == sheet), texts.RemoveAll(text => text.Sheet == sheet));
 
+    // Becomes another copy of these marks (the one kept online, taken on this PC), checked as loaded ones are. Nothing to
+    // undo afterwards: undoing past it would mix two copies.
+    internal void Replace(IEnumerable<InkStroke> nextStrokes, IEnumerable<PageText> nextTexts)
+    {
+        var copy = new PageMarks(nextStrokes, nextTexts);
+        group = null;
+        undo.Clear();
+        strokes = copy.strokes;
+        texts = copy.texts;
+        Changed?.Invoke();
+    }
+
     // Takes every mark off every page, for good: nothing to undo afterwards.
     internal bool ClearAll()
     {

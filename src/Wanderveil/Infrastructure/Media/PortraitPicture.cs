@@ -10,6 +10,7 @@ using Dalamud.Interface.Textures;
 using Dalamud.Interface.Textures.TextureWraps;
 using Dalamud.Plugin.Services;
 using Wanderveil.Features.Passport;
+using Wanderveil.Infrastructure.Online;
 using Wanderveil.Infrastructure.Storage;
 using Wanderveil.UI.Components;
 
@@ -20,7 +21,7 @@ namespace Wanderveil.Infrastructure.Media;
 // copied beside the passport (portrait-<profile>.image) on a background task, so a large picture never stalls
 // a frame. Pictures taller than ShownHeight are scaled down once on the GPU, since textures have no mipmaps.
 // A new texture is swapped in at the start of a frame (Poll), when no draw list still refers to the old one.
-internal sealed class PortraitPicture : IPassportPortrait, IDisposable
+internal sealed class PortraitPicture : IPassportPortrait, IPictureHost, IDisposable
 {
     private const int ShownHeight = 1200;
     private readonly ITextureProvider provider;
@@ -38,6 +39,8 @@ internal sealed class PortraitPicture : IPassportPortrait, IDisposable
     // Written by background work under gate, taken by Poll on the draw thread.
     private IDalamudTextureWrap? arrived;
     private bool center;
+    // Whether the arrived picture came from the server, whose placement in the frame comes with the identity.
+    private bool fromServer;
     private string? failure;
     // Each choice or removal starts a new generation; work from an older one is discarded when it finishes.
     private int generation;
@@ -60,6 +63,75 @@ internal sealed class PortraitPicture : IPassportPortrait, IDisposable
     }
 
     public PortraitState State => state;
+
+    // The holder chose, took, or removed a picture here (raised from a background task once it is saved or gone).
+    public event Action? Changed;
+
+    // The picture as saved on this PC, or null. Worker thread.
+    public byte[]? ReadStored() => store.ReadPicture(profileName);
+
+    // A copy the server takes (PNG or JPEG, at most 4 MiB and 2048 px): the stored file when it already is; else
+    // decoded, scaled to fit, and encoded as PNG, or as JPEG when the PNG is still too large. Worker thread.
+    public async Task<(byte[] Bytes, string ContentType)> ForUpload(byte[] stored, CancellationToken cancellationToken)
+    {
+        if (PictureCheck.Fits(stored)) return (stored, PictureCheck.Inspect(stored)!.Value.ContentType);
+        if (readback is not { } saver) throw new InvalidDataException("This picture cannot be prepared for upload here.");
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, stopping.Token);
+        IDalamudTextureWrap wrap = await provider.CreateFromImageAsync(stored, "Wanderveil portrait upload", linked.Token);
+        try
+        {
+            foreach (var side in new[] { PictureCheck.MaximumSide, PictureCheck.MaximumSide / 2 })
+            {
+                var scale = Math.Min(1.0, side / (double)Math.Max(wrap.Width, wrap.Height));
+                using var sized = scale < 1.0
+                    ? await provider.CreateFromExistingTextureAsync(wrap, new TextureModificationArgs { NewWidth = Math.Max(1, (int)(wrap.Width * scale)), NewHeight = Math.Max(1, (int)(wrap.Height * scale)) }, true, "Wanderveil portrait upload", linked.Token)
+                    : null;
+                var source = sized ?? wrap;
+                foreach (var (extension, type) in new[] { (".png", "image/png"), (".jpg", "image/jpeg") })
+                {
+                    var encoder = saver.GetSupportedImageEncoderInfos().FirstOrDefault(info => info.Extensions.Any(e => string.Equals(e, extension, StringComparison.OrdinalIgnoreCase)));
+                    if (encoder == null) continue;
+                    using var stream = new MemoryStream();
+                    await saver.SaveToStreamAsync(source, encoder.ContainerGuid, stream, null, true, true, linked.Token);
+                    var bytes = stream.ToArray();
+                    if (PictureCheck.Fits(bytes)) return (bytes, type);
+                }
+            }
+        }
+        finally { wrap.Dispose(); }
+        throw new InvalidDataException("This picture could not be made small enough to save online.");
+    }
+
+    // The server's picture taken on this PC (or none): kept and shown, without counting as the holder's change.
+    // Where it sits in the frame comes with the identity. UI thread.
+    public void Replace(byte[]? bytes)
+    {
+        int current;
+        lock (gate)
+        {
+            current = ++generation;
+            arrived?.Dispose();
+            arrived = null;
+            failure = null;
+        }
+        if (bytes == null)
+        {
+            retired?.Dispose();
+            retired = shown;
+            shown = null;
+            state = PortraitState.None;
+            problem = null;
+            Task.Run(() =>
+            {
+                try { store.DeletePicture(profileName); }
+                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) { report?.Invoke(exception); }
+            });
+            return;
+        }
+        state = PortraitState.Loading;
+        problem = null;
+        Task.Run(() => Load(current, () => Task.FromResult(bytes), keep: true, recenter: false, holder: false));
+    }
     public string? Problem => problem;
 
     public bool TryGet(out BookImage image)
@@ -131,6 +203,7 @@ internal sealed class PortraitPicture : IPassportPortrait, IDisposable
         {
             try { store.DeletePicture(profileName); }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) { report?.Invoke(exception); }
+            Changed?.Invoke();
         });
     }
 
@@ -141,11 +214,13 @@ internal sealed class PortraitPicture : IPassportPortrait, IDisposable
         retired = null;
         IDalamudTextureWrap? next;
         bool recenter;
+        bool fromHolder;
         string? failed;
         lock (gate)
         {
             next = arrived;
             recenter = center;
+            fromHolder = !fromServer;
             failed = failure;
             arrived = null;
             failure = null;
@@ -160,7 +235,7 @@ internal sealed class PortraitPicture : IPassportPortrait, IDisposable
         shown = next;
         state = PortraitState.Shown;
         problem = null;
-        if (recenter || profile.Identity.Portrait == null) profile.Update(profile.Identity with { Portrait = PortraitCrop.Centered });
+        if (recenter || profile.Identity.Portrait == null && fromHolder) profile.Update(profile.Identity with { Portrait = PortraitCrop.Centered });
     }
 
     // The file picker's own window; drawn by the plugin each frame after its windows.
@@ -183,7 +258,7 @@ internal sealed class PortraitPicture : IPassportPortrait, IDisposable
         retired = null;
     }
 
-    private async Task Load(int current, Func<Task<byte[]>> read, bool keep, bool recenter)
+    private async Task Load(int current, Func<Task<byte[]>> read, bool keep, bool recenter, bool holder = true)
     {
         IDalamudTextureWrap? wrap = null;
         try
@@ -198,12 +273,14 @@ internal sealed class PortraitPicture : IPassportPortrait, IDisposable
             }
             // Only a picture that decoded is kept, so a saved portrait is always one that can be shown.
             if (keep) store.SavePicture(profileName, bytes);
+            if (keep && holder) Changed?.Invoke();
             lock (gate)
             {
                 if (current != generation || disposed) { wrap.Dispose(); return; }
                 arrived?.Dispose();
                 arrived = wrap;
                 center = recenter;
+                fromServer = !holder;
             }
         }
         catch (OperationCanceledException) { wrap?.Dispose(); }

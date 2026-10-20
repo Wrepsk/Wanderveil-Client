@@ -103,6 +103,24 @@ internal sealed class StampCollection
         return new CollectResult(CollectOutcome.Collected, stamp);
     }
 
+    // Becomes another copy of this passport's stamps (the one kept online, taken on this PC): every stamp and place is
+    // replaced. The copy is checked as a restored one is; false (and nothing changed) when it is not valid.
+    internal bool Replace(IEnumerable<StampInstance> restored, IEnumerable<PlacedStamp> placements)
+    {
+        StampCollection checkedCopy;
+        try { checkedCopy = new StampCollection(clock, restored, placements); }
+        catch (ArgumentException) { return false; }
+        stamps.Clear();
+        stamps.AddRange(checkedCopy.stamps);
+        placed.Clear();
+        placed.AddRange(checkedCopy.placed);
+        places.Clear();
+        foreach (var (id, place) in checkedCopy.places) places[id] = place;
+        issued = Math.Max(issued, checkedCopy.issued);
+        Changed?.Invoke();
+        return true;
+    }
+
     // Takes a stamp off its page; it waits to be placed again. The stamp itself is never removed: an earned
     // stamp stays in the passport. False when it was not placed.
     internal bool Unplace(StampInstance stamp)

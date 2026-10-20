@@ -1,4 +1,7 @@
 using System;
+using System.Globalization;
+using System.IO;
+using System.IO.Compression;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -17,6 +20,9 @@ internal sealed record AccountInfo(Guid AccountId, CharacterInfo Character, stri
 internal sealed record SessionInfo(AccountInfo Account, DateTimeOffset ExpiresAt);
 internal sealed record SessionGrant(AccountInfo Account, DateTimeOffset ExpiresAt, string Token);
 internal sealed record PassportRecord(int Revision, DateTimeOffset UpdatedAt, JsonElement Document);
+// A picture as saved online: its revision (from the ETag) and its bytes.
+internal sealed record PictureFile(int Revision, byte[] Bytes, string ContentType);
+internal sealed record PictureInfo(int Revision, DateTimeOffset UpdatedAt, string ContentType, int Width, int Height, int Bytes);
 internal sealed record XivAuthFlow(string FlowId, string UserCode, Uri VerificationUri, Uri? VerificationUriComplete, int Interval, DateTimeOffset ExpiresAt)
 {
     // The page to open: with the code filled in where XIVAuth gives one.
@@ -94,23 +100,72 @@ internal sealed class WanderveilApi
     internal Task<ApiResult<object>> DeleteAccount(string token, CancellationToken cancellationToken) =>
         Send<object>(HttpMethod.Delete, "v1/account", token, null, cancellationToken);
 
-    internal Task<ApiResult<PassportRecord>> GetPassport(string token, CancellationToken cancellationToken) =>
-        Send<PassportRecord>(HttpMethod.Get, "v1/passport", token, null, cancellationToken);
+    internal Task<ApiResult<PassportRecord>> GetPassport(string token, CancellationToken cancellationToken) => GetDocument(token, "v1/passport", cancellationToken);
 
     // Saves over the revision named, or as the first save when there is none.
-    internal Task<ApiResult<PassportRecord>> PutPassport(string token, string document, int? over, CancellationToken cancellationToken)
+    internal Task<ApiResult<PassportRecord>> PutPassport(string token, string document, int? over, CancellationToken cancellationToken) =>
+        PutDocument(token, "v1/passport", document, over, false, cancellationToken);
+
+    // A passport part kept as a document (v1/passport, v1/passport/stamps, v1/passport/marks), compressed in transit
+    // when the server offers it.
+    internal Task<ApiResult<PassportRecord>> GetDocument(string token, string path, CancellationToken cancellationToken) =>
+        Send<PassportRecord>(HttpMethod.Get, path, token, null, cancellationToken, request => request.Headers.AcceptEncoding.Add(new StringWithQualityHeaderValue("gzip")));
+
+    // Saves a part over the revision named (or as its first save); gzip compresses it on the way (the drawing).
+    internal Task<ApiResult<PassportRecord>> PutDocument(string token, string path, string document, int? over, bool gzip, CancellationToken cancellationToken)
     {
-        var content = new StringContent("{\"document\":" + document + "}", Encoding.UTF8, "application/json");
-        return Send<PassportRecord>(HttpMethod.Put, "v1/passport", token, content, cancellationToken, request =>
+        var bytes = Encoding.UTF8.GetBytes("{\"document\":" + document + "}");
+        if (gzip)
         {
-            if (over is { } revision) request.Headers.IfMatch.Add(new EntityTagHeaderValue($"\"{revision}\""));
-            else request.Headers.IfNoneMatch.Add(EntityTagHeaderValue.Any);
-        });
+            using var compressed = new MemoryStream();
+            using (var stream = new GZipStream(compressed, CompressionLevel.Optimal, leaveOpen: true)) stream.Write(bytes);
+            bytes = compressed.ToArray();
+        }
+        var content = new ByteArrayContent(bytes);
+        content.Headers.ContentType = new MediaTypeHeaderValue("application/json") { CharSet = "utf-8" };
+        if (gzip) content.Headers.ContentEncoding.Add("gzip");
+        return Send<PassportRecord>(HttpMethod.Put, path, token, content, cancellationToken, request => Over(request, over));
+    }
+
+    internal async Task<ApiResult<PictureFile>> GetPicture(string token, CancellationToken cancellationToken)
+    {
+        var answer = await Exchange(HttpMethod.Get, "v1/passport/picture", token, null, cancellationToken).ConfigureAwait(false);
+        if (!answer.Result.Ok) return new(null, answer.Result.Status, answer.Result.Code, answer.Result.Detail, answer.Result.RetryAfter);
+        if (answer.Revision is not { } revision || answer.Body.Length == 0) return ApiResult<PictureFile>.NoAnswer("The Wanderveil server's picture could not be read.");
+        return new(new PictureFile(revision, answer.Body, answer.ContentType ?? "application/octet-stream"), answer.Result.Status);
+    }
+
+    internal Task<ApiResult<PictureInfo>> PutPicture(string token, byte[] bytes, string contentType, int? over, CancellationToken cancellationToken)
+    {
+        var content = new ByteArrayContent(bytes);
+        content.Headers.ContentType = new MediaTypeHeaderValue(contentType);
+        return Send<PictureInfo>(HttpMethod.Put, "v1/passport/picture", token, content, cancellationToken, request => Over(request, over));
+    }
+
+    internal Task<ApiResult<object>> DeletePicture(string token, int over, CancellationToken cancellationToken) =>
+        Send<object>(HttpMethod.Delete, "v1/passport/picture", token, null, cancellationToken, request => Over(request, over));
+
+    private static void Over(HttpRequestMessage request, int? over)
+    {
+        if (over is { } revision) request.Headers.IfMatch.Add(new EntityTagHeaderValue($"\"{revision.ToString(CultureInfo.InvariantCulture)}\""));
+        else request.Headers.IfNoneMatch.Add(EntityTagHeaderValue.Any);
     }
 
     private static StringContent Body(object value) => new(JsonSerializer.Serialize(value, Json), Encoding.UTF8, "application/json");
 
     private async Task<ApiResult<T>> Send<T>(HttpMethod method, string path, string? token, HttpContent? content, CancellationToken cancellationToken, Action<HttpRequestMessage>? prepare = null)
+    {
+        var answer = await Exchange(method, path, token, content, cancellationToken, prepare).ConfigureAwait(false);
+        if (!answer.Result.Ok) return new(default, answer.Result.Status, answer.Result.Code, answer.Result.Detail, answer.Result.RetryAfter);
+        if (answer.Body.Length == 0) return new(default, answer.Result.Status);
+        try { return new(JsonSerializer.Deserialize<T>(answer.Body, Json), answer.Result.Status); }
+        catch (JsonException) { return ApiResult<T>.NoAnswer("The Wanderveil server's answer could not be read."); }
+    }
+
+    private readonly record struct Answer(ApiResult<object> Result, byte[] Body, int? Revision, string? ContentType);
+
+    // One request and its answer as bytes (expanded when gzip-compressed), with the revision from its ETag.
+    private async Task<Answer> Exchange(HttpMethod method, string path, string? token, HttpContent? content, CancellationToken cancellationToken, Action<HttpRequestMessage>? prepare = null)
     {
         using var request = new HttpRequestMessage(method, new Uri(Server, path)) { Content = content };
         request.Headers.TryAddWithoutValidation(ClientHeader, version);
@@ -119,26 +174,30 @@ internal sealed class WanderveilApi
         prepare?.Invoke(request);
         HttpResponseMessage response;
         try { response = await http.SendAsync(request, cancellationToken).ConfigureAwait(false); }
-        catch (HttpRequestException) { return ApiResult<T>.NoAnswer("The Wanderveil server could not be reached."); }
-        catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested) { return ApiResult<T>.NoAnswer("The Wanderveil server did not answer in time."); }
+        catch (HttpRequestException) { return new(ApiResult<object>.NoAnswer("The Wanderveil server could not be reached."), [], null, null); }
+        catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested) { return new(ApiResult<object>.NoAnswer("The Wanderveil server did not answer in time."), [], null, null); }
         using (response)
         {
             var status = (int)response.StatusCode;
-            var retryAfter = response.Headers.RetryAfter?.Delta;
-            string text;
-            try { text = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false); }
-            catch (HttpRequestException) { return ApiResult<T>.NoAnswer("The Wanderveil server's answer was cut off."); }
-            if (response.IsSuccessStatusCode)
+            byte[] body;
+            try
             {
-                if (text.Length == 0) return new(default, status);
-                try { return new(JsonSerializer.Deserialize<T>(text, Json), status); }
-                catch (JsonException) { return ApiResult<T>.NoAnswer("The Wanderveil server's answer could not be read."); }
+                body = await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
+                if (response.Content.Headers.ContentEncoding.Contains("gzip"))
+                {
+                    using var expanded = new MemoryStream();
+                    using (var stream = new GZipStream(new MemoryStream(body), CompressionMode.Decompress)) await stream.CopyToAsync(expanded, cancellationToken).ConfigureAwait(false);
+                    body = expanded.ToArray();
+                }
             }
-            var (code, detail) = Problem(text);
+            catch (Exception exception) when (exception is HttpRequestException or InvalidDataException) { return new(ApiResult<object>.NoAnswer("The Wanderveil server's answer was cut off."), [], null, null); }
+            var revision = response.Headers.ETag is { } tag && int.TryParse(tag.Tag.Trim('"'), NumberStyles.None, CultureInfo.InvariantCulture, out var number) ? number : (int?)null;
+            if (response.IsSuccessStatusCode) return new(new(null, status), body, revision, response.Content.Headers.ContentType?.MediaType);
+            var (code, detail) = Problem(Encoding.UTF8.GetString(body));
             // A gateway with no word from Wanderveil itself is the server being down, not a refusal.
             if (code == null && response.StatusCode is HttpStatusCode.BadGateway or HttpStatusCode.ServiceUnavailable or HttpStatusCode.GatewayTimeout)
-                return ApiResult<T>.NoAnswer("The Wanderveil server is not available right now.");
-            return new(default, status, code, detail, retryAfter);
+                return new(ApiResult<object>.NoAnswer("The Wanderveil server is not available right now."), [], null, null);
+            return new(new(null, status, code, detail, response.Headers.RetryAfter?.Delta), body, revision, null);
         }
     }
 
