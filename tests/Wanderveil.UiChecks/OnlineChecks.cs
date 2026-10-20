@@ -263,7 +263,12 @@ internal static class OnlineChecks
         account.SetCharacter(Content, "Wander Veil", "Ravana");
         server.XivAuthEnabled = false;
         account.StartXivAuth();
-        check(Until(() => account.Problem?.Contains("does not offer XIVAuth", StringComparison.Ordinal) == true) && account.Step == SignInStep.Ready, "A server without XIVAuth was not explained.");
+        check(Until(() => account.Problem?.Contains("does not offer XIVAuth", StringComparison.Ordinal) == true) && account.Step == SignInStep.Ready && !account.XivAuthOffered,
+            "A server without XIVAuth was not explained, or XIVAuth is still offered.");
+        // XIVAuth briefly down is not the same: it is still offered.
+        server.XivAuthEnabled = true;
+        account.Restart();
+        check(!account.XivAuthOffered, "XIVAuth came back without the server changing.");
     }
 
     private static void CheckSync(Action<bool, string> check, string directory)

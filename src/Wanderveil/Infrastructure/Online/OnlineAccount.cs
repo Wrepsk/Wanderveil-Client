@@ -47,6 +47,8 @@ internal sealed class OnlineAccount : IDisposable
     internal LodestoneChallenge? Challenge { get; private set; }
     // The XIVAuth sign-in waiting for approval, if any.
     internal XivAuthFlow? Flow { get; private set; }
+    // Whether the server may offer XIVAuth: false once it has said it does not, until the server changes.
+    internal bool XivAuthOffered { get; private set; } = true;
     // One second of the server's polling interval; shorter only in checks.
     internal TimeSpan PollUnit { get; init; } = TimeSpan.FromSeconds(1);
     // Why the last step did not work, in words for the holder; null when nothing went wrong.
@@ -193,7 +195,14 @@ internal sealed class OnlineAccount : IDisposable
             {
                 if (ticket != generation) return;
                 offline = started.Offline;
-                if (!started.Ok || started.Value == null) { Step = SignInStep.Ready; Problem = Explain(started); return; }
+                if (!started.Ok || started.Value == null)
+                {
+                    Step = SignInStep.Ready;
+                    Problem = Explain(started);
+                    // Not set up there (as opposed to XIVAuth being down for now, which comes with a time to wait).
+                    if (started.Code == "xivauth_unavailable" && started.RetryAfter == null) XivAuthOffered = false;
+                    return;
+                }
                 flow = started.Value;
                 Flow = flow;
                 Step = SignInStep.Approving;
@@ -323,6 +332,7 @@ internal sealed class OnlineAccount : IDisposable
         serverSeen = text;
         var server = WanderveilApi.ParseServer(text);
         api = server == null ? null : new WanderveilApi(http, server, version);
+        XivAuthOffered = true;
         Reset();
         return api;
     }

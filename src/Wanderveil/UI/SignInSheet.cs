@@ -12,7 +12,8 @@ namespace Wanderveil.UI;
 internal enum SignInAction { None, RequestCode, CopyCode, OpenProfile, CheckCode, StartXivAuth, OpenXivAuth, Restart, ChangeServer, SaveServer, Close }
 
 // What the sheet shows: the character's account state and sign-in step, as OnlineAccount has them.
-internal sealed record SignInView(AccountState State, SignInStep Step, string Name, string World, LodestoneChallenge? Challenge, string? Problem, string? Server, XivAuthFlow? Flow = null);
+// XivAuth: whether the server may offer XIVAuth (false once it has said it does not).
+internal sealed record SignInView(AccountState State, SignInStep Step, string Name, string World, LodestoneChallenge? Challenge, string? Problem, string? Server, XivAuthFlow? Flow = null, bool XivAuth = true);
 
 // The sign-in, as an application form on passport paper: who is applying, the code to put on the Lodestone profile,
 // and the check. Drawn in its own window before the passport opens; returns what the holder asked for. Holds only
@@ -22,6 +23,9 @@ internal sealed class SignInSheet
     private string serverText = "";
     private bool editingServer;
     private bool serverInvalid;
+
+    // The height the sheet needed when last drawn, so its window can fit it.
+    internal float Height { get; private set; }
 
     // The server address the holder entered, after SaveServer.
     internal string ServerText => serverText.Trim();
@@ -72,6 +76,7 @@ internal sealed class SignInSheet
         }
         finally
         {
+            Height = inner.Position.Y - bounds.Position.Y + ImGui.GetCursorPosY() + pad;
             ImGui.EndChild();
             ImGui.PopStyleVar();
         }
@@ -131,15 +136,20 @@ internal sealed class SignInSheet
         }
         else if (view.Challenge is not { } challenge)
         {
-            Body("Your passport is kept for this character, so Wanderveil needs to know it is yours. Prove it with a short code on the character's Lodestone profile, which the server reads there, or with XIVAuth if you use it.", context);
+            Body(view.XivAuth
+                ? "Your passport is kept for this character, so Wanderveil needs to know it is yours. Prove it with a short code on the character's Lodestone profile, which the server reads there, or with XIVAuth if you use it."
+                : "Your passport is kept for this character, so Wanderveil needs to know it is yours. Prove it with a short code on the character's Lodestone profile, which the server reads there.", context);
             Gap(16, context);
             var busy = view.Step == SignInStep.Requesting;
             var row = ImGui.GetCursorScreenPos();
             if (Stamp(busy ? "Asking" : "Get my code", inner, context, enabled: !busy)) action = SignInAction.RequestCode;
             var after = ImGui.GetCursorScreenPos();
-            ImGui.SetCursorScreenPos(new Vector2(row.X + StampWidth(busy ? "Asking" : "Get my code", inner, context) + 14 * context.Scale, row.Y));
-            if (Stamp("Sign in with XIVAuth", inner, context, enabled: !busy)) action = SignInAction.StartXivAuth;
-            ImGui.SetCursorScreenPos(after);
+            if (view.XivAuth)
+            {
+                ImGui.SetCursorScreenPos(new Vector2(row.X + StampWidth(busy ? "Asking" : "Get my code", inner, context) + 14 * context.Scale, row.Y));
+                if (Stamp("Sign in with XIVAuth", inner, context, enabled: !busy)) action = SignInAction.StartXivAuth;
+                ImGui.SetCursorScreenPos(after);
+            }
             Problem(view, inner, context);
             // The small print, before anything is sent.
             Gap(18, context);

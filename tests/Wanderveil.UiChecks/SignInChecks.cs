@@ -38,7 +38,7 @@ internal static class SignInChecks
         void Frame() => host.Frame(() =>
         {
             var context = new UiContext(1, 18) { TitleFont = host.TitleFont, HeadingFont = host.HeadingFont, BodyFont = host.BodyFont, DisplayFont = host.DisplayFont, MonoFont = host.MonoFont, SignatureFont = host.SignatureFont };
-            var view = new SignInView(account.State, account.Step, account.CharacterName, account.CharacterWorld, account.Challenge, account.Problem, account.Api?.Server.Authority, account.Flow);
+            var view = new SignInView(account.State, account.Step, account.CharacterName, account.CharacterWorld, account.Challenge, account.Problem, account.Api?.Server.Authority, account.Flow, account.XivAuthOffered);
             var asked = sheet.Draw(new UiRect(ImGui.GetWindowPos() + new Vector2(10), new Vector2(500, 620)), view, context);
             if (asked != SignInAction.None) action = asked;
             check(ImGui.GetScrollMaxX() == 0f, "The sign-in sheet overflows sideways.");
@@ -89,6 +89,7 @@ internal static class SignInChecks
         check(Take() == SignInAction.StartXivAuth, "Sign in with XIVAuth did not ask to start it.");
         account.StartXivAuth();
         check(OnlineChecks.Until(() => account.Step == SignInStep.Approving), "No XIVAuth sign-in started.");
+        check(sheet.Height > 0 && sheet.Height < 620, $"The sheet did not report the height it needed ({sheet.Height}).");
         Frames(2);
         check(sheet.Controls.ContainsKey("Open XIVAuth again") && sheet.Controls.ContainsKey("Cancel") && !sheet.Controls.ContainsKey("Get my code"), "Waiting for XIVAuth does not show its step.");
         Save("signin-xivauth.bmp");
@@ -96,6 +97,17 @@ internal static class SignInChecks
         check(Take() == SignInAction.OpenXivAuth, "The XIVAuth link did not ask to open it.");
         Click("Cancel");
         check(Take() == SignInAction.Restart, "Cancel did not ask to restart.");
+        account.Restart();
+        Frames(2);
+
+        // A server without XIVAuth: the reason shows once, and only the Lodestone code is offered.
+        server.XivAuthEnabled = false;
+        account.StartXivAuth();
+        check(OnlineChecks.Until(() => !account.XivAuthOffered), "A server without XIVAuth was not noticed.");
+        Frames(2);
+        check(!sheet.Controls.ContainsKey("Sign in with XIVAuth") && sheet.Controls.ContainsKey("Get my code"), "XIVAuth is still offered by a server without it.");
+        Save("signin-no-xivauth.bmp");
+        server.XivAuthEnabled = true;
         account.Restart();
         Frames(2);
         Click("Get my code");

@@ -20,6 +20,9 @@ internal sealed class SignInWindow : Window
     private readonly Action<string> saveServer;
     private readonly Action signedIn;
     private readonly SignInSheet sheet = new();
+    // The sheet's type, a size up from the host's: it is read at a distance, not on a page held close.
+    private const float Type = 1.25f;
+    private const float Width = 600;
     // The XIVAuth sign-in whose page was opened, so each opens the browser once by itself.
     private string? opened;
 
@@ -32,7 +35,7 @@ internal sealed class SignInWindow : Window
         this.server = server;
         this.saveServer = saveServer;
         this.signedIn = signedIn;
-        Size = new Vector2(500, 620);
+        Size = new Vector2(Width, 640);
         SizeCondition = ImGuiCond.Always;
         PositionCondition = ImGuiCond.Appearing;
     }
@@ -40,6 +43,9 @@ internal sealed class SignInWindow : Window
     public override void PreDraw()
     {
         var viewport = ImGui.GetMainViewport();
+        // As tall as the sheet needed last frame, within the screen; WindowSystem applies host scaling to Size.
+        if (sheet.Height > 0)
+            Size = new Vector2(Width, Math.Clamp(sheet.Height / ShellStyle.Scale + 6, 240, MathF.Max(240, (viewport.WorkSize.Y - 40) / ShellStyle.Scale)));
         Position = viewport.WorkPos + (viewport.WorkSize - Size!.Value * ShellStyle.Scale) / 2;
         BookShell.PrepareWindow(Size.Value * ShellStyle.Scale);
     }
@@ -56,9 +62,9 @@ internal sealed class SignInWindow : Window
             return;
         }
         using var fonts = assets.LockFonts();
-        var context = new UiContext(ShellStyle.Scale, ImGui.GetFontSize()) { TitleFont = fonts.Title, HeadingFont = fonts.Heading, BodyFont = fonts.Body, DisplayFont = fonts.Display, MonoFont = fonts.Mono, SignatureFont = fonts.Signature, Fonts = fonts };
+        var context = new UiContext(ShellStyle.Scale, MathF.Round(ImGui.GetFontSize() * Type)) { TitleFont = fonts.Title, HeadingFont = fonts.Heading, BodyFont = fonts.Body, DisplayFont = fonts.Display, MonoFont = fonts.Mono, SignatureFont = fonts.Signature, Fonts = fonts };
         if (account.Flow is { } flow && flow.FlowId != opened) { opened = flow.FlowId; Util.OpenLink(flow.Page.ToString()); }
-        var view = new SignInView(state, account.Step, account.CharacterName, account.CharacterWorld, account.Challenge, account.Problem, account.Api?.Server.Authority, account.Flow);
+        var view = new SignInView(state, account.Step, account.CharacterName, account.CharacterWorld, account.Challenge, account.Problem, account.Api?.Server.Authority, account.Flow, account.XivAuthOffered);
         switch (sheet.Draw(new UiRect(ImGui.GetWindowPos(), ImGui.GetWindowSize() - new Vector2(0, 4 * context.Scale)), view, context))
         {
             case SignInAction.RequestCode: account.RequestCode(); break;
