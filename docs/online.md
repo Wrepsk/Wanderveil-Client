@@ -47,4 +47,4 @@ A change is sent two seconds after the last edit. With no answer, it waits and t
 
 ## What is not covered yet
 
-There is no sharing yet. XIVAuth has been tried only against stand-ins: a real XIVAuth sign-in needs Wanderveil's XIVAuth application to be registered and configured on the server. The live test ran on Windows against a local server. Not yet observed: a hosted server over HTTPS, DPAPI under Wine, and other players' characters.
+There is no sharing yet. XIVAuth works live: on 21 October 2026, with Wanderveil's XIVAuth application registered (scope `character`, device code flow, confidential client) and configured on a local server, the user signed in from the game through XIVAuth. The passport saved earlier through the Lodestone sign-in loaded correctly, because both sign-ins identify the character by its Lodestone ID. The live test ran on Windows against a local server. Not yet observed: a hosted server over HTTPS, DPAPI under Wine, and other players' characters.
