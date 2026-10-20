@@ -38,9 +38,12 @@ internal sealed record PassportColours(Rgb? Cloth = null, Rgb? Foil = null, Rgb?
 {
     internal static readonly PassportColours None = new();
 
-    // The parts the guard may move, in the order it prefers to move them: of two colours that do not read
-    // together, the first named here moves (foil before cloth, text and ink before paper).
-    internal static readonly ColourPart[] Guarded = [ColourPart.Cloth, ColourPart.Foil, ColourPart.Ink, ColourPart.Paper, ColourPart.Text];
+    // The parts the guard may move: of two colours that do not read together, it prefers foil over cloth and text or
+    // ink over paper. Rings are kept faintly visible on the paper; only the rings move for that.
+    internal static readonly ColourPart[] Guarded = [ColourPart.Cloth, ColourPart.Foil, ColourPart.Ink, ColourPart.Paper, ColourPart.Text, ColourPart.Lines];
+
+    // How far rings must stand from the paper to show: printed at 5%, a 3:1 colour shows as faint texture.
+    internal const float RingsContrast = 3f;
 
     internal bool IsEmpty => Cloth == null && Foil == null && Ink == null && Paper == null && Text == null && Lines == null && !Free && Exact == 0;
 
@@ -115,6 +118,12 @@ internal sealed record PassportLook(Vector4 Cloth, Vector4 Foil, Vector4 Ink, Ve
         var caption = automatic ? (light ? LightCaptionInk : CaptionInk) : Vector4.Lerp(text, paper, 0.3f) with { W = 1f };
         if (!colours.Free) caption = Moved(caption, paper, 4.5f);
         var lines = colours.Lines?.Vector ?? (automatic ? light ? Vector4.One : Black : text);
+        // Rings too close to the paper vanish: they are moved (never the paper) until they show faintly.
+        if (colours.Adjustable(ColourPart.Lines) && Contrast(lines, paper) < PassportColours.RingsContrast)
+        {
+            lines = Moved(lines, paper, PassportColours.RingsContrast);
+            adjusted.Add(ColourPart.Lines);
+        }
         return new PassportLook(cloth, foil, ink, paper, text, caption, lines, light, adjusted.ToArray());
 
         // Two colours that must read together: the first moves if the guard may move it, else the second.

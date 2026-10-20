@@ -66,6 +66,14 @@ internal static class ColourChecks
         book.Save(artifacts, "colour-settings-exact-text.bmp");
         book.Click(book.Shell.ColourSwatch(ColourPart.Text, -1)!.Value);
         book.Frames(2);
+        // The Rings box sits on the same line and keeps the rings exact when unticked.
+        book.Click(book.Shell.ColourSwatch(ColourPart.Lines, -1)!.Value);
+        check(profile.Identity.Appearance?.Colours?.Adjustable(ColourPart.Lines) == false, "The Rings box does not keep the rings exact.");
+        book.Frames(2);
+        check(book.Shell.PageOverflow == 0, "The six May adjust boxes overflow the page.");
+        book.Save(artifacts, "colour-settings-rings.bmp");
+        book.Click(book.Shell.ColourSwatch(ColourPart.Lines, -1)!.Value);
+        book.Frames(2);
         var page = book.Page(true);
         var below = book.Shell.ColourSwatch(ColourPart.Text, 0)!.Value;
         for (var y = below.Y + 12; profile.Identity.Appearance?.Colours?.Free != true && y < page.Max.Y; y += 3)
@@ -126,7 +134,17 @@ internal static class ColourChecks
         check(Rgb.Of(foilExact.Foil) == Rgb.Hex(0x1E3A2A) && foilExact.Adjusted.Contains(ColourPart.Cloth) && PassportLook.Contrast(foilExact.Foil, foilExact.Cloth) >= 3, "With foil kept exact, the cloth does not move for it.");
         // Rings: their own colour when picked, else following the text.
         var gold = PassportLook.Of(PassportEdition.Gridania, new PassportColours(Lines: Rgb.Hex(0xB99662)));
-        check(Rgb.Of(gold.Lines) == Rgb.Hex(0xB99662) && Rgb.Of(sepia.Lines) == Rgb.Hex(0x4A3426), "Rings do not take their own colour, or stop following the text.");
+        check(Rgb.Of(gold.Lines) != Rgb.Hex(0xB99662) && gold.Adjusted.Contains(ColourPart.Lines) && PassportLook.Contrast(gold.Lines, gold.Paper) >= PassportColours.RingsContrast && gold.Paper == PassportLook.EditionPaper,
+            "Gold rings on cream are not moved (only the rings) until they show.");
+        var goldExact = PassportLook.Of(PassportEdition.Gridania, new PassportColours(Lines: Rgb.Hex(0xB99662)).WithExact(ColourPart.Lines, true));
+        check(Rgb.Of(goldExact.Lines) == Rgb.Hex(0xB99662) && !goldExact.Adjusted.Contains(ColourPart.Lines), "Rings kept exact are still moved.");
+        var navy = PassportLook.Of(PassportEdition.Gridania, new PassportColours(Lines: Rgb.Hex(0x2A3B52)));
+        check(Rgb.Of(navy.Lines) == Rgb.Hex(0x2A3B52) && !navy.Adjusted.Contains(ColourPart.Lines) && Rgb.Of(sepia.Lines) == Rgb.Hex(0x4A3426), "Rings that show are moved, or rings stop following the text.");
+        foreach (var hex in new[] { 0x000000, 0x777777, 0xFFFFFF, 0xD8C5A3 })
+        {
+            var on = PassportLook.Of(PassportEdition.Gridania, new PassportColours(Paper: Rgb.Hex(hex)));
+            check(PassportLook.Contrast(on.Lines, on.Paper) >= PassportColours.RingsContrast, $"Automatic rings do not show on paper {Rgb.Hex(hex)}.");
+        }
         Console.WriteLine("PASS colour-model");
     }
 

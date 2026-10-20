@@ -62,7 +62,7 @@ internal sealed class BookShellColours(PassportProfile holder)
         if (BookControl.Toggle("Keep colours readable", !chosen.Free, context)) holder.SetReadable(chosen.Free);
         if (!chosen.Free) Adjustable(chosen, context);
         var note = chosen.Free ? "Colours are used exactly as picked, even where text is hard to read."
-            : look.Adjusted.Length > 0 ? $"Adjusted to stay readable: {string.Join(", ", look.Adjusted.Select(Name))}."
+            : look.Adjusted.Length > 0 ? Adjusted(look.Adjusted)
             : chosen.Text == null && look.LightText ? "On this dark paper, text prints light." : null;
         if (note != null)
         {
@@ -111,7 +111,7 @@ internal sealed class BookShellColours(PassportProfile holder)
                 list.AddLine(boxAt + new Vector2(box * 0.42f, box * 0.76f), boxAt + new Vector2(box * 0.82f, box * 0.22f), ink, MathF.Max(1, 1.4f * context.Scale));
             }
             UiTypography.Draw(list, at + new Vector2(box + 4 * context.Scale, 2 * context.Scale), label, TextRole.Caption, context, size.X + 1, hovered ? UiTheme.Ink : UiTheme.MutedInk, false);
-            if (hovered) { ImGui.SetMouseCursor(ImGuiMouseCursor.Hand); ImGui.SetTooltip(on ? $"{Name(part)} may be adjusted to stay readable" : $"{Name(part)} stays exactly as picked"); }
+            if (hovered) { ImGui.SetMouseCursor(ImGuiMouseCursor.Hand); ImGui.SetTooltip(on ? part == ColourPart.Lines ? "Rings may be adjusted to stay faintly visible" : $"{Name(part)} may be adjusted to stay readable" : $"{Name(part)} stays exactly as picked"); }
             if (clicked) holder.SetAdjustable(part, !on);
             at += new Vector2(item.X + gap, 0);
         }
@@ -283,6 +283,15 @@ internal sealed class BookShellColours(PassportProfile holder)
         ColourPart.Ink => edition.Ink,
         _ => PassportLook.EditionPaper,
     });
+
+    // What the guard moved: colours to stay readable, rings to stay visible.
+    private static string Adjusted(ColourPart[] parts)
+    {
+        var readable = parts.Where(part => part != ColourPart.Lines).Select(Name).ToArray();
+        var note = readable.Length > 0 ? $"Adjusted to stay readable: {string.Join(", ", readable)}." : "";
+        if (parts.Contains(ColourPart.Lines)) note += (note.Length > 0 ? " " : "") + "Rings adjusted to stay visible.";
+        return note;
+    }
 
     private static string Name(ColourPart part) => part switch
     {
