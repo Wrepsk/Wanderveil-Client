@@ -34,6 +34,24 @@ internal static class CameraChecks
             check(MathF.Abs(guide.Size.X / guide.Size.Y - PassportDocumentView.PortraitAspect) < 0.01f && book.Shell.Camera.Controls.ContainsKey("Take"), "The camera's guide is not a 3:4 frame with its panel.");
             if (!motion) book.Save(artifacts, "camera-guide.bmp");
 
+            // The guide's edges move it and its corners resize it, staying 3:4; only they and the panel take the mouse.
+            var camera0 = book.Shell.Camera;
+            check(camera0.TakesMouse(camera0.Controls["Guide edge"]) && !camera0.TakesMouse(guide.Position + guide.Size / 2) && !camera0.TakesMouse(guide.Position - new Vector2(60)) && camera0.TakesMouse(camera0.Controls["Take"]),
+                "The guide's window takes the mouse inside the guide or around it, or not on its edges and panel.");
+            book.Drag(camera0.Controls["Guide edge"], camera0.Controls["Guide edge"] + new Vector2(-150, 60));
+            var moved = camera0.Guide;
+            check(MathF.Abs(moved.Position.X - (guide.Position.X - 150)) < 3 && MathF.Abs(moved.Position.Y - (guide.Position.Y + 60)) < 3 && moved.Size == guide.Size, $"Dragging the guide's edge does not move it ({guide.Position} to {moved.Position}).");
+            // Its bottom right corner, dragged in, makes it smaller from its top left.
+            book.Drag(camera0.Controls["Guide corner 3"], camera0.Controls["Guide corner 3"] - new Vector2(90, 120));
+            var resized = camera0.Guide;
+            check(resized.Size.Y < moved.Size.Y - 100 && MathF.Abs(resized.Size.X / resized.Size.Y - PassportDocumentView.PortraitAspect) < 0.01f && Vector2.Distance(resized.Position, moved.Position) < 2, $"Dragging the guide's corner does not resize it at 3:4 from the opposite corner ({resized}).");
+            check(camera0.Panel.Position.Y > resized.Max.Y, "The panel does not sit under the guide.");
+            // Dragged to the screen's foot, the panel goes above it.
+            book.Drag(camera0.Controls["Guide edge"], camera0.Controls["Guide edge"] + new Vector2(0, 600));
+            check(camera0.Panel.Max.Y < camera0.Guide.Position.Y, "With the guide at the screen's foot, the panel does not go above it.");
+            if (!motion) book.Save(artifacts, "camera-guide-moved.bmp");
+            guide = camera0.Guide;
+
             // A countdown: Take starts it; Escape cancels it, taking nothing; the book comes back still editing.
             book.Click(book.Shell.Camera.Controls["Countdown 2"]);
             book.Click(book.Shell.Camera.Controls["Take"]);
@@ -51,7 +69,8 @@ internal static class CameraChecks
             book.Click(book.Shell.Camera.Controls["Countdown 0"]);
             book.Click(book.Shell.Camera.Controls["Take"]);
             for (var frame = 0; frame < 120 && (book.Shell.Phase != BookPhase.Open || book.Shell.CameraOpen); frame++) book.Frame();
-            check(camera.Taken is { } taken && Vector2.Distance(taken.Min, guide.Position) < 1 && Vector2.Distance(taken.Max, guide.Max) < 1 && book.Shell.EditingIdentity && profile.Identity.Portrait != null,
+            var now = book.Shell.Camera.Guide;
+            check(camera.Taken is { } taken && Vector2.Distance(taken.Min, now.Position) < 1 && Vector2.Distance(taken.Max, now.Max) < 1 && Vector2.Distance(now.Position, guide.Position) < 1 && book.Shell.EditingIdentity && profile.Identity.Portrait != null,
                 $"Take does not capture the guide's area, or the book does not come back ({camera.Taken}).");
             // The picture's frame choices make the page taller; it settles to fit its paper again.
             book.Frames(12);

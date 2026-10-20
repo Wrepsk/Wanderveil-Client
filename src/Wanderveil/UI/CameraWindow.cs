@@ -7,7 +7,8 @@ using Wanderveil.UI.Primitives;
 namespace Wanderveil.UI;
 
 // The camera's guide, over the whole game view, while the book steps aside for Take a picture. A transparent window:
-// only the guide's panel takes the mouse, so the camera can still be moved around it. The book opens and closes it.
+// only the guide's panel, edges, and corners take the mouse, so the game's camera can still be turned, even through
+// the guide. The book opens and closes it.
 internal sealed class CameraWindow : Window
 {
     private readonly BookShell shell;
@@ -32,7 +33,7 @@ internal sealed class CameraWindow : Window
         Position = viewport.Pos;
         // WindowSystem applies host UI scaling to Size.
         Size = viewport.Size / scale;
-        Flags = Flags0 | (shell.Camera.Panel.Contains(ImGui.GetIO().MousePos) ? ImGuiWindowFlags.None : ImGuiWindowFlags.NoMouseInputs);
+        Flags = Flags0 | (shell.Camera.TakesMouse(ImGui.GetIO().MousePos) ? ImGuiWindowFlags.None : ImGuiWindowFlags.NoMouseInputs);
         BookShell.PrepareWindow(viewport.Size);
     }
 

@@ -12,7 +12,8 @@ namespace Wanderveil.UI;
 // Take a picture: while the book steps aside, the screen dims around a 3:4 frame guide, and a small paper panel under it
 // offers Take, a countdown (off, 3, 5, or 10 seconds, kept for the session), and Cancel, with a tip about posing. Take
 // (after the countdown) captures what is inside the guide; the capture is taken before any plugin window draws, so
-// neither the guide nor the panel is in the picture. Escape cancels, also mid-countdown.
+// neither the guide nor the panel is in the picture. Escape cancels, also mid-countdown. The guide's edges move it and
+// its corners resize it (staying 3:4), kept for the session; inside, the mouse passes through to the game's camera.
 internal sealed class BookShellCamera(IPassportPortrait? picture)
 {
     internal static readonly int[] Countdowns = [0, 3, 5, 10];
@@ -22,12 +23,94 @@ internal sealed class BookShellCamera(IPassportPortrait? picture)
     // Seconds left before the picture is taken, while counting down.
     internal float? Remaining { get; private set; }
     internal UiRect Guide { get; private set; }
+    // Where the guide sits: its centre (0 to 1 across and down the screen) and its height as a share of the screen's.
+    private Vector2 centre = new(0.5f, 0.42f);
+    private float share = 0.68f;
+    // How thick the edges that move the guide are, and how large its corner handles, last frame.
+    private float grip = 8f;
     // Where the panel lay last frame: the only part of the screen that takes the mouse.
     internal UiRect Panel { get; private set; }
     // For checks: where each control was drawn last frame, by name.
     internal Dictionary<string, Vector2> Controls { get; } = new(StringComparer.Ordinal);
 
     internal bool Available => picture?.CanTake == true;
+
+    // Whether the guide's window takes the mouse at a point: on its panel, or on the guide's edges and corners. Inside
+    // the guide and around it, the mouse passes to the game.
+    internal bool TakesMouse(Vector2 point)
+    {
+        if (Panel.Contains(point)) return true;
+        var outer = new UiRect(Guide.Position - new Vector2(grip), Guide.Size + new Vector2(grip * 2));
+        var inner = new UiRect(Guide.Position + new Vector2(grip), Vector2.Max(Vector2.Zero, Guide.Size - new Vector2(grip * 2)));
+        return outer.Contains(point) && !inner.Contains(point) || dragging;
+    }
+
+    private bool dragging;
+
+    // The guide from its centre and share, kept within the screen and at least a fifth of its height.
+    private UiRect Place(UiRect screen)
+    {
+        share = Math.Clamp(share, 0.2f, 0.95f);
+        var height = MathF.Round(screen.Size.Y * share);
+        var width = MathF.Round(height * PassportDocumentView.PortraitAspect);
+        if (width > screen.Size.X * 0.95f) { width = MathF.Round(screen.Size.X * 0.95f); height = MathF.Round(width / PassportDocumentView.PortraitAspect); share = height / screen.Size.Y; }
+        var middle = screen.Position + centre * screen.Size;
+        var min = Vector2.Clamp(middle - new Vector2(width, height) / 2, screen.Position, Vector2.Max(screen.Position, screen.Max - new Vector2(width, height)));
+        centre = (min + new Vector2(width, height) / 2 - screen.Position) / Vector2.Max(Vector2.One, screen.Size);
+        return new UiRect(min, new Vector2(width, height));
+    }
+
+    // The guide's edges move it; its corners resize it from the opposite corner, staying 3:4. Returns the guide as it
+    // now lies.
+    private UiRect Handles(UiRect screen, UiRect guide, UiContext context)
+    {
+        if (Remaining != null) { dragging = false; return guide; }
+        var io = ImGui.GetIO();
+        var any = false;
+        // Edges: four strips along the sides, between the corners.
+        var edges = new[]
+        {
+            new UiRect(guide.Position + new Vector2(grip, -grip), new Vector2(guide.Size.X - grip * 2, grip * 2)),
+            new UiRect(new Vector2(guide.Position.X + grip, guide.Max.Y - grip), new Vector2(guide.Size.X - grip * 2, grip * 2)),
+            new UiRect(guide.Position + new Vector2(-grip, grip), new Vector2(grip * 2, guide.Size.Y - grip * 2)),
+            new UiRect(new Vector2(guide.Max.X - grip, guide.Position.Y + grip), new Vector2(grip * 2, guide.Size.Y - grip * 2)),
+        };
+        for (var index = 0; index < edges.Length; index++)
+        {
+            ImGui.SetCursorScreenPos(edges[index].Position);
+            ImGui.InvisibleButton("Guide edge " + index, Vector2.Max(Vector2.One, edges[index].Size));
+            if (ImGui.IsItemHovered() || ImGui.IsItemActive()) ImGui.SetMouseCursor(ImGuiMouseCursor.ResizeAll);
+            if (ImGui.IsItemActive())
+            {
+                any = true;
+                centre += io.MouseDelta / Vector2.Max(Vector2.One, screen.Size);
+            }
+        }
+        Controls["Guide edge"] = edges[0].Position + edges[0].Size / 2;
+        // Corners: each resizes from the opposite one.
+        var corners = new[] { (guide.Position, guide.Max), (new Vector2(guide.Max.X, guide.Position.Y), new Vector2(guide.Position.X, guide.Max.Y)), (new Vector2(guide.Position.X, guide.Max.Y), new Vector2(guide.Max.X, guide.Position.Y)), (guide.Max, guide.Position) };
+        for (var index = 0; index < corners.Length; index++)
+        {
+            var (corner, anchor) = corners[index];
+            ImGui.SetCursorScreenPos(corner - new Vector2(grip * 1.5f));
+            ImGui.InvisibleButton("Guide corner " + index, new Vector2(grip * 3));
+            if (ImGui.IsItemHovered() || ImGui.IsItemActive()) ImGui.SetMouseCursor(index is 0 or 3 ? ImGuiMouseCursor.ResizeNwse : ImGuiMouseCursor.ResizeNesw);
+            if (ImGui.IsItemActive())
+            {
+                any = true;
+                var reach = Vector2.Abs(io.MousePos - anchor);
+                var height = MathF.Max(reach.Y, reach.X / PassportDocumentView.PortraitAspect);
+                height = Math.Clamp(height, screen.Size.Y * 0.2f, screen.Size.Y * 0.95f);
+                var size = new Vector2(height * PassportDocumentView.PortraitAspect, height);
+                var toward = new Vector2(MathF.Sign(corner.X - anchor.X), MathF.Sign(corner.Y - anchor.Y));
+                share = height / screen.Size.Y;
+                centre = (anchor + toward * size / 2 - screen.Position) / Vector2.Max(Vector2.One, screen.Size);
+            }
+            Controls["Guide corner " + index] = corner;
+        }
+        dragging = any;
+        return any ? Place(screen) : guide;
+    }
 
     internal void Reset() => Remaining = null;
 
@@ -37,10 +120,12 @@ internal sealed class BookShellCamera(IPassportPortrait? picture)
         Controls.Clear();
         if (escape) { Remaining = null; return false; }
         var list = ImGui.GetWindowDrawList();
-        var height = MathF.Round(screen.Size.Y * 0.68f);
-        var width = MathF.Round(height * PassportDocumentView.PortraitAspect);
-        var guide = new UiRect(screen.Position + new Vector2((screen.Size.X - width) / 2, screen.Size.Y * 0.08f), new Vector2(width, height));
+        grip = MathF.Max(8f, 10 * context.Scale);
+        var guide = Place(screen);
+        guide = Handles(screen, guide, context);
         Guide = guide;
+        var height = guide.Size.Y;
+        var width = guide.Size.X;
 
         // The rest of the screen dims; the guide is outlined, with brighter corners.
         var dim = ImGui.GetColorU32(new Vector4(0, 0, 0, 0.45f));
@@ -80,7 +165,7 @@ internal sealed class BookShellCamera(IPassportPortrait? picture)
         var pad = 12 * context.Scale;
         var gap = 16 * context.Scale;
         var control = BookShellLayout.GetControlHeight(context);
-        const string Tip = "Pose anywhere. In group pose (/gpose) the game's HUD hides and you can choose poses and expressions; elsewhere its Hide UI key (Scroll Lock by default) hides it.";
+        const string Tip = "Drag the frame's edges to move it and its corners to resize it. Pose anywhere: in group pose (/gpose) the game's HUD hides and you can choose poses and expressions; elsewhere its Hide UI key (Scroll Lock by default) hides it, but not this.";
         var labels = new List<string> { Remaining == null ? "Take" : "Taking" };
         foreach (var seconds0 in Countdowns) labels.Add(seconds0 == 0 ? "No countdown" : $"{seconds0} s");
         labels.Add("Cancel");
@@ -90,7 +175,14 @@ internal sealed class BookShellCamera(IPassportPortrait? picture)
         row += gap * 2 + 4 * context.Scale * (Countdowns.Length - 1);
         var panelWidth = MathF.Min(screen.Size.X - pad * 2, MathF.Max(row, width) + pad * 2);
         var tipSize = UiTypography.Measure(Tip, TextRole.Caption, context, panelWidth - pad * 2, true);
-        var panel = new UiRect(new Vector2(screen.Position.X + (screen.Size.X - panelWidth) / 2, guide.Max.Y + 14 * context.Scale), new Vector2(panelWidth, pad * 2 + control + 6 * context.Scale + tipSize.Y));
+        // Under the guide where it fits, else over it, else at the screen's foot; centred on the guide where it can be.
+        var panelHeight = pad * 2 + control + 6 * context.Scale + tipSize.Y;
+        var space = 14 * context.Scale;
+        var top = guide.Max.Y + space + panelHeight <= screen.Max.Y - 8 ? guide.Max.Y + space
+            : guide.Position.Y - space - panelHeight >= screen.Position.Y + 8 ? guide.Position.Y - space - panelHeight
+            : screen.Max.Y - 8 - panelHeight;
+        var panelX = Math.Clamp(guide.Position.X + (guide.Size.X - panelWidth) / 2, screen.Position.X + 8, MathF.Max(screen.Position.X + 8, screen.Max.X - 8 - panelWidth));
+        var panel = new UiRect(new Vector2(panelX, top), new Vector2(panelWidth, panelHeight));
         Panel = panel;
         PageSurface.Draw(list, panel, context);
         var x = panel.Position.X + pad;

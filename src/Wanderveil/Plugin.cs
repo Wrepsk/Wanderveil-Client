@@ -116,8 +116,12 @@ public sealed class Plugin : IDalamudPlugin
     private void Draw()
     {
         portrait?.Poll();
-        // The camera's guide stays visible in group pose, the game's own posing tool.
-        PluginInterface.UiBuilder.DisableGposeUiHide = mainWindow.CameraOpen;
+        // The camera's guide stays visible in group pose (the game's own posing tool) and when the game's UI is hidden,
+        // by its Hide UI key or by the game itself, so a picture can be taken without the HUD.
+        var camera = mainWindow.CameraOpen;
+        PluginInterface.UiBuilder.DisableGposeUiHide = camera;
+        PluginInterface.UiBuilder.DisableUserUiHide = camera;
+        PluginInterface.UiBuilder.DisableAutomaticUiHide = camera;
         assets?.BeginFrame();
         windowSystem.Draw();
         portrait?.DrawDialog();
