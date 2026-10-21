@@ -18,8 +18,10 @@ internal enum DrawingTool { Pencil, Eraser, Text, Eyedropper }
 // every couple of pixels, pressed harder when slower); the eraser rubs out only what it passes over; Text writes a
 // line where the page is clicked (or rewrites a line clicked on), kept on Enter or clicking away, Escape leaving it as
 // it was. The page under the mouse takes its clicks while drawing, so it never turns or moves the book; Page Up/Down
-// still turn. Marks lie above the stamps and never change them.
-internal sealed class BookShellDrawing(PageMarks marks, IBookAssets assets)
+// still turn. Marks lie above the stamps and never change them. Others' marks (layer, ADR-0006) lie beneath the book's
+// own: never erased or picked up here, named on hover, and removable by the holder with a right-click; with a layer,
+// only the pages it allows take drawing.
+internal sealed class BookShellDrawing(PageMarks marks, IBookAssets assets, IBookShellLayer? layer = null)
 {
     // Graphite, then six inks; the second is the passport's own page ink.
     internal static readonly (string Name, int Hex)[] Palette = [("Graphite", 0x3A3D44), ("Page ink", -1), ("Sepia", 0x6B4A2E), ("Red", 0xA3302A), ("Blue", 0x2F4F8A), ("Green", 0x3D6B3A), ("White", 0xF2EEE6)];
@@ -40,6 +42,9 @@ internal sealed class BookShellDrawing(PageMarks marks, IBookAssets assets)
     private string typed = "";
     private bool focusWriting;
     private bool full;
+    // The mark of the layer under the mouse this frame, and the one a right-click is offering to remove.
+    private LayerMark? hovered;
+    private LayerMark? removing;
 
     // Frame: the page's box, which marks are measured from; Surface: where they may be drawn (the paper, in from its
     // edges, down to the page's foot).
@@ -59,6 +64,10 @@ internal sealed class BookShellDrawing(PageMarks marks, IBookAssets assets)
     internal bool Busy => live.Count > 0 || erasing;
     internal bool Writing => writing != null;
     internal PageMarks Marks => marks;
+    internal IBookShellLayer? Layer => layer;
+    // For checks: the layer's mark under the mouse last frame, and where the Remove choice was drawn.
+    internal LayerMark? Hovered => hovered;
+    internal Vector2? RemoveChoice { get; private set; }
     // For checks: where each toolbar control was drawn last frame, by name.
     internal Dictionary<string, Vector2> Controls { get; } = new(StringComparer.Ordinal);
 
@@ -84,7 +93,11 @@ internal sealed class BookShellDrawing(PageMarks marks, IBookAssets assets)
         areas.Clear();
         Controls.Clear();
         ClearChoices.Clear();
+        hovered = null;
     }
+
+    // Whether any of these stamp pages take drawing (every page, without a layer).
+    internal bool MayDrawOn(IEnumerable<int> sheets) => layer == null || sheets.Any(layer.MayDraw);
 
     // A stamp page whose marks are drawn this frame, measured from the current window (the page's box) and shown as
     // far as surface reaches; live pages take the drawing while in Draw mode.
@@ -94,10 +107,20 @@ internal sealed class BookShellDrawing(PageMarks marks, IBookAssets assets)
         var paper = surface ?? page;
         var list = ImGui.GetWindowDrawList();
         list.PushClipRect(paper.Position, paper.Max, false);
+        if (layer != null)
+        {
+            foreach (var mark in layer.Marks)
+            {
+                if (mark.Sheet != sheet) continue;
+                if (mark.Stroke != null) InkArt.Stroke(list, assets, page, mark.Stroke);
+                else InkArt.Text(list, page, mark.Text!, context);
+            }
+            if (live && !Busy && ImGui.IsMouseHoveringRect(paper.Position, paper.Max) && LayerAt(sheet, InkArt.FromPage(page, ImGui.GetIO().MousePos), page, context) is { } under) hovered = under;
+        }
         foreach (var stroke in marks.StrokesOn(sheet)) InkArt.Stroke(list, assets, page, stroke);
         foreach (var (index, text) in marks.TextsOn(sheet))
             if (writing is not { Index: { } editing } || editing != index || writing.Value.Sheet != sheet) InkArt.Text(list, page, text, context);
-        if (live && Drawing) areas.Add(new Area(sheet, page, paper));
+        if (live && Drawing && (layer?.MayDraw(sheet) ?? true)) areas.Add(new Area(sheet, page, paper));
         if (this.live.Count > 1 && liveSheet == sheet) InkArt.Stroke(list, assets, page, this.live, StrokeWidths[Size], Ink(pageInk).Vector);
         list.PopClipRect();
     }
@@ -189,6 +212,57 @@ internal sealed class BookShellDrawing(PageMarks marks, IBookAssets assets)
         // Undo from the keyboard, unless writing.
         var io = ImGui.GetIO();
         if (writing == null && io.KeyCtrl && ImGui.IsKeyPressed(ImGuiKey.Z, false) && !Busy) marks.Undo();
+    }
+
+    // After Interact, in the book's own window: names the layer's mark under the mouse (outside Draw mode), and on the
+    // holder's own passport offers removing it on a right-click.
+    internal void Others(UiContext context)
+    {
+        RemoveChoice = null;
+        if (layer == null) return;
+        var over = hovered != null && !Drawing && ImGui.IsWindowHovered(ImGuiHoveredFlags.RootAndChildWindows) && !ImGui.IsAnyItemActive();
+        if (over)
+        {
+            var made = hovered!.Stroke != null ? "Drawn" : "Written";
+            ImGui.SetTooltip(layer.MayRemove ? $"{made} by {hovered.Author}. Right-click to remove it." : $"{made} by {hovered.Author}");
+            if (layer.MayRemove && ImGui.IsMouseClicked(ImGuiMouseButton.Right)) { removing = hovered; ImGui.OpenPopup("Remove guest mark"); }
+        }
+        if (!PaperColours.Begin("Remove guest mark", context)) return;
+        try
+        {
+            if (removing is { } mark)
+            {
+                if (ImGui.Selectable($"Remove {mark.Author}'s {(mark.Stroke != null ? "drawing" : "writing")}")) { layer.Remove(mark.Id); removing = null; ImGui.CloseCurrentPopup(); }
+                RemoveChoice = ImGui.GetItemRectMin() + ImGui.GetItemRectSize() / 2;
+                if (ImGui.Selectable("Keep it")) { removing = null; ImGui.CloseCurrentPopup(); }
+                ImGui.TextDisabled("Settings, Sharing removes everything one guest made.");
+            }
+            else ImGui.CloseCurrentPopup();
+        }
+        finally { PaperColours.End(); }
+    }
+
+    // The layer's mark nearest under a page point: a line within a short reach, or writing it lies on (the topmost).
+    private LayerMark? LayerAt(int sheet, Vector2 at, UiRect page, UiContext context)
+    {
+        LayerMark? nearest = null;
+        var best = 0.012f * 0.012f;
+        foreach (var mark in layer!.Marks)
+        {
+            if (mark.Sheet != sheet) continue;
+            if (mark.Text is { } text)
+            {
+                var (min, max) = InkArt.Box(page, text, context);
+                if (at.X >= min.X && at.Y >= min.Y && at.X <= max.X && at.Y <= max.Y) { nearest = mark; best = 0; }
+                continue;
+            }
+            foreach (var point in mark.Stroke!.Points)
+            {
+                var distance = Vector2.DistanceSquared(new Vector2(point.X, point.Y), at);
+                if (distance <= best + mark.Stroke.Width * mark.Stroke.Width / 4) { best = distance; nearest = mark; }
+            }
+        }
+        return nearest;
     }
 
     // The colour of the mark nearest under a page point: a line within a short reach, or writing it lies on.

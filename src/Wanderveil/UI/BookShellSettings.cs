@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Wanderveil.Features.Drawing;
 
 namespace Wanderveil.UI;
 
@@ -69,7 +70,20 @@ internal interface IBookShellSharing
     void Visit(string name, string world);
     // Whether a passport is being opened.
     bool Opening { get; }
+
+    // Invited co-drawing (ADR-0006): who may draw on this passport and where, and whose passports the holder may draw
+    // on. Pages are stamp pages counted from 0 (the first stamp page).
+    IReadOnlyList<DrawingPerson> Drawers { get; }
+    IReadOnlyList<DrawingPerson> InvitedBy { get; }
+    void LetDraw(Guid player, IReadOnlyList<int> sheets);
+    void StopDrawing(Guid player);
+    // Takes away everything one guest drew or wrote on this passport.
+    void RemoveMarksBy(Guid player);
 }
+
+// A guest invited to draw on the holder's passport, or the owner of a passport the holder is invited to draw on, with
+// the stamp pages (from 0) of the invitation.
+internal sealed record DrawingPerson(Guid AccountId, string Name, string World, IReadOnlyList<int> Sheets);
 
 // Someone else's passport, opened to look at (ADR-0005): whose it is, and reporting or blocking them. The book shows
 // it read-only, with no settings, editing, stamps to place, drawing, or other sections.
@@ -83,4 +97,27 @@ internal interface IBookShellVisit
     // part: identity, picture, marks, stamps, or other; reason: harassment, hateful, sexual, spam, impersonation, or other.
     void Report(string part, string reason);
     void Block();
+}
+
+// A stroke or line of writing by someone else, laid over the book's own marks (ADR-0006): who made it, by name.
+internal sealed record LayerMark(Guid Id, string Author, InkStroke? Stroke, PageText? Text)
+{
+    internal int Sheet => Stroke?.Sheet ?? Text!.Sheet;
+}
+
+// Invited co-drawing (ADR-0006), as the book shows it. On the holder's own passport: guests' marks, each removable. On
+// a visited one: the owner's drawing and other guests' marks, and the pages the book's own marks (this visitor's) may
+// be drawn on. Reads are the latest known state; removing happens in the background.
+internal interface IBookShellLayer
+{
+    IReadOnlyList<LayerMark> Marks { get; }
+    // Whether the book's own marks may be drawn on this stamp page.
+    bool MayDraw(int sheet);
+    // Whether marks of the layer may be removed here (the holder's own passport).
+    bool MayRemove { get; }
+    void Remove(Guid mark);
+    // Why the last save or read did not go through, if it did not.
+    string? Problem { get; }
+    // Called while the stamp pages show: reads again when what it shows is old.
+    void Refresh();
 }

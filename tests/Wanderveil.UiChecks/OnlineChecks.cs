@@ -534,6 +534,10 @@ internal static class OnlineChecks
         private readonly HashSet<(Guid Owner, Guid Viewer)> viewers = [];
         private readonly HashSet<(Guid Blocker, Guid Blocked)> blocks = [];
         internal List<(Guid Reporter, Guid Owner, string Part, string Reason)> Reports { get; } = [];
+        // Co-drawing (ADR-0006): invitations by owner and guest, and guests' marks.
+        private readonly Dictionary<(Guid Owner, Guid Guest), int[]> grants = [];
+        private readonly List<(Guid Id, Guid Owner, Guid Author, int Sheet, string Kind, JsonNode Data)> guestMarks = [];
+        internal int GuestMarkCount(Guid owner) { lock (gate) return guestMarks.Count(m => m.Owner == owner); }
         internal int PartWrites { get; private set; }
         internal bool LastPutCompressed { get; private set; }
         // The paths that arrived gzip-compressed.
@@ -739,6 +743,7 @@ internal static class OnlineChecks
         {
             var method = request.Method.Method;
             var query = request.RequestUri!.Query;
+            if (CoDrawing(path, method, query, body, me) is { } drawn) return drawn;
             if (path == "/v1/sharing")
             {
                 if (method == "PUT") { var visibility = (string?)JsonNode.Parse(body)!["visibility"]; if (visibility == "anyone") anyone.Add(me); else anyone.Remove(me); }
@@ -784,7 +789,12 @@ internal static class OnlineChecks
             if (path == "/v1/viewers")
                 return Json(200, viewers.Where(v => v.Owner == me).Select(v => new { accountId = v.Viewer, character = Character(accounts.Single(a => a.Value == v.Viewer).Key), verifiedBy = "lodestone", since = DateTimeOffset.UtcNow }).ToList());
             if (path.StartsWith("/v1/viewers/", StringComparison.Ordinal) && method == "DELETE")
-                return viewers.Remove((me, Guid.Parse(path[12..]))) ? new HttpResponseMessage(HttpStatusCode.NoContent) : Problem(404, "viewer_not_found");
+            {
+                // Removing a viewer ends their invitation to draw too.
+                var viewer = Guid.Parse(path[12..]);
+                grants.Remove((me, viewer));
+                return viewers.Remove((me, viewer)) ? new HttpResponseMessage(HttpStatusCode.NoContent) : Problem(404, "viewer_not_found");
+            }
             if (path == "/v1/blocks")
                 return Json(200, blocks.Where(b => b.Blocker == me).Select(b => new { accountId = b.Blocked, character = Character(accounts.Single(a => a.Value == b.Blocked).Key), verifiedBy = "lodestone", since = DateTimeOffset.UtcNow }).ToList());
             if (path.StartsWith("/v1/blocks/", StringComparison.Ordinal))
@@ -793,6 +803,8 @@ internal static class OnlineChecks
                 if (method == "PUT")
                 {
                     blocks.Add((me, other));
+                    grants.Remove((me, other));
+                    grants.Remove((other, me));
                     viewers.Remove((me, other));
                     viewers.Remove((other, me));
                     for (var index = 0; index < requests.Count; index++)
@@ -833,6 +845,59 @@ internal static class OnlineChecks
                 return new HttpResponseMessage(HttpStatusCode.Accepted);
             }
             return null;
+        }
+
+        private object MarkView((Guid Id, Guid Owner, Guid Author, int Sheet, string Kind, JsonNode Data) mark) => new Dictionary<string, object?>
+        {
+            ["markId"] = mark.Id, ["sheet"] = mark.Sheet, ["author"] = Player(mark.Author), ["createdAt"] = DateTimeOffset.UtcNow, [mark.Kind] = mark.Data,
+        };
+
+        private HttpResponseMessage? CoDrawing(string path, string method, string query, string body, Guid me)
+        {
+            var noContent = new HttpResponseMessage(HttpStatusCode.NoContent);
+            if (path == "/v1/drawing-grants")
+                return Json(200, grants.Where(g => g.Key.Owner == me).Select(g => new { guest = Player(g.Key.Guest), pages = g.Value, since = DateTimeOffset.UtcNow }).ToList());
+            if (path.StartsWith("/v1/drawing-grants/", StringComparison.Ordinal))
+            {
+                var guest = Guid.Parse(path[19..]);
+                if (method == "DELETE") return grants.Remove((me, guest)) ? noContent : Problem(404, "grant_not_found");
+                if (!viewers.Contains((me, guest))) return Problem(409, "not_a_viewer");
+                var pages = JsonNode.Parse(body)!["pages"]!.AsArray().Select(page => (int)page!).Distinct().Order().ToArray();
+                if (pages.Length == 0) return Problem(400, "invalid_pages");
+                grants[(me, guest)] = pages;
+                return Json(200, new { guest = Player(guest), pages, since = DateTimeOffset.UtcNow });
+            }
+            if (path == "/v1/drawing-invitations")
+                return Json(200, grants.Where(g => g.Key.Guest == me && Visible(me, g.Key.Owner)).Select(g => new { owner = Player(g.Key.Owner), pages = g.Value }).ToList());
+            if (path == "/v1/passport/guest-marks")
+            {
+                if (method == "GET") return Json(200, guestMarks.Where(m => m.Owner == me).Select(MarkView).ToList());
+                var author = Guid.Parse(System.Web.HttpUtility.ParseQueryString(query)["author"]!);
+                guestMarks.RemoveAll(m => m.Owner == me && m.Author == author);
+                return noContent;
+            }
+            if (path.StartsWith("/v1/passport/guest-marks/", StringComparison.Ordinal))
+                return guestMarks.RemoveAll(m => m.Owner == me && m.Id == Guid.Parse(path[25..])) > 0 ? noContent : Problem(404, "mark_not_found");
+            var segments = path.Split('/');
+            if (segments.Length < 5 || segments[2] != "visits" || segments[4] != "guest-marks") return null;
+            var owner = Guid.Parse(segments[3]);
+            if (!Visible(me, owner)) return Problem(404, "passport_not_visible");
+            if (segments.Length == 5) return Json(200, guestMarks.Where(m => m.Owner == owner).Select(MarkView).ToList());
+            var id = Guid.Parse(segments[5]);
+            var found = guestMarks.FindIndex(m => m.Id == id);
+            if (method == "DELETE")
+            {
+                if (found >= 0 && guestMarks[found].Author == me && guestMarks[found].Owner == owner) guestMarks.RemoveAt(found);
+                return found >= 0 ? noContent : Problem(404, "mark_not_found");
+            }
+            if (found >= 0) return guestMarks[found].Author == me ? Json(200, MarkView(guestMarks[found])) : Problem(409, "mark_conflict");
+            var save = JsonNode.Parse(body)!;
+            var sheet = (int)save["sheet"]!;
+            if (!grants.TryGetValue((owner, me), out var invited) || !invited.Contains(sheet)) return Problem(403, "drawing_not_allowed");
+            var kind = save["stroke"] != null ? "stroke" : "text";
+            var mark = (id, owner, me, sheet, kind, save[kind]!.DeepClone());
+            guestMarks.Add(mark);
+            return Json(200, MarkView(mark));
         }
 
         private object Character(long id) => new { lodestoneId = id.ToString(), name = characters[id].Name, world = characters[id].World, dataCenter = "Materia" };

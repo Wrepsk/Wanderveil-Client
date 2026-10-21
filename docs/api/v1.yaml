@@ -7,8 +7,8 @@ info:
     Version 1, 21 October 2026: implemented by the Wanderveil server and this client, and used in game against a local
     server. The 1.1.0 additions (ADR-0005: the passport's other parts, sharing, view requests, viewers, visits, blocks,
     and reports) are implemented on the server and this client. The 1.2.0 additions (ADR-0006: invitations to draw,
-    guests' marks, and the live hub at /v1/live described in README.md) are implemented on the server; the client does
-    not use them yet, so they stay a draft. Compatibility promises begin with the first client release that uses it; until then it may still change.
+    guests' marks, and the live hub at /v1/live described in README.md) are implemented on the server; this client
+    uses invitations and guests' marks, not yet the hub, so they stay a draft. Compatibility promises begin with the first client release that uses it; until then it may still change.
     See README.md beside this file for the rules every endpoint follows.
 
     Every account is one FFXIV character verified through the Lodestone or XIVAuth. A verification proves control of

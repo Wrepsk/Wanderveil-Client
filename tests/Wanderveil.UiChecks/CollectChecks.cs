@@ -467,11 +467,11 @@ internal static class CollectChecks
         internal PreviewTextures Textures => host.Textures!;
 
         internal Book(Vector2 room, StampCollection stamps, BookShellContent? content = null, ISavedState? storage = null, bool readsEscape = true, bool motion = false, float textScale = 1f,
-            PassportProfile? identity = null, Func<PreviewTextures, IPassportPortrait>? portrait = null, ICharacterSource? character = null, Wanderveil.Features.Drawing.PageMarks? marks = null, IBookShellAccount? account = null, IBookShellSharing? sharing = null, IBookShellVisit? visit = null)
+            PassportProfile? identity = null, Func<PreviewTextures, IPassportPortrait>? portrait = null, ICharacterSource? character = null, Wanderveil.Features.Drawing.PageMarks? marks = null, IBookShellAccount? account = null, IBookShellSharing? sharing = null, IBookShellVisit? visit = null, IBookShellLayer? layer = null)
         {
             this.room = room;
             host = new HeadlessUi(room, materials: true);
-            Shell = new BookShell(host.Textures!, PassportIdentity.Sample, content: content, stamps: stamps, storage: storage, identity: identity, portrait: portrait?.Invoke(host.Textures!), character: character, marks: marks, account: account, sharing: sharing, visit: visit) { ReducedMotion = !motion, ReadsEscape = readsEscape };
+            Shell = new BookShell(host.Textures!, PassportIdentity.Sample, content: content, stamps: stamps, storage: storage, identity: identity, portrait: portrait?.Invoke(host.Textures!), character: character, marks: marks, account: account, sharing: sharing, visit: visit, layer: layer) { ReducedMotion = !motion, ReadsEscape = readsEscape };
             context = new UiContext(1, 18 * textScale) { TitleFont = host.TitleFont, HeadingFont = host.HeadingFont, BodyFont = host.BodyFont, DisplayFont = host.DisplayFont, MonoFont = host.MonoFont, SignatureFont = host.SignatureFont };
             Frames(3);
         }
@@ -531,6 +531,13 @@ internal static class CollectChecks
         }
 
         internal void Frames(int count) { for (var index = 0; index < count; index++) Frame(); }
+
+        internal void RightClick(Vector2 point)
+        {
+            ImGui.GetIO().AddMousePosEvent(point.X, point.Y); Frame();
+            ImGui.GetIO().AddMouseButtonEvent(1, true); Frame();
+            ImGui.GetIO().AddMouseButtonEvent(1, false); Frames(2);
+        }
 
         internal void Click(Vector2 point)
         {

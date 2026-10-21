@@ -215,6 +215,29 @@ internal static class SharingChecks
         check(sharing.Calls.Last() == "visit Lux Arden@Sophia", "Open it did not open the passport named.");
         book.Click(book.Shell.SharingControls["Kel Doran Open"]);
         check(sharing.Calls.Last() == "visit Kel Doran@Ravana", "An approved request did not offer to open the passport.");
+
+        // Co-drawing (ADR-0006): inviting a viewer to draw on pages named as the book prints them, then changing,
+        // ending, and clearing an invitation; and opening a passport one is invited to draw on.
+        var first = book.Shell.FixedPageCount + 1;
+        book.Click(book.Tab(5));
+        book.Frames(10);
+        check(book.Shell.Category == SettingsCategory.Drawing && book.Shell.SharingControls.ContainsKey("Kel Doran invitation Open"),
+            "The sixth Settings tab does not open Drawing together, or passports one may draw on are not listed.");
+        book.Click(book.Shell.SharingControls["Tam Orin Let draw"]);
+        book.Frames(4);
+        book.Save(artifacts, "settings-drawing-invite.bmp");
+        book.Click(book.Shell.SharingControls["Draw pages"]);
+        book.Type($"{first}, {first + 2}-{first + 3}");
+        book.Click(book.Shell.SharingControls["Let draw"]);
+        check(sharing.Calls.Last() == "let draw 0,2,3", $"Letting a viewer draw did not send the pages chosen ({sharing.Calls.Last()}).");
+        sharing.Drawers = [new(StubSharing.Tam, "Tam Orin", "Phoenix", [0, 2, 3])];
+        book.Frames(2);
+        book.Save(artifacts, "settings-drawing.bmp");
+        book.Click(book.Shell.SharingControls["Tam Orin Remove marks"]);
+        book.Click(book.Shell.SharingControls["Tam Orin Stop"]);
+        check(sharing.Calls.TakeLast(2).SequenceEqual(["remove marks", "stop drawing"]), "Removing a guest's marks or ending their invitation did not reach the account.");
+        book.Click(book.Shell.SharingControls["Kel Doran invitation Open"]);
+        check(sharing.Calls.Last() == "visit Kel Doran@Ravana", "An invitation to draw did not open that passport.");
         sharing.Message = "Asked to see the passport of Lux Arden (Sophia). If they use Wanderveil they will see your request; it waits for their answer, up to 14 days.";
         book.Frames(2);
         book.Save(artifacts, "settings-sharing-asked.bmp");
@@ -232,7 +255,7 @@ internal static class SharingChecks
         public bool Anyone => false;
         public IReadOnlyList<SharingRequest> Incoming { get; } = [new(Guid.NewGuid(), Mira, "Mira Vale", "Ravana", false, DateTimeOffset.UtcNow.AddDays(10))];
         public IReadOnlyList<SharingRequest> Outgoing { get; } = [new(Guid.NewGuid(), null, "Ana Lys", "Sophia", false, DateTimeOffset.UtcNow.AddDays(3)), new(Guid.NewGuid(), null, "Kel Doran", "Ravana", true, DateTimeOffset.UtcNow.AddDays(5))];
-        public IReadOnlyList<SharingPerson> Viewers { get; } = [new(Guid.NewGuid(), "Tam Orin", "Phoenix", "xivauth", DateTimeOffset.UtcNow)];
+        public IReadOnlyList<SharingPerson> Viewers { get; } = [new(Tam, "Tam Orin", "Phoenix", "xivauth", DateTimeOffset.UtcNow)];
         public IReadOnlyList<SharingPerson> Blocked { get; } = [new(Guid.NewGuid(), "Bad Actor", "Ravana", "lodestone", DateTimeOffset.UtcNow)];
         public (string Name, string World)? Target => ("Lux Arden", "Sophia");
         public void Refresh() => Refreshed++;
@@ -246,5 +269,11 @@ internal static class SharingChecks
         public void Ask(string name, string world) => Calls.Add($"ask {name}@{world}");
         public bool Opening => false;
         public void Visit(string name, string world) => Calls.Add($"visit {name}@{world}");
+        internal static readonly Guid Tam = Guid.NewGuid();
+        public IReadOnlyList<DrawingPerson> Drawers { get; set; } = [];
+        public IReadOnlyList<DrawingPerson> InvitedBy { get; } = [new(Guid.NewGuid(), "Kel Doran", "Ravana", [0, 1, 2, 7])];
+        public void LetDraw(Guid player, IReadOnlyList<int> sheets) => Calls.Add($"let draw {string.Join(",", sheets)}");
+        public void StopDrawing(Guid player) => Calls.Add("stop drawing");
+        public void RemoveMarksBy(Guid player) => Calls.Add("remove marks");
     }
 }

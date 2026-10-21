@@ -57,7 +57,7 @@ A change is sent two seconds after the last edit. With no answer, it waits and t
 
 ## Sharing
 
-**Sharing** is the fifth Settings category (an eye), beside General, Customization, Layout, and Saved data; the category tabs are icons and all five sit in one row. It follows ADR-0005:
+**Sharing** is the fifth Settings category (an eye), beside General, Customization, Layout, Saved data, and Drawing together; the category tabs are icons and all six sit in one row. It follows ADR-0005:
 
 - **Asking to see a passport** (left page): type a character's name and home world, or use your target in game, and choose **Ask to see it**. The answer never says whether that character uses Wanderveil, so the page says what is true: if they do, they see your request, which waits up to 14 days.
 - **Who may open yours** (right page): **Only people I approve** (the default) or **Anyone signed in**. Visitors see your whole passport and can take screenshots, and a block always keeps someone out.
@@ -72,7 +72,7 @@ Each list shows its first five and how many more, with each entry's actions on i
 
 A passport you may see opens in a book of its own, beside yours: the owner's edition, colours, symbols, identity pages and picture, stamps where they placed them, and drawing and writing.
 
-- **Read-only:** no section tabs, no Settings, no editing, no stamps to place, no drawing or decorating, and no way out to Discover.
+- **Read-only:** no section tabs, no Settings, no editing, no stamps to place, no decorating, and no way out to Discover. Drawing is offered only where the owner invited you (below).
 - **Its footer:** says whose it is (*Visiting Name, World*), with **Report** and **Block**.
   - **Report** asks what (their picture, drawing and writing, details and other text, stamps, or something else) and why (harassment, hateful, sexual, spam, impersonating someone, or something else). People at Wanderveil review reports, and the owner is not told who reported.
   - **Block** asks first, then closes the visit.
@@ -81,6 +81,18 @@ A passport you may see opens in a book of its own, beside yours: the owner's edi
 
 Previews: [a visited passport](previews/online/visit-book.png), [reporting it](previews/online/visit-report.png).
 
+## Drawing together
+
+**Drawing together** is the sixth Settings category (a pencil). It follows ADR-0006: an owner invites people who can open their passport to draw and write on chosen stamp pages.
+
+- **Inviting** (left page): **Let draw** beside someone under *Invite to draw* asks for the pages, as the book numbers them (for example `5, 7-9`; stamp pages run from 5 to 100), then **Let them draw**. Only people approved by name can be invited, as the server requires.
+- **Drawing on yours:** each guest with their pages, **Pages** (change them), **Stop** (end the invitation; their marks stay), and **Remove marks** (everything they made).
+- **You may draw on:** passports whose owners invited you, with **Open**.
+- **On your own pages:** guests' marks lie beneath your own. Hovering one names who drew or wrote it, and a right-click offers removing it. Your eraser, Clear, and Undo never touch them.
+- **On a visited passport:** the owner's drawing and other guests' marks lie beneath yours, each named on hover. **Draw** appears in the footer where you are invited; the pencil, eraser, and writing then work only on invited pages. Each stroke or line is saved as its own mark as you make it, and Undo or the eraser erases it on the server. A mark the server refuses (no longer invited, or over a limit) is taken back, and the footer says why. Without an answer, marks wait and are sent when the server answers again. Marks the owner removes leave your copy too.
+
+Guests' marks are read when the stamp pages show, and again every 20 seconds while they do. Strokes drawn by others do not appear live yet: that comes with the live connection (the next slice). Previews: [the Drawing together page](previews/online/settings-drawing.png), [inviting](previews/online/settings-drawing-invite.png), [a guest's mark named on your page](previews/online/codrawing-own.png), [drawing on a visited passport](previews/online/codrawing-visit.png).
+
 ## What is not covered yet
 
-Sharing has not been tried between two players in game yet. XIVAuth works live: on 21 October 2026, with Wanderveil's XIVAuth application registered (scope `character`, device code flow, confidential client) and configured on a local server, the user signed in from the game through XIVAuth. The passport saved earlier through the Lodestone sign-in loaded correctly, because both sign-ins identify the character by its Lodestone ID. The live test ran on Windows against a local server. Not yet observed: a hosted server over HTTPS, DPAPI under Wine, and other players' characters.
+Drawing together has not been tried in game yet, and others' strokes do not appear live until the live connection lands. XIVAuth works live: on 21 October 2026, with Wanderveil's XIVAuth application registered (scope `character`, device code flow, confidential client) and configured on a local server, the user signed in from the game through XIVAuth. The passport saved earlier through the Lodestone sign-in loaded correctly, because both sign-ins identify the character by its Lodestone ID. The live test ran on Windows against a local server. Not yet observed: a hosted server over HTTPS, DPAPI under Wine, and other players' characters.

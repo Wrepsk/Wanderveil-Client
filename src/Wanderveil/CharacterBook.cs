@@ -52,12 +52,15 @@ internal sealed class CharacterBook : IDisposable
         ], directory);
         Sharing = new SharingCenter(account, session);
         Visits = new VisitCenter(account, session);
+        Guests = new CoDrawingCenter(account, session, null);
+        this.account = account;
         this.textures = textures;
         this.assets = assets;
         this.configuration = configuration;
         this.saveConfiguration = saveConfiguration;
         Window = new MainWindow(() => configuration.ReducedMotion, new ConfigurationSettings(configuration, saveConfiguration), assets, stamps.Collection, stamps,
-            new PassportServices(identity.Profile, identity, portrait, new GameCharacter(framework, player)), marks.Marks, marks, new BookAccount(account, session, Sync), new BookSharing(Sharing, Visits, target));
+            new PassportServices(identity.Profile, identity, portrait, new GameCharacter(framework, player)), marks.Marks, marks, new BookAccount(account, session, Sync), new BookSharing(Sharing, Visits, Guests, target),
+            layer: new GuestLayer(Guests));
         windows.AddWindow(Window);
         windows.AddWindow(Window.Camera);
         Sync.Start();
@@ -68,8 +71,11 @@ internal sealed class CharacterBook : IDisposable
     internal PassportSync Sync { get; }
     internal SharingCenter Sharing { get; }
     internal VisitCenter Visits { get; }
-    // The passport being visited, if any: its window and picture, in memory only.
-    private (MainWindow Window, VisitPicture Picture)? visiting;
+    // Guests' marks on this passport (ADR-0006).
+    internal CoDrawingCenter Guests { get; }
+    // The passport being visited, if any: its window, picture, and guests' marks, in memory only.
+    private (MainWindow Window, VisitPicture Picture, CoDrawingCenter Drawing)? visiting;
+    private readonly OnlineAccount account;
     private readonly ITextureProvider textures;
     private readonly PassportAssets assets;
     private readonly Configuration configuration;
@@ -87,13 +93,16 @@ internal sealed class CharacterBook : IDisposable
             var picture = new VisitPicture(textures, visited.Picture);
             var profile = new PassportProfile(visited.Identity);
             var stamps = new Features.Stamps.StampCollection(null, visited.Stamps.Stamps, visited.Stamps.Placements);
-            var marks = new Features.Drawing.PageMarks(visited.Marks.Strokes, visited.Marks.Texts);
+            // The book's own marks are this visitor's, where invited; the owner's drawing lies beneath with others' marks.
+            var drawing = new CoDrawingCenter(account, Session, visited.Owner.AccountId);
+            var owners = new Features.Drawing.PageMarks(visited.Marks.Strokes, visited.Marks.Texts);
             var window = new MainWindow(() => configuration.ReducedMotion, new ConfigurationSettings(configuration, saveConfiguration), assets, stamps, NoSaving.Instance,
-                new PassportServices(profile, NoSaving.Instance, picture, NoCharacter.Instance), marks, NoSaving.Instance, visit: new BookVisit(Visits, visited.Owner),
-                id: "Wanderveil visit###Wanderveil.Visit");
+                new PassportServices(profile, NoSaving.Instance, picture, NoCharacter.Instance), drawing.Mine, NoSaving.Instance, visit: new BookVisit(Visits, visited.Owner),
+                layer: new VisitLayer(drawing, owners, visited.Owner.Character.Name), id: "Wanderveil visit###Wanderveil.Visit");
             windows.AddWindow(window);
             window.Summon();
-            visiting = (window, picture);
+            drawing.Refresh();
+            visiting = (window, picture, drawing);
         }
         if (visiting is { } open)
         {
@@ -107,6 +116,7 @@ internal sealed class CharacterBook : IDisposable
         if (visiting is not { } open) return;
         windows.RemoveWindow(open.Window);
         open.Picture.Dispose();
+        open.Drawing.Dispose();
         visiting = null;
     }
 
@@ -120,6 +130,7 @@ internal sealed class CharacterBook : IDisposable
         windows.RemoveWindow(Window);
         Sync.Dispose();
         Sharing.Dispose();
+        Guests.Dispose();
         stamps.Dispose();
         identity.Dispose();
         marks.Dispose();
@@ -147,6 +158,47 @@ internal sealed class CharacterBook : IDisposable
         public System.Threading.Tasks.Task<CharacterDetails?> Read() => System.Threading.Tasks.Task.FromResult<CharacterDetails?>(null);
     }
 
+    // Guests' marks on the holder's own passport, each removable.
+    private sealed class GuestLayer(CoDrawingCenter center) : IBookShellLayer
+    {
+        private readonly LayerMarks marks = new();
+        public IReadOnlyList<LayerMark> Marks => marks.Of(center.Marks, null);
+        public bool MayDraw(int sheet) => true;
+        public bool MayRemove => true;
+        public void Remove(Guid mark) => center.Remove(mark);
+        public string? Problem => center.Problem;
+        public void Refresh() { center.Poll(); center.RefreshIfStale(); }
+    }
+
+    // On a visited passport: the owner's drawing and other guests' marks beneath the visitor's own, who may draw on
+    // the pages they are invited to.
+    private sealed class VisitLayer(CoDrawingCenter center, Features.Drawing.PageMarks owners, string owner) : IBookShellLayer
+    {
+        private readonly LayerMarks marks = new();
+        private readonly LayerMark[] drawn = [.. owners.Strokes.Select(stroke => new LayerMark(Guid.Empty, owner, stroke, null)), .. owners.Texts.Select(text => new LayerMark(Guid.Empty, owner, null, text))];
+        public IReadOnlyList<LayerMark> Marks => marks.Of(center.Marks, center.Me, drawn);
+        public bool MayDraw(int sheet) => center.Ready && center.Pages.Contains(sheet);
+        public bool MayRemove => false;
+        public void Remove(Guid mark) { }
+        public string? Problem => center.Problem;
+        public void Refresh() { center.Poll(); center.RefreshIfStale(); }
+    }
+
+    // Guests' marks as the book draws them, made again only when they change.
+    private sealed class LayerMarks
+    {
+        private IReadOnlyList<GuestInk>? from;
+        private IReadOnlyList<LayerMark> made = [];
+
+        internal IReadOnlyList<LayerMark> Of(IReadOnlyList<GuestInk> marks, Guid? skip, IReadOnlyList<LayerMark>? beneath = null)
+        {
+            if (ReferenceEquals(marks, from)) return made;
+            from = marks;
+            made = [.. beneath ?? [], .. marks.Where(mark => mark.Author.AccountId != skip).Select(mark => new LayerMark(mark.Id, mark.Author.Character.Name, mark.Stroke, mark.Text))];
+            return made;
+        }
+    }
+
     // A visited passport's owner, and reporting or blocking them.
     private sealed class BookVisit(VisitCenter visits, Player owner) : IBookShellVisit
     {
@@ -159,7 +211,7 @@ internal sealed class CharacterBook : IDisposable
     }
 
     // Sharing, as the passport's Settings pages show it.
-    private sealed class BookSharing(SharingCenter center, VisitCenter visits, Func<(string Name, string World)?> target) : IBookShellSharing
+    private sealed class BookSharing(SharingCenter center, VisitCenter visits, CoDrawingCenter guests, Func<(string Name, string World)?> target) : IBookShellSharing
     {
         public bool Loaded => center.Loaded;
         public bool Busy => center.Busy;
@@ -182,6 +234,11 @@ internal sealed class CharacterBook : IDisposable
         public void Block(Guid player) => center.Block(player);
         public void Unblock(Guid player) => center.Unblock(player);
         public void Ask(string name, string world) => center.Ask(name, world);
+        public IReadOnlyList<DrawingPerson> Drawers => center.Snapshot.Grants.Select(g => new DrawingPerson(g.Guest.AccountId, g.Guest.Character.Name, g.Guest.Character.World, g.Pages)).ToList();
+        public IReadOnlyList<DrawingPerson> InvitedBy => center.Snapshot.Invitations.Select(i => new DrawingPerson(i.Owner.AccountId, i.Owner.Character.Name, i.Owner.Character.World, i.Pages)).ToList();
+        public void LetDraw(Guid player, IReadOnlyList<int> sheets) => center.LetDraw(player, sheets);
+        public void StopDrawing(Guid player) => center.StopDrawing(player);
+        public void RemoveMarksBy(Guid player) => guests.RemoveBy(player);
 
         private static SharingPerson Person(ListedPlayer player) => new(player.AccountId, player.Character.Name, player.Character.World, player.VerifiedBy, player.Since);
     }

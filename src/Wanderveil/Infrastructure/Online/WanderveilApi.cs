@@ -32,6 +32,11 @@ internal sealed record CharacterName(string Name, string World);
 internal sealed record ViewRequest(Guid RequestId, string State, Player? From, CharacterName? To, DateTimeOffset CreatedAt, DateTimeOffset ExpiresAt);
 internal sealed record ListedPlayer(Guid AccountId, CharacterInfo Character, string VerifiedBy, DateTimeOffset Since);
 internal sealed record Visit(Player Owner, Dictionary<string, int> Revisions);
+
+// Co-drawing (ADR-0006; contract 1.2.0).
+internal sealed record DrawingGrant(Player Guest, int[] Pages, DateTimeOffset Since);
+internal sealed record DrawingInvitation(Player Owner, int[] Pages);
+internal sealed record GuestMark(Guid MarkId, int Sheet, Player Author, DateTimeOffset CreatedAt, JsonElement? Stroke, JsonElement? Text);
 internal sealed record XivAuthFlow(string FlowId, string UserCode, Uri VerificationUri, Uri? VerificationUriComplete, int Interval, DateTimeOffset ExpiresAt)
 {
     // The page to open: with the code filled in where XIVAuth gives one.
@@ -208,6 +213,36 @@ internal sealed class WanderveilApi
 
     internal Task<ApiResult<object>> Report(string token, Guid owner, string part, string reason, string? note, CancellationToken cancellationToken) =>
         Send<object>(HttpMethod.Post, "v1/reports", token, Body(new { accountId = owner, part, reason, note }), cancellationToken);
+
+    internal Task<ApiResult<DrawingGrant[]>> DrawingGrants(string token, CancellationToken cancellationToken) =>
+        Send<DrawingGrant[]>(HttpMethod.Get, "v1/drawing-grants", token, null, cancellationToken);
+
+    internal Task<ApiResult<DrawingGrant>> SetDrawingGrant(string token, Guid guest, IEnumerable<int> pages, CancellationToken cancellationToken) =>
+        Send<DrawingGrant>(HttpMethod.Put, $"v1/drawing-grants/{guest}", token, Body(new { pages }), cancellationToken);
+
+    internal Task<ApiResult<object>> RevokeDrawingGrant(string token, Guid guest, CancellationToken cancellationToken) =>
+        Send<object>(HttpMethod.Delete, $"v1/drawing-grants/{guest}", token, null, cancellationToken);
+
+    internal Task<ApiResult<DrawingInvitation[]>> DrawingInvitations(string token, CancellationToken cancellationToken) =>
+        Send<DrawingInvitation[]>(HttpMethod.Get, "v1/drawing-invitations", token, null, cancellationToken);
+
+    // Guests' marks on one's own passport (owner null) or on a passport one may see.
+    internal Task<ApiResult<GuestMark[]>> GuestMarks(string token, Guid? owner, CancellationToken cancellationToken) =>
+        Send<GuestMark[]>(HttpMethod.Get, owner is { } id ? $"v1/visits/{id}/guest-marks" : "v1/passport/guest-marks", token, null, cancellationToken);
+
+    // A guest adds their mark (body as the contract's GuestMarkSave JSON); the same ID again answers the mark saved.
+    internal Task<ApiResult<GuestMark>> AddGuestMark(string token, Guid owner, Guid mark, string body, CancellationToken cancellationToken) =>
+        Send<GuestMark>(HttpMethod.Put, $"v1/visits/{owner}/guest-marks/{mark}", token, new StringContent(body, Encoding.UTF8, "application/json"), cancellationToken);
+
+    internal Task<ApiResult<object>> EraseGuestMark(string token, Guid owner, Guid mark, CancellationToken cancellationToken) =>
+        Send<object>(HttpMethod.Delete, $"v1/visits/{owner}/guest-marks/{mark}", token, null, cancellationToken);
+
+    // The owner removes one guest mark, or everything one guest made.
+    internal Task<ApiResult<object>> RemoveGuestMark(string token, Guid mark, CancellationToken cancellationToken) =>
+        Send<object>(HttpMethod.Delete, $"v1/passport/guest-marks/{mark}", token, null, cancellationToken);
+
+    internal Task<ApiResult<object>> RemoveGuestMarksBy(string token, Guid author, CancellationToken cancellationToken) =>
+        Send<object>(HttpMethod.Delete, $"v1/passport/guest-marks?author={author}", token, null, cancellationToken);
 
     private static void Over(HttpRequestMessage request, int? over)
     {
