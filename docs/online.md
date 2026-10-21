@@ -6,7 +6,7 @@ Every Wanderveil passport belongs to one FFXIV character that has signed in. A s
 
 ## Signing in
 
-The first time a character logs in without a session, Wanderveil opens the sign-in sheet by itself, once per character per session. It also opens instead of the passport when you use `/wanderveil` or the plugin's buttons without a session. The sheet is a passport-office application form, its type a size up from the game's UI font (it is read at a distance), and its window as tall as its content. It names the logged-in character, then:
+Without a session, the sign-in sheet opens instead of the passport when you use `/wanderveil` or the plugin's buttons. It never opens by itself on login or when the plugin loads (changed after the first two-player test, 21 October 2026); it does open after a sign-out while the passport was open, to say why. The sheet is a passport-office application form, its type a size up from the game's UI font (it is read at a distance), and its window as tall as its content. It names the logged-in character, then:
 
 1. **Get my code** asks the server for a code (`WV-` and eight characters) for that character's name and home world.
 2. You paste the code anywhere in your Character Profile on the Lodestone and save. **Copy** and **Open my Lodestone profile settings** help with this.
@@ -63,16 +63,18 @@ A change is sent two seconds after the last edit. With no answer, it waits and t
 - **Who may open yours** (right page): **Only people I approve** (the default) or **Anyone signed in**. Visitors see your whole passport and can take screenshots, and a block always keeps someone out.
 - **Asking to see yours:** each request with **Approve**, **Decline** (the sender is not told), and **Block**.
 - **Who can open yours:** your viewers, each with **Remove** and **Block**.
-- **You asked to see:** your requests, *waiting* or *approved*, with **Withdraw** while waiting. A decline looks like waiting until the request expires.
+- **You asked to see:** your requests, each character once, *waiting* or *approved*: **Withdraw** while waiting, and **Open** and **Remove** once approved. **Remove** gives up the approval: their passport no longer opens for you until you ask again. An approval also leaves this list when they remove you or either of you blocks the other. Asking again while approved adds nothing. A decline looks like waiting until the request expires.
 - **Blocked:** with **Unblock**. Unblocking does not restore an approval the block removed.
 
-Each list shows its first five and how many more, with each entry's actions on its line. The page reads everything again when it opens and every half minute while it shows, and after each action. Reading and changing run in the background. Without the server, the page says so and keeps what it last read. **Open it** (beside **Ask to see it**) and **Open** (on an approved request) open a passport you may see. Previews: [the page](previews/online/settings-sharing.png), [after asking](previews/online/settings-sharing-asked.png).
+Each list shows its first five and how many more, with each entry's actions on its line. The page reads everything again when it opens and every half minute while it shows, and after each action. Reading and changing run in the background. Without the server, the page says so and keeps what it last read. **Open it** (beside **Ask to see it**) and **Open** (on an approved request) open a passport you may see.
+
+**From a player's right-click menu** (in the world, the party list, friends, chat, and other player menus), Wanderveil adds an entry marked with a boxed W. **Open passport** shows where that character approved you. Otherwise **Ask to see passport** opens their passport if they share it with anyone, and asks to see it if not. The chat log then says the request was sent, or why the passport could not open. The menu only offers this while you are signed in, and never for your own character. Previews: [the page](previews/online/settings-sharing.png), [after asking](previews/online/settings-sharing-asked.png).
 
 ## Visiting a passport
 
 A passport you may see opens in a book of its own, beside yours: the owner's edition, colours, symbols, identity pages and picture, stamps where they placed them, and drawing and writing.
 
-- **Read-only:** no section tabs, no Settings, no editing, no stamps to place, no decorating, and no way out to Discover. Drawing is offered only where the owner invited you (below).
+- **Read-only:** no section tabs or ribbon, no Settings, no editing, no stamps to place, no decorating, and no way out to Discover. Drawing is offered only where the owner invited you (below).
 - **Its footer:** says whose it is (*Visiting Name, World*), with **Report** and **Block**.
   - **Report** asks what (their picture, drawing and writing, details and other text, stamps, or something else) and why (harassment, hateful, sexual, spam, impersonating someone, or something else). People at Wanderveil review reports, and the owner is not told who reported.
   - **Block** asks first, then closes the visit.

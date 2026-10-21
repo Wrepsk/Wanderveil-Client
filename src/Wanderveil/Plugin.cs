@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net.Http;
 using Dalamud.Game.ClientState.Keys;
 using Dalamud.Game.Command;
+using Dalamud.Game.Gui.ContextMenu;
 using Dalamud.Interface.Windowing;
 using Dalamud.IoC;
 using Dalamud.Plugin;
@@ -24,6 +26,8 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] private static IKeyState KeyState { get; set; } = null!;
     [PluginService] private static IPlayerState PlayerState { get; set; } = null!;
     [PluginService] private static ITargetManager TargetManager { get; set; } = null!;
+    [PluginService] private static IContextMenu ContextMenu { get; set; } = null!;
+    [PluginService] private static IChatGui Chat { get; set; } = null!;
 
     private const string CommandName = "/wanderveil";
 
@@ -36,13 +40,14 @@ public sealed class Plugin : IDalamudPlugin
     private SignInWindow? signIn;
     // The logged-in, signed-in character's passport; none until one is (ADR-0004: sign in first).
     private CharacterBook? book;
-    // Characters already asked to sign in this session, so the sheet opens by itself only once each.
-    private readonly HashSet<ulong> asked = [];
     // Opens the passport once the character it is waiting for has one.
     private bool openWhenReady;
     // The player targeted in game, read on the framework thread each frame, for asking to see their passport.
     private volatile Tuple<string, string>? target;
     private bool commandRegistered;
+    // A passport asked for from a player's menu that is not approved by name: opened if it is shared with anyone,
+    // otherwise asked for (framework thread).
+    private (string Name, string World)? askIfRefused;
     private bool disposed;
 
     public Plugin()
@@ -70,6 +75,7 @@ public sealed class Plugin : IDalamudPlugin
             Framework.Update += OnFrameworkUpdate;
             PluginInterface.UiBuilder.OpenMainUi += OpenMain;
             PluginInterface.UiBuilder.OpenConfigUi += OpenSettings;
+            ContextMenu.OnMenuOpened += OnMenuOpened;
             Log.Information("Wanderveil loaded.");
         }
         catch
@@ -89,6 +95,7 @@ public sealed class Plugin : IDalamudPlugin
         Framework.Update -= OnFrameworkUpdate;
         PluginInterface.UiBuilder.OpenMainUi -= OpenMain;
         PluginInterface.UiBuilder.OpenConfigUi -= OpenSettings;
+        ContextMenu.OnMenuOpened -= OnMenuOpened;
 
         if (commandRegistered)
         {
@@ -130,8 +137,9 @@ public sealed class Plugin : IDalamudPlugin
             AskToSignIn();
     }
 
-    // On the framework thread: follows the logged-in character, swaps its passport in or out, and asks a character
-    // without a session to sign in (once). When the passport has a use for Escape, it takes the key from the game.
+    // On the framework thread: follows the logged-in character and swaps its passport in or out. A character without
+    // a session is asked to sign in only when the holder opens Wanderveil (/wanderveil or the plugin's buttons), never
+    // by itself on login. When the passport has a use for Escape, it takes the key from the game.
     private void OnFrameworkUpdate(IFramework framework)
     {
         if (disposed || account == null) return;
@@ -143,8 +151,17 @@ public sealed class Plugin : IDalamudPlugin
             ? Tuple.Create(player.Name.TextValue, player.HomeWorld.Value.Name.ExtractText())
             : null;
         Follow();
-        if (account.State is AccountState.SignedOut or AccountState.NoServer && asked.Add(account.ContentId)) AskToSignIn();
         if (book != null && openWhenReady) { openWhenReady = false; book.Window.Summon(); }
+        if (book != null && askIfRefused is { } asked && !book.Visits.Opening)
+        {
+            askIfRefused = null;
+            if (book.Visits.Problem == VisitCenter.NotVisible)
+            {
+                book.Sharing.Ask(asked.Name, asked.World);
+                Chat.Print($"[Wanderveil] Asked to see the passport of {asked.Name} ({asked.World}). If they use Wanderveil, they will see your request.");
+            }
+            else if (book.Visits.Problem is { } problem) Chat.PrintError("[Wanderveil] " + problem);
+        }
 
         if (book == null || !book.Window.WantsEscape || !KeyState[VirtualKey.ESCAPE]) return;
         KeyState[VirtualKey.ESCAPE] = false;
@@ -175,6 +192,33 @@ public sealed class Plugin : IDalamudPlugin
         {
             Log.Error(exception, "Could not open the Wanderveil passport for {Profile}.", session.Profile);
         }
+    }
+
+    // A player's right-click menu (in the world, party, friends, chat, and the like): Open passport where they approved
+    // this character, otherwise Ask to see passport, which opens it if it is shared with anyone and asks otherwise.
+    private void OnMenuOpened(IMenuOpenedArgs args)
+    {
+        if (book == null || args.MenuType != ContextMenuType.Default || args.Target is not MenuTargetDefault target) return;
+        var name = target.TargetName;
+        var world = target.TargetHomeWorld.ValueNullable?.Name.ExtractText();
+        if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(world) || target.TargetHomeWorld.RowId == 0) return;
+        if (account?.Session?.Account.Character is { } me && string.Equals(me.Name, name, StringComparison.OrdinalIgnoreCase) && string.Equals(me.World, world, StringComparison.OrdinalIgnoreCase)) return;
+        var current = book;
+        current.Sharing.RefreshIfStale();
+        var approved = current.Sharing.Snapshot.Outgoing.Any(request => request.State == "approved" &&
+            string.Equals(request.To?.Name, name, StringComparison.OrdinalIgnoreCase) && string.Equals(request.To?.World, world, StringComparison.OrdinalIgnoreCase));
+        args.AddMenuItem(new MenuItem
+        {
+            Name = approved ? "Open passport" : "Ask to see passport",
+            PrefixChar = 'W',
+            PrefixColor = 37,
+            OnClicked = _ =>
+            {
+                if (book != current) return;
+                current.Visits.Open(name, world);
+                askIfRefused = approved ? null : (name, world);
+            },
+        });
     }
 
     private void AskToSignIn()

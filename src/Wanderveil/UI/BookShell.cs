@@ -273,14 +273,15 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         }
         focusSection = false;
         solid.Add(BookSurface.Board(layout.Book, layout.IsSpread ? BookFace.Spread : Section == BookSection.Passport && VisiblePage % 2 == 1 ? BookFace.Right : BookFace.Left));
-        for (var index = 0; index < TabCount; index++) solid.Add(layout.Bookmark(index).Union(BookControl.RibbonBounds(layout.Bookmark(index), context)));
+        // A visited passport has no tabs or ribbon, so nothing of theirs takes the mouse.
+        if (visit == null) for (var index = 0; index < TabCount; index++) solid.Add(layout.Bookmark(index).Union(BookControl.RibbonBounds(layout.Bookmark(index), context)));
         var surfacePage = turning && !layout.IsSpread ? turn.Last + 1 : VisiblePage;
         var surfaceFace = layout.IsSpread ? BookFace.Spread : Section == BookSection.Passport && surfacePage % 2 == 1 ? BookFace.Right : BookFace.Left;
         BookSurface.Draw(layout.Book, surfaceFace, assets, context);
         // The pages' background pattern, on the paper beneath everything (the rings are part of the plate).
         foreach (var right in layout.IsSpread ? new[] { false, true } : [false])
             PagePattern.Draw(ImGui.GetWindowDrawList(), Background, BookSurface.Paper(layout.Book, surfaceFace, right), UiTheme.Lines, holder.Identity.Edition, assets);
-        Ribbon(layout, context);
+        if (visit == null) Ribbon(layout, context);
 
         // Page contents scale with the paper like printed matter: a smaller book shows smaller text,
         // spacing, and artwork rather than scrolling. Enlarged host text still enlarges it (and may scroll).
@@ -1709,10 +1710,11 @@ internal sealed class BookShell(IBookAssets assets, PassportIdentity profile, IR
         SharingList(context, "WHO CAN OPEN YOURS", sharing.Anyone ? "Anyone signed in, and no one approved by name." : "No one yet.", sharing.Viewers, person => person.AccountId, person => $"{person.Name}, {person.World}", _ => ["Remove", "Block"],
             person => SharingActions(context, person.Name, ("Remove", () => sharing.RemoveViewer(person.AccountId)), ("Block", () => sharing.Block(person.AccountId))));
         SharingList(context, "YOU ASKED TO SEE", "You have not asked anyone.", sharing.Outgoing, request => request.Id,
-            request => $"{request.Name}, {request.World}: " + (request.Approved ? "approved" : "waiting"), request => request.Approved ? ["Open"] : ["Withdraw"],
+            request => $"{request.Name}, {request.World}: " + (request.Approved ? "approved" : "waiting"), request => request.Approved ? ["Open", "Remove"] : ["Withdraw"],
             request =>
             {
-                if (request.Approved) SharingActions(context, request.Name, ("Open", () => sharing.Visit(request.Name, request.World)));
+                // Remove gives up an approval: their passport no longer opens for you until you ask again.
+                if (request.Approved) SharingActions(context, request.Name, ("Open", () => sharing.Visit(request.Name, request.World)), ("Remove", () => sharing.Withdraw(request.Id)));
                 else SharingActions(context, request.Name, ("Withdraw", () => sharing.Withdraw(request.Id)));
             });
         SharingList(context, "BLOCKED", "No one.", sharing.Blocked, person => person.AccountId, person => $"{person.Name}, {person.World}", _ => ["Unblock"],

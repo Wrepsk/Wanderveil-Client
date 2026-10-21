@@ -754,6 +754,8 @@ internal static class OnlineChecks
                 var asked = JsonNode.Parse(body)!;
                 var (name, world) = ((string)asked["name"]!, (string)asked["world"]!);
                 var target = AccountNamed(name, world);
+                // Already a viewer: nothing new.
+                if (target is { } already && viewers.Contains((already, me))) return new HttpResponseMessage(HttpStatusCode.Accepted);
                 var silent = target == null || target == me || viewers.Contains((target.Value, me)) || blocks.Contains((target.Value, me)) || blocks.Contains((me, target.Value));
                 if (!requests.Any(r => r.From == me && r.Name == name && r.World == world && r.State == "pending"))
                     requests.Add((Guid.NewGuid(), me, name, world, target, silent, "pending", DateTimeOffset.UtcNow.AddDays(14)));
@@ -763,7 +765,9 @@ internal static class OnlineChecks
             {
                 if (query.Contains("incoming", StringComparison.Ordinal))
                     return Json(200, requests.Where(r => r.To == me && !r.Silent && r.State == "pending").Select(r => new { requestId = r.Id, state = "pending", from = Player(r.From), createdAt = DateTimeOffset.UtcNow, expiresAt = r.Expires }).ToList());
-                return Json(200, requests.Where(r => r.From == me && r.State is "pending" or "approved" or "declined")
+                // An approved request is listed while the approval lasts; each character once, the latest.
+                return Json(200, requests.Where(r => r.From == me && (r.State is "pending" or "declined" || r.State == "approved" && r.To is { } owner && viewers.Contains((owner, me))))
+                    .Reverse().DistinctBy(r => (r.Name.ToLowerInvariant(), r.World.ToLowerInvariant()))
                     .Select(r => new { requestId = r.Id, state = r.State == "approved" ? "approved" : "pending", to = new { name = r.Name, world = r.World }, createdAt = DateTimeOffset.UtcNow, expiresAt = r.Expires }).ToList());
             }
             if (path.StartsWith("/v1/view-requests/", StringComparison.Ordinal))
@@ -779,8 +783,10 @@ internal static class OnlineChecks
                     else requests[index] = found with { State = "declined" };
                     return new HttpResponseMessage(HttpStatusCode.NoContent);
                 }
-                if (parts.Length == 4 && method == "DELETE" && found.From == me && found.State != "approved")
+                if (parts.Length == 4 && method == "DELETE" && found.From == me && found.State != "withdrawn")
                 {
+                    // An approved one: the viewer leaves.
+                    if (found.State == "approved" && found.To is { } owner) { viewers.Remove((owner, me)); grants.Remove((owner, me)); }
                     requests[index] = found with { State = "withdrawn" };
                     return new HttpResponseMessage(HttpStatusCode.NoContent);
                 }

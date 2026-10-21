@@ -59,7 +59,13 @@ internal sealed class SharingCenter : IDisposable
 
     internal void Approve(Guid request) => Run("Approved: they can open your passport now.", async (api, token) => await api.Approve(session.Token, request, token).ConfigureAwait(false));
     internal void Decline(Guid request) => Run("Declined. They are not told.", async (api, token) => await api.Decline(session.Token, request, token).ConfigureAwait(false));
-    internal void Withdraw(Guid request) => Run("Your request was withdrawn.", async (api, token) => await api.Withdraw(session.Token, request, token).ConfigureAwait(false));
+    // Withdraws a waiting request, or gives up an approved one (that passport no longer opens until asked again).
+    internal void Withdraw(Guid request)
+    {
+        var approved = Snapshot.Outgoing.Any(r => r.RequestId == request && r.State == "approved");
+        Run(approved ? "Removed: their passport no longer opens for you. Ask again to see it." : "Your request was withdrawn.",
+            async (api, token) => await api.Withdraw(session.Token, request, token).ConfigureAwait(false));
+    }
     internal void RemoveViewer(Guid viewer) => Run("Removed: they can no longer open your passport.", async (api, token) => await api.RemoveViewer(session.Token, viewer, token).ConfigureAwait(false));
     internal void Block(Guid player) => Run("Blocked: neither of you can see or ask to see the other's passport.", async (api, token) => await api.Block(session.Token, player, token).ConfigureAwait(false));
     internal void Unblock(Guid player) => Run("Unblocked. Any approval the block removed stays removed.", async (api, token) => await api.Unblock(session.Token, player, token).ConfigureAwait(false));

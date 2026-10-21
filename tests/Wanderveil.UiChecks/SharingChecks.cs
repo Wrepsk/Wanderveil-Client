@@ -70,6 +70,27 @@ internal static class SharingChecks
         owner.Unblock(visitorId);
         owner.Flush(TimeSpan.FromSeconds(5));
         check(owner.Snapshot.Blocks.Count == 0 && owner.Snapshot.Viewers.Count == 0, "Unblocking did not lift the block, or brought the approval back.");
+        visitor.Refresh();
+        visitor.Flush(TimeSpan.FromSeconds(5));
+        check(visitor.Snapshot.Outgoing.All(r => r.To?.Name != "Owner Self"), "The blocked visitor still lists the approval the block ended.");
+
+        // Asked and approved again: one entry. Asking again while approved adds none. Then the visitor removes it.
+        visitor.Ask("Owner Self", "Ravana");
+        visitor.Flush(TimeSpan.FromSeconds(5));
+        owner.Refresh();
+        owner.Flush(TimeSpan.FromSeconds(5));
+        owner.Approve(owner.Snapshot.Incoming.Single().RequestId);
+        owner.Flush(TimeSpan.FromSeconds(5));
+        visitor.Ask("Owner Self", "Ravana");
+        visitor.Flush(TimeSpan.FromSeconds(5));
+        var approvedAgain = visitor.Snapshot.Outgoing.Where(r => r.To?.Name == "Owner Self").ToList();
+        check(approvedAgain.Count == 1 && approvedAgain[0].State == "approved", $"Approved again, or asked again while approved, the visitor lists it {approvedAgain.Count} times.");
+        visitor.Withdraw(approvedAgain[0].RequestId);
+        visitor.Flush(TimeSpan.FromSeconds(5));
+        owner.Refresh();
+        owner.Flush(TimeSpan.FromSeconds(5));
+        check(visitor.Snapshot.Outgoing.All(r => r.To?.Name != "Owner Self") && owner.Snapshot.Viewers.Count == 0 && visitor.Message?.StartsWith("Removed", StringComparison.Ordinal) == true,
+            "Removing an approved passport did not end the approval on both sides.");
 
         // Anyone, and back.
         owner.SetAnyone(true);
@@ -215,6 +236,8 @@ internal static class SharingChecks
         check(sharing.Calls.Last() == "visit Lux Arden@Sophia", "Open it did not open the passport named.");
         book.Click(book.Shell.SharingControls["Kel Doran Open"]);
         check(sharing.Calls.Last() == "visit Kel Doran@Ravana", "An approved request did not offer to open the passport.");
+        book.Click(book.Shell.SharingControls["Kel Doran Remove"]);
+        check(sharing.Calls.Last() == "withdraw", "An approved passport could not be removed from the list.");
 
         // Co-drawing (ADR-0006): inviting a viewer to draw on pages named as the book prints them, then changing,
         // ending, and clearing an invitation; and opening a passport one is invited to draw on.

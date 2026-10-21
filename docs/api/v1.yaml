@@ -462,7 +462,8 @@ paths:
       summary: Ask a character's owner to let you view their passport.
       description: |
         1.1.0 (ADR-0005); implemented on the server. Always `202` for a valid name and world, whether or not the character uses Wanderveil,
-        has blocked you, or already approved you: the answer never says. At most 20 a day and one pending per pair.
+        has blocked you, or already approved you: the answer never says. At most 20 a day and one pending per pair. Asking
+        again while approved adds nothing.
       requestBody:
         required: true
         content:
@@ -477,6 +478,9 @@ paths:
       tags: [Sharing]
       operationId: listViewRequests
       summary: Requests to view your passport (incoming), or the ones you sent (outgoing).
+      description: |
+        Outgoing lists each character once (the latest request). An approved request is listed while the approval lasts;
+        removing the viewer, a block either way, or withdrawing it ends it, and it leaves the list.
       parameters:
         - name: direction
           in: query
@@ -517,7 +521,10 @@ paths:
     delete:
       tags: [Sharing]
       operationId: withdrawViewRequest
-      summary: Withdraw a request you sent.
+      summary: Withdraw a request you sent, or give up an approved one.
+      description: |
+        Withdrawing an approved request ends the approval: that passport no longer opens for you (unless shared with
+        anyone), and any invitation to draw on it ends too. Asking again starts over.
       parameters:
         - $ref: '#/components/parameters/RequestId'
       responses:
